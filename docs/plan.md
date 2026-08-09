@@ -137,9 +137,12 @@ get full detail, public rooms get almost none.
 
 **9 - Adoption: the kit ladder (petrus: hardware friction).**
 1. *Free, ships with launch:* a pre-built SD image (`carwatch.img`) -
-   flash, enter wifi + key on a first-boot config page, done - plus a
-   one-click parts list. Kills most of the setup friction at zero
-   inventory risk.
+   flash, enter wifi + key on a first-boot config page, done - plus an
+   Amazon affiliate IDEA LIST: the whole kit in one add-to-basket click,
+   zero stock, small commission. Printed QR codes point at
+   carwatch.app/build (our instructions page carrying the affiliate
+   links) - Amazon's ToS forbids affiliate links in offline material,
+   a QR to our own page is fine.
 2. *If demand shows:* sell pre-flashed SD cards (trivial logistics).
 3. *On real demand:* a DIY kit sold as a curated UNASSEMBLED bundle of
    individually CE-marked off-the-shelf parts + open-source software.
