@@ -16,8 +16,8 @@ if [ ! -f /etc/carwatch/config.json ]; then
   echo ">> Edit /etc/carwatch/config.json with your key, room and SSIDs."
 fi
 
-# iwgetid for SSID detection
-sudo apt-get install -y wireless-tools >/dev/null
+# iwgetid for SSID detection + pdftotext for the manual RAG
+sudo apt-get install -y wireless-tools poppler-utils >/dev/null
 
 sudo systemctl daemon-reload
 echo ">> Done. Start with: sudo systemctl enable --now carwatch"

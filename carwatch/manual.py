@@ -23,7 +23,24 @@ import re
 import subprocess
 import sys
 
-INDEX_DIR = os.environ.get("CARWATCH_STATE", "/var/lib/carwatch")
+def _index_dir() -> str:
+    """CARWATCH_STATE wins; else /var/lib/carwatch when writable (the
+    systemd service's StateDirectory); else a user-writable fallback so
+    a plain `python3 -m carwatch.manual --ingest` just works (codexmb:
+    /var/lib/carwatch belongs to the carwatch system user)."""
+    env = os.environ.get("CARWATCH_STATE")
+    if env:
+        return env
+    system = "/var/lib/carwatch"
+    if os.path.isdir(system) and os.access(system, os.W_OK):
+        return system
+    return os.path.join(
+        os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+        "carwatch",
+    )
+
+
+INDEX_DIR = _index_dir()
 INDEX_PATH = os.path.join(INDEX_DIR, "manual-index.json")
 
 CHUNK_CHARS = 1200
