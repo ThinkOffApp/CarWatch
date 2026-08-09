@@ -135,6 +135,23 @@ location or clips to a public room; only opt-in coarse events (hazard
 warnings). Location trails are a stalking vector; private convoy rooms
 get full detail, public rooms get almost none.
 
+**9 - Adoption: the kit ladder (petrus: hardware friction).**
+1. *Free, ships with launch:* a pre-built SD image (`carwatch.img`) -
+   flash, enter wifi + key on a first-boot config page, done - plus a
+   one-click parts list. Kills most of the setup friction at zero
+   inventory risk.
+2. *If demand shows:* sell pre-flashed SD cards (trivial logistics).
+3. *Only on real demand:* a physical CarWatch kit box (CE marking and
+   support burden - it must earn its way in).
+
+**Cameras that can join.** The dashcam's three cameras (ours), any USB
+camera on the Pi (a ~20 euro interior cam gives camp mode eyes), and
+possibly official Mercedes me API data (location, lock, fuel) as a
+cleaner alternative to OBD for some fields (check at phase 4). The
+factory surround cameras are OFF LIMITS: they live on Mercedes's
+internal bus with no public access, and prying is warranty and safety
+territory.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
