@@ -103,6 +103,21 @@ loop already speaks that protocol, so no code changes to add a tier):
    on the car's OWN budget-capped key; the car can never quietly burn
    credits. The room shows which brain answered.
 
+**Glass-surface render rules (petrus: "very simple... no blinking!").**
+Anything projected onto glass (HUD) or overlaid on the mirror follows hard
+rules: static glyphs and numbers only, high contrast, generous size, NO
+blinking, NO animation, NO transitions - state changes simply appear on
+the next refresh. Nothing on a driving surface may pull the eye. Alerts
+that genuinely need attention go to the phone/watch, not to the glass.
+
+**HUD hardware (route 2 reference).** Windscreen reflective film (PET HUD
+film, ~10-15 euro on amazon.de) + a high-brightness panel: standard Pi
+displays (300-400 nits) prototype fine and work at night; DAYLIGHT needs
+a 1000-nit-class panel (Waveshare/Newhaven direct, ~110 euro). A salvaged
+OEM Mercedes HUD unit is the stretch path: teardown, read the TFT's model
+number, panelook it, and if LVDS/RGB a cheap HDMI driver board makes the
+Pi render through OEM optics.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
