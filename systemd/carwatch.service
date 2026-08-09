@@ -1,0 +1,16 @@
+[Unit]
+Description=CarWatch car agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m carwatch.agent
+WorkingDirectory=/opt/carwatch
+Restart=always
+RestartSec=10
+User=carwatch
+StateDirectory=carwatch
+
+[Install]
+WantedBy=multi-user.target
