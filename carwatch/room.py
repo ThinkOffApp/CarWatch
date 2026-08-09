@@ -18,11 +18,24 @@ class RoomClient:
         self.api_key = api_key
         self.room = room
 
-    def post(self, body: str, image_url: str | None = None) -> dict:
+    def post(
+        self,
+        body: str,
+        image_url: str | None = None,
+        file_url: str | None = None,
+        file_name: str | None = None,
+        file_size: int | None = None,
+    ) -> dict:
         """Post a message to the room. Returns the created message JSON."""
         payload: dict = {"room": self.room, "body": body}
         if image_url:
             payload["image_url"] = image_url
+        if file_url:
+            payload["file_url"] = file_url
+            if file_name:
+                payload["file_name"] = file_name
+            if file_size is not None:
+                payload["file_size"] = file_size
         req = urllib.request.Request(
             f"{self.api_base}/api/v1/messages",
             data=json.dumps(payload).encode(),

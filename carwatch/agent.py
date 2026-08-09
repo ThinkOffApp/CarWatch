@@ -6,6 +6,7 @@ Run: python3 -m carwatch.agent            (config from /etc/carwatch/config.json
 
 from __future__ import annotations
 
+import os
 import time
 import traceback
 
@@ -47,8 +48,24 @@ def main() -> None:
             if cam.ready() and now - last_cam_poll > cfg.wolfbox.poll_seconds:
                 last_cam_poll = now
                 for clip_url in cam.new_event_clips(since=now - 3600):
-                    # Phase 2: pull the clip locally, upload, post with media.
-                    room.post(f"{cfg.handle}: dashcam event", image_url=clip_url)
+                    name = clip_url.rsplit("/", 1)[-1]
+                    marker = os.path.join(cfg.state_dir, f"posted-{name}")
+                    if os.path.exists(marker):
+                        continue  # already posted this clip
+                    local = os.path.join(cfg.state_dir, name)
+                    # Camera URLs only resolve on the camera's own AP, so
+                    # the clip is pulled locally, then uploaded to the
+                    # room's media store once real internet is back.
+                    cam.download(clip_url, local)
+                    public = room.upload(local)
+                    room.post(
+                        f"{cfg.handle}: dashcam event, clip attached",
+                        file_url=public,
+                        file_name=name,
+                        file_size=os.path.getsize(local),
+                    )
+                    open(marker, "w").close()
+                    os.unlink(local)
         except Exception:
             # A daemon in a car must never die on a network blip. Print for
             # journalctl, keep ticking; unsent events are re-derived from

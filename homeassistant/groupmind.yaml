@@ -1,0 +1,35 @@
+# Home Assistant -> GroupMind bridge (put the pieces in configuration.yaml
+# and automations.yaml). One rest_command posts ANY camera's events into a
+# room; works for Nest (via the Nest integration), Reolink, and anything
+# else HA can see. The API key lives in HA's secrets.yaml, never here.
+
+rest_command:
+  groupmind_post:
+    url: "https://groupmind.one/api/v1/messages"
+    method: POST
+    headers:
+      X-API-Key: !secret groupmind_camera_key
+      Content-Type: application/json
+    payload: >-
+      {"room": "{{ room }}", "body": "{{ body }}"
+      {%- if image_url is defined and image_url %}, "image_url": "{{ image_url }}"{% endif -%}
+      }
+
+# automations.yaml example: doorbell/camera person event -> room post with
+# snapshot. Duplicate per camera or template over a list.
+#
+# - alias: "Camera event to GroupMind"
+#   trigger:
+#     - platform: state
+#       entity_id: binary_sensor.front_door_person
+#       to: "on"
+#   action:
+#     - service: camera.snapshot
+#       target: { entity_id: camera.front_door }
+#       data:
+#         filename: /config/www/snapshots/front_door_last.jpg
+#     - service: rest_command.groupmind_post
+#       data:
+#         room: home-cameras
+#         body: "Front door: person detected"
+#         image_url: "https://YOUR_HA_EXTERNAL_URL/local/snapshots/front_door_last.jpg"
