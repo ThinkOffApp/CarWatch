@@ -73,6 +73,14 @@ mirror's display path; the Pi uses it for (a) local-model frame analysis
 live view of the parked car in CodeWatch. Probe maps the stream endpoint
 on bench day.
 
+
+**7 - Hybrid brain routing.** Local-first: Gemma answers everything it can,
+instantly and offline. When the car is online and a mention asks for more
+(explicit opt-in like "think hard", or a handler that knows it is out of
+depth), the query escalates to a cloud model (e.g. Opus 5) using the car's
+OWN budget-capped API key - the car can never quietly burn credits. The
+room shows which brain answered.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
