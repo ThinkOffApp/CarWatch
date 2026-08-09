@@ -206,6 +206,19 @@ Two levers, decided by measured tok/s, not bought blind:
 Bench day runs Gemma 4 E2B on CPU against a supported 1.5B on the Hailo
 and we pick by what feels smarter in the car.
 
+**Runtime to beat: ik_llama.cpp (via Potato OS, petrus's find).**
+Potato OS (github.com/potato-os/core, Apache 2.0) is a Pi-optimized
+local-LLM image that runs Qwen3-30B-A3B (30B MoE, 3B active) at ~8-9
+tok/s on an 8GB Pi 5 with SSD offload, plus vision. Two takeaways:
+- Swap bench.sh from plain llama.cpp to **ik_llama.cpp** (IQK-optimized
+  fork), meaningfully faster on the Pi.
+- The MoE + SSD-offload recipe puts a much smarter model than Gemma E2B
+  on the 8GB board at the same speed - may make 16GB RAM and the Hailo
+  both unnecessary for the brain.
+Bench day: flash Potato OS on a spare card, measure Qwen3-30B on our
+unit to confirm 8-9 tok/s, then adopt ik_llama into our stack (keep our
+own agent layer rather than depending on their experimental OS).
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
