@@ -161,6 +161,21 @@ factory surround cameras are OFF LIMITS: they live on Mercedes's
 internal bus with no public access, and prying is warranty and safety
 territory.
 
+## Modular tiers (petrus: minimum setup = Pi + local AI + car integration)
+
+The code is already modular - the dashcam, OBD and displays are optional
+plugins around a core agent. The kit tiers mirror that:
+
+| Tier | Hardware | What you get | ~Cost |
+|------|----------|--------------|-------|
+| CORE | Pi 5 8GB kit + USB mic/speaker | @car room agent: presence, trips, mention commands, offline voice with local AI, brain routing | ~150 euro |
+| +VISION | any Novatek-family dashcam (WOLFBOX ref) | clips into the room, impact events, mirror icon strip, camp-mode eyes | +100-320 euro |
+| +OBD | Mercedes-compatible BT dongle | battery, range, fault codes on strip and in chat | +30 euro |
+| +HUD | high-brightness display + film | driving-only windshield projection | +60-120 euro |
+
+CORE alone is a complete product: the car talks, listens, and messages.
+Every tier above it hot-plugs; nothing requires reflashing.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
