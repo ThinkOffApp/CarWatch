@@ -78,9 +78,20 @@ class Wolfbox:
     FILE_DOWNLOAD_PREFIX above instead.
     """
 
+    # A failed probe retries after this long - the Pi routinely boots
+    # faster than the camera, so "not detected yet" must never be a
+    # permanent verdict (kimi3 review P1: only True latches).
+    REPROBE_SECONDS = 120
+
+    # First successful poll caps how much history can flood the room
+    # (kimi3 review: an unbounded first poll posts the camera's entire
+    # event archive).
+    MAX_CLIPS_PER_POLL = 3
+
     def __init__(self, host: str):
         self.host = host
-        self._novatek: bool | None = None  # unknown until first poll
+        self._novatek = False
+        self._next_probe = 0.0
 
     def _get(self, path: str, timeout: int = 6) -> bytes:
         req = urllib.request.Request(
@@ -92,16 +103,22 @@ class Wolfbox:
     def ready(self) -> bool:
         if EVENT_LIST_PATH is not None:
             return True
-        if self._novatek is None:
-            try:
-                self._get("/?custom=1&cmd=3015")
-                self._novatek = True
-            except Exception:
-                self._novatek = False
-        return bool(self._novatek)
+        if self._novatek:
+            return True
+        import time
+        now = time.time()
+        if now < self._next_probe:
+            return False
+        self._next_probe = now + self.REPROBE_SECONDS
+        try:
+            self._get("/?custom=1&cmd=3015")
+            self._novatek = True
+        except Exception:
+            pass  # camera still booting or out of range; retried later
+        return self._novatek
 
     def new_event_clips(self, since: float) -> list[str]:
-        """Return download URLs of event clips. Empty when unreachable."""
+        """Newest event-clip URLs, capped. Empty when unreachable."""
         if not self.ready():
             return []
         try:
@@ -109,7 +126,9 @@ class Wolfbox:
         except Exception:
             return []
         # Novatek answers XML with <FPATH>A:\DCIM\Event\FILE.MP4</FPATH>
-        # entries. Event/RO files are the impact/manual saves.
+        # entries. Event/RO files are the impact/manual saves. Filenames
+        # embed timestamps, so lexical order is chronological - newest
+        # last; the cap takes from the tail.
         clips: list[str] = []
         for raw in xml.split("<FPATH>")[1:]:
             fpath = raw.split("</FPATH>")[0].strip()
@@ -119,7 +138,8 @@ class Wolfbox:
             lowered = web.lower()
             if "/event/" in lowered or "_ro" in lowered:
                 clips.append(f"http://{self.host}{web}")
-        return clips
+        clips.sort()
+        return clips[-self.MAX_CLIPS_PER_POLL:]
 
     def download(self, url: str, dest: str) -> str:
         """Pull one clip to local storage; returns dest."""

@@ -4,9 +4,9 @@ Signals are kept deliberately abstract because installs differ: an
 ignition-switched Pi sees boot = trip start; a constantly-powered Pi
 uses network context (home wifi vs none) and, later, OBD speed.
 
-v1 signals:
-  - current wifi SSID (home SSID present = parked at home)
-  - system uptime (fresh boot on switched power = trip start)
+v1 signal: the current wifi SSID (home SSID = parked at home; the
+dashcam's own AP is park-neutral). Ignition-switched installs get
+boot = trip start for free because the daemon starts at boot.
 
 The state machine emits events; the agent decides what to post.
 """
@@ -46,8 +46,18 @@ def current_ssid() -> str | None:
 
 
 class TripTracker:
-    def __init__(self, home_ssids: list[str], idle_seconds: int = 300):
+    def __init__(
+        self,
+        home_ssids: list[str],
+        idle_seconds: int = 300,
+        neutral_ssids: list[str] | None = None,
+    ):
         self.home_ssids = set(home_ssids)
+        # Park-neutral networks (the dashcam's own AP): being on them says
+        # nothing about location - the normal clip-polling topology is
+        # "parked at home, joined to the camera" and must not read as
+        # DRIVING (kimi3 review).
+        self.neutral_ssids = set(neutral_ssids or [])
         self.idle_seconds = idle_seconds
         self.state = State.UNKNOWN
         self.trip_started_at: float | None = None
@@ -57,6 +67,8 @@ class TripTracker:
         ssid = current_ssid()
         if ssid and ssid in self.home_ssids:
             return State.PARKED_HOME
+        if ssid and ssid in self.neutral_ssids:
+            return self.state  # no signal either way: hold current state
         # No home network: with only wifi as a v1 signal we cannot separate
         # "driving" from "parked away" instantly; DRIVING decays into
         # PARKED_AWAY after idle_seconds without a state change.

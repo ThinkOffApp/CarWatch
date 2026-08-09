@@ -25,7 +25,11 @@ def main() -> None:
     cfg = Config.load()
     os.makedirs(cfg.state_dir, exist_ok=True)
     room = RoomClient(cfg.api_base, cfg.api_key, cfg.room)
-    trips = TripTracker(cfg.home_ssids, cfg.trip_idle_seconds)
+    trips = TripTracker(
+        cfg.home_ssids,
+        cfg.trip_idle_seconds,
+        neutral_ssids=[cfg.wolfbox.ssid] if cfg.wolfbox.ssid else [],
+    )
     cam = Wolfbox(cfg.wolfbox.host)
     commands = Commands(cfg.handle, cfg.state_dir, trips)
     outbox = Outbox(cfg.state_dir)
@@ -50,9 +54,13 @@ def main() -> None:
             outbox.flush(room)
 
             # Mentions: "@gle battery", "@gle status" from any watch/phone.
+            # Marker advances only after every reply posted, so an offline
+            # stretch delays answers instead of eating them (kimi3 review).
             try:
-                for reply in commands.answer_new(room.fetch(limit=20)):
+                replies, newest_id = commands.pending_replies(room.fetch(limit=20))
+                for reply in replies:
                     room.post(f"{cfg.handle}: {reply}")
+                commands.mark(newest_id)
             except Exception:
                 pass  # room unreachable mid-drive is routine
 

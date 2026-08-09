@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import shutil
+import tempfile
 import urllib.request
 import uuid
 
@@ -56,26 +59,41 @@ class RoomClient:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r).get("messages", [])
 
+    # Refuse absurd uploads outright; 4K event clips are minutes long and
+    # a small Pi must not slurp them into RAM (kimi3 review) - the
+    # multipart body is spooled to disk and streamed, never held twice.
+    MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
     def upload(self, path: str) -> str:
         """Upload a media file, returning its public URL."""
+        size = os.path.getsize(path)
+        if size > self.MAX_UPLOAD_BYTES:
+            raise ValueError(f"{path} is {size} bytes, over the upload cap")
         mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
         name = path.rsplit("/", 1)[-1]
         boundary = f"----carwatch{uuid.uuid4().hex[:12]}"
-        with open(path, "rb") as f:
-            data = f.read()
-        body = (
+        head = (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="file"; filename="{name}"\r\n'
             f"Content-Type: {mime}\r\n\r\n"
-        ).encode() + data + f"\r\n--{boundary}--\r\n".encode()
-        req = urllib.request.Request(
-            f"{self.api_base}/api/v1/upload",
-            data=body,
-            headers={
-                "X-API-Key": self.api_key,
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return json.load(r)["url"]
+        ).encode()
+        tail = f"\r\n--{boundary}--\r\n".encode()
+        with tempfile.TemporaryFile() as body:
+            body.write(head)
+            with open(path, "rb") as f:
+                shutil.copyfileobj(f, body, 1 << 16)
+            body.write(tail)
+            length = body.tell()
+            body.seek(0)
+            req = urllib.request.Request(
+                f"{self.api_base}/api/v1/upload",
+                data=body,
+                headers={
+                    "X-API-Key": self.api_key,
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    "Content-Length": str(length),
+                },
+            )
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.load(r)["url"]

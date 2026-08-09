@@ -11,6 +11,10 @@ Restart=always
 RestartSec=10
 User=carwatch
 StateDirectory=carwatch
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/carwatch
 
 [Install]
 WantedBy=multi-user.target

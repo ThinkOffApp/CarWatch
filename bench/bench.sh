@@ -46,8 +46,11 @@ fi
 
 echo "== Gemma 4 E2B GGUF"
 if [ ! -f "$MODELS/$GEMMA_FILE" ]; then
-  curl -L --fail -o "$MODELS/$GEMMA_FILE" \
+  # download to tmp + mv so a killed download can never leave a truncated
+  # model that the -f guard would then trust forever (kimi3 review)
+  curl -L --fail -o "$MODELS/$GEMMA_FILE.part" \
     "https://huggingface.co/$GEMMA_REPO/resolve/main/$GEMMA_FILE"
+  mv "$MODELS/$GEMMA_FILE.part" "$MODELS/$GEMMA_FILE"
 fi
 
 echo "== benchmark (tokens/sec)"

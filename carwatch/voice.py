@@ -69,7 +69,8 @@ def ask(cfg: dict, text: str) -> str:
 
 
 def speak(cfg: dict, text: str) -> None:
-    wav = tempfile.mktemp(suffix=".wav")
+    fd, wav = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
     subprocess.run(
         ["piper", "--model", cfg["piper_voice"], "--output_file", wav],
         input=text, text=True, check=True,
@@ -79,7 +80,8 @@ def speak(cfg: dict, text: str) -> None:
 
 
 def one_round(cfg: dict) -> None:
-    wav = tempfile.mktemp(suffix=".wav")
+    fd, wav = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
     print(f"Listening for {cfg['record_seconds']}s…")
     record(cfg["record_seconds"], wav)
     heard = transcribe(cfg, wav)
