@@ -47,6 +47,15 @@ class RoomClient:
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)
 
+    def fetch(self, limit: int = 20) -> list[dict]:
+        """Newest room messages (server returns newest-first)."""
+        req = urllib.request.Request(
+            f"{self.api_base}/api/v1/rooms/{self.room}/messages?limit={limit}",
+            headers={"X-API-Key": self.api_key},
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.load(r).get("messages", [])
+
     def upload(self, path: str) -> str:
         """Upload a media file, returning its public URL."""
         mime = mimetypes.guess_type(path)[0] or "application/octet-stream"

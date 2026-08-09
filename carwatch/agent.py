@@ -10,6 +10,7 @@ import os
 import time
 import traceback
 
+from .commands import Commands
 from .config import Config
 from .room import RoomClient
 from .trips import TripTracker
@@ -21,9 +22,11 @@ TICK_SECONDS = 20
 
 def main() -> None:
     cfg = Config.load()
+    os.makedirs(cfg.state_dir, exist_ok=True)
     room = RoomClient(cfg.api_base, cfg.api_key, cfg.room)
     trips = TripTracker(cfg.home_ssids, cfg.trip_idle_seconds)
     cam = Wolfbox(cfg.wolfbox.host)
+    commands = Commands(cfg.handle, cfg.state_dir, trips)
     last_cam_poll = 0.0
 
     # One boot announcement, then event-driven posts only - the room is a
@@ -43,6 +46,13 @@ def main() -> None:
                     "trip_summary": ev.detail,
                 }.get(ev.kind, ev.detail)
                 room.post(f"{cfg.handle}: {text}")
+
+            # Mentions: "@gle battery", "@gle status" from any watch/phone.
+            try:
+                for reply in commands.answer_new(room.fetch(limit=20)):
+                    room.post(f"{cfg.handle}: {reply}")
+            except Exception:
+                pass  # room unreachable mid-drive is routine
 
             now = time.time()
             if cam.ready() and now - last_cam_poll > cfg.wolfbox.poll_seconds:
