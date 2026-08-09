@@ -41,12 +41,16 @@ daily health posts, fault codes explained in plain language by the local model.
 1. *Cabin audio via Bluetooth.* The Pi pairs to MBUX as an A2DP audio
    source so the assistant speaks through the car's speakers. Config, not
    code (bluez + a pairing script).
-2. *MBUX screen as clip viewer.* The Pi presents as a USB mass-storage
-   gadget on the car's data port, exposing an `Events/` folder CarWatch
-   keeps fresh with the latest dashcam clips; MBUX's USB media player shows
-   them on the built-in screen. Cabling note: the Pi 5's gadget-capable
-   USB-C port is also its power input, so this needs a power-injector
-   arrangement (power the Pi separately, data lines to MBUX).
+2. *MBUX screen as the DASHBOARD (petrus's design).* The Pi renders a
+   dashboard image on a cycle - car state, pending count, latest room
+   messages, newest event thumbnails - the same render-not-capture
+   pattern as the CodeWatch e-ink screensaver, and exposes it (plus an
+   `Events/` clip folder) through a USB mass-storage gadget on the car's
+   data port. MBUX's own media viewer becomes the dashboard display: no
+   app needed on the head unit, it is just showing pictures the Pi keeps
+   fresh. Cabling note: the Pi 5's gadget-capable USB-C port is also its
+   power input, so this needs a power-injector arrangement (power the Pi
+   separately, data lines to MBUX).
 3. *Android Auto phone emulation - explicitly out of scope.* Phone-side AA
    requires Google-signed certificates; do not plan on it.
 
@@ -55,11 +59,13 @@ mirror screen runs a basic Android under the hood (dashcamtalk + firmware
 notes). Bench day probes it for ADB over its wifi AP and USB.
 
 *Safety-first design (petrus: "it is important for safety"): the mirror's
-LIVE REAR FEED is never replaced or blocked.* CodeWatch renders only as a
-translucent overlay strip (Android `TYPE_APPLICATION_OVERLAY`): latest
-message ticker + approve/deny, sized and placed so the camera stream stays
-fully readable underneath; overlay hides while reversing if the unit
-exposes that state.
+LIVE REAR FEED is never replaced or blocked.* The overlay is ICONS ONLY
+(petrus's design), a slim glyph strip in a corner: pending-approvals
+count badge, connectivity, camera-recording state, car state. No text to
+read at a glance-critical surface; anything that needs reading lives on
+the MBUX dashboard or the phone. Rendered via Android
+`TYPE_APPLICATION_OVERLAY`, hides while reversing if the unit exposes
+that state.
 
 Known risks: many units ship locked down (no ADB, no launcher), and the
 mirror's Android version may predate CodeWatch's minSdk 30 - fallback is a
