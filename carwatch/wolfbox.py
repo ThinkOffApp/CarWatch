@@ -117,8 +117,12 @@ class Wolfbox:
             pass  # camera still booting or out of range; retried later
         return self._novatek
 
-    def new_event_clips(self, since: float) -> list[str]:
-        """Newest event-clip URLs, capped. Empty when unreachable."""
+    def new_event_clips(self) -> list[str]:
+        """Newest event-clip URLs, capped. Empty when unreachable.
+
+        No time filter by design: the cap plus the agent's posted-clip
+        markers are the dedup contract (a `since` arg existed briefly,
+        unused - codexmb flagged the lie and it is gone)."""
         if not self.ready():
             return []
         try:

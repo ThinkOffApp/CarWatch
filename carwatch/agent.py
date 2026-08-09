@@ -67,7 +67,7 @@ def main() -> None:
             now = time.time()
             if cam.ready() and now - last_cam_poll > cfg.wolfbox.poll_seconds:
                 last_cam_poll = now
-                for clip_url in cam.new_event_clips(since=now - 3600):
+                for clip_url in cam.new_event_clips():
                     name = clip_url.rsplit("/", 1)[-1]
                     marker = os.path.join(cfg.state_dir, f"posted-{name}")
                     if os.path.exists(marker):
