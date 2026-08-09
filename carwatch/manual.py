@@ -47,7 +47,10 @@ CHUNK_CHARS = 1200
 CHUNK_OVERLAP = 200
 STOPWORDS = frozenset(
     "the a an and or of to in on for with is are be it its this that you your "
-    "if as at by from can may will when what which how do does".split()
+    "if as at by from can may will when what which how do does "
+    # German manuals are common in this house
+    "der die das und oder von zu im in auf mit ist sind sie ihr ihre wenn "
+    "als bei aus kann wird wann was wie".split()
 )
 
 
@@ -87,24 +90,39 @@ def ingest(path: str) -> dict:
     return index
 
 
-def search(query: str, top: int = 3) -> list[dict]:
-    """Top chunks by lexical score: term frequency weighted by rarity."""
+_cache: dict = {"mtime": None, "index": None, "chunk_tokens": None, "df": None}
+
+
+def _load_index():
+    """Index + per-chunk token sets, cached by file mtime so repeated
+    voice queries do not re-tokenize a big manual every time (kimi3)."""
     try:
+        mtime = os.path.getmtime(INDEX_PATH)
+    except Exception:
+        return None
+    if _cache["mtime"] != mtime:
         with open(INDEX_PATH) as f:
             index = json.load(f)
-    except Exception:
+        chunk_tokens = [set(_tokens(c["text"])) for c in index["chunks"]]
+        df: dict[str, int] = {}
+        for toks in chunk_tokens:
+            for t in toks:
+                df[t] = df.get(t, 0) + 1
+        _cache.update(mtime=mtime, index=index, chunk_tokens=chunk_tokens, df=df)
+    return _cache
+
+
+def search(query: str, top: int = 3) -> list[dict]:
+    """Top chunks by lexical score: presence of query terms weighted by
+    rarity across chunks (set membership, no term frequency - chunks are
+    uniform-sized so tf adds little)."""
+    cache = _load_index()
+    if cache is None:
         return []
     q = _tokens(query)
     if not q:
         return []
-    # document frequency for rarity weighting
-    df: dict[str, int] = {}
-    chunk_tokens = []
-    for c in index["chunks"]:
-        toks = set(_tokens(c["text"]))
-        chunk_tokens.append(toks)
-        for t in toks:
-            df[t] = df.get(t, 0) + 1
+    index, chunk_tokens, df = cache["index"], cache["chunk_tokens"], cache["df"]
     n = max(len(chunk_tokens), 1)
     scored = []
     for c, toks in zip(index["chunks"], chunk_tokens):
@@ -115,7 +133,10 @@ def search(query: str, top: int = 3) -> list[dict]:
     return [c for _, c in scored[:top]]
 
 
-def context_for(query: str, budget_chars: int = 2400) -> str:
+# Default sized for the Pi: ~300 tokens of context. 2400 chars cost
+# 12-30s of extra prefill on a Pi-5-class 2B model (kimi3 measured
+# estimate); faster hosts can pass a bigger budget.
+def context_for(query: str, budget_chars: int = 1200) -> str:
     """Prompt context block for the voice loop, with page citations."""
     hits = search(query)
     if not hits:
