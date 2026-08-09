@@ -54,12 +54,22 @@ def transcribe(cfg: dict, wav: str) -> str:
 
 
 def ask(cfg: dict, text: str) -> str:
+    # Owner's-manual RAG: if a manual is ingested, relevant excerpts ride
+    # in as context so warning-light questions get real answers offline.
+    system = cfg["system_prompt"]
+    try:
+        from .manual import context_for
+        extra = context_for(text)
+        if extra:
+            system = f"{system}\n\n{extra}"
+    except Exception:
+        pass
     payload = json.dumps({
         "messages": [
-            {"role": "system", "content": cfg["system_prompt"]},
+            {"role": "system", "content": system},
             {"role": "user", "content": text},
         ],
-        "max_tokens": 120,
+        "max_tokens": 160,
     }).encode()
     req = urllib.request.Request(
         cfg["llama_url"], data=payload, headers={"Content-Type": "application/json"}

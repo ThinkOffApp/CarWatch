@@ -21,7 +21,7 @@ mkdir -p "$STACK" "$MODELS"
 echo "== apt deps"
 sudo apt-get update -qq
 sudo apt-get install -y -qq git build-essential cmake curl ffmpeg \
-  wireless-tools alsa-utils python3-pip adb sox libsox-fmt-all
+  wireless-tools alsa-utils python3-pip adb sox libsox-fmt-all poppler-utils
 
 echo "== llama.cpp"
 if [ ! -d "$STACK/llama.cpp" ]; then
