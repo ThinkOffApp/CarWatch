@@ -183,6 +183,14 @@ plugins around a core agent. The kit tiers mirror that:
 CORE alone is a complete product: the car talks, listens, and messages.
 Every tier above it hot-plugs; nothing requires reflashing.
 
+**Bench-day firmware catalog (safe, read-only).** Download all G900 firmware
+branches and run binwalk - reading only, NEVER flashing the car's mirror.
+Records SoC, RTOS family, and whether the UI is reflashable. If crackable,
+open a "G900 custom UI" issue with the findings as a real starting point.
+Custom-UI hacking is a someday/community track (buy a SECOND G900 as the
+mule; never brick the daily driver); RE notes go in the public repo to
+attract the car-hacker crowd. Never on the product's critical path.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
