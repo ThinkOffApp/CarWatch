@@ -38,9 +38,15 @@ daily health posts, fault codes explained in plain language by the local model.
 
 **5 - MBUX integration (use the car's own computer).** Easiest first:
 
-1. *Cabin audio via Bluetooth.* The Pi pairs to MBUX as an A2DP audio
-   source so the assistant speaks through the car's speakers. Config, not
-   code (bluez + a pairing script).
+1. *Cabin audio via Bluetooth (petrus: use the car mic + speakers).*
+   SPEAKERS are easy: Pi pairs to MBUX as an A2DP source and the assistant
+   speaks through the car speakers (bluez + pairing script, config not
+   code). The car MIC is the fiddly half: routing it to the Pi needs
+   Bluetooth HFP with the Pi as the phone side, and the car only opens its
+   mic in a call-state, which fights always-listening. RECOMMENDED HYBRID:
+   car speakers for output + a tiny USB mic on the Pi (~10 euro, hidden
+   near the mirror) for reliable always-on listening. Full car-mic-over-BT
+   is a bench-day stretch, not a given.
 2. *MBUX screen as the DASHBOARD (petrus's design).* The Pi renders a
    dashboard image on a cycle - car state, pending count, latest room
    messages, newest event thumbnails - the same render-not-capture
