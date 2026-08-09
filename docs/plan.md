@@ -50,14 +50,23 @@ daily health posts, fault codes explained in plain language by the local model.
 3. *Android Auto phone emulation - explicitly out of scope.* Phone-side AA
    requires Google-signed certificates; do not plan on it.
 
-**6 - CodeWatch on the rearview mirror (probe-gated).** The G900's mirror
-screen runs a basic Android under the hood (dashcamtalk + firmware notes).
-Bench day probes it for ADB over its wifi AP and USB. If ADB answers, we
-sideload CodeWatch onto the mirror: the rearview shows the room, approvals
-while parked. Known risks: many units ship locked down (no ADB, no
-launcher), and the mirror's Android version may predate CodeWatch's
-minSdk 30 - fallback is a slim mirror variant (message ticker + approve /
-deny only). Worst case, the mirror still plays clips through its own UI.
+**6 - CodeWatch overlay on the rearview mirror (probe-gated).** The G900's
+mirror screen runs a basic Android under the hood (dashcamtalk + firmware
+notes). Bench day probes it for ADB over its wifi AP and USB.
+
+*Safety-first design (petrus: "it is important for safety"): the mirror's
+LIVE REAR FEED is never replaced or blocked.* CodeWatch renders only as a
+translucent overlay strip (Android `TYPE_APPLICATION_OVERLAY`): latest
+message ticker + approve/deny, sized and placed so the camera stream stays
+fully readable underneath; overlay hides while reversing if the unit
+exposes that state.
+
+Known risks: many units ship locked down (no ADB, no launcher), and the
+mirror's Android version may predate CodeWatch's minSdk 30 - fallback is a
+purpose-built slim overlay APK with a low minSdk. Worst case, the mirror
+still plays clips through its own UI. Related cheap add once the probe
+maps the camera's stream endpoint: the Pi relays the live feed so
+CodeWatch can show a remote live view of the parked car.
 
 ## RAM budget (8 GB)
 
