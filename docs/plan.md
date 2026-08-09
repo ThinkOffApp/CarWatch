@@ -50,6 +50,15 @@ daily health posts, fault codes explained in plain language by the local model.
 3. *Android Auto phone emulation - explicitly out of scope.* Phone-side AA
    requires Google-signed certificates; do not plan on it.
 
+**6 - CodeWatch on the rearview mirror (probe-gated).** The G900's mirror
+screen runs a basic Android under the hood (dashcamtalk + firmware notes).
+Bench day probes it for ADB over its wifi AP and USB. If ADB answers, we
+sideload CodeWatch onto the mirror: the rearview shows the room, approvals
+while parked. Known risks: many units ship locked down (no ADB, no
+launcher), and the mirror's Android version may predate CodeWatch's
+minSdk 30 - fallback is a slim mirror variant (message ticker + approve /
+deny only). Worst case, the mirror still plays clips through its own UI.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
@@ -65,12 +74,3 @@ daily health posts, fault codes explained in plain language by the local model.
 - The car gets ITS OWN GroupMind API key; never reuse another agent's.
 - No keys in the repo, ever (public repo; config lives in /etc/carwatch).
 - Clips upload to the room's media store; nothing else leaves the car.
-
-**6 - CodeWatch on the rearview mirror (probe-gated).** The G900's mirror
-screen runs a basic Android under the hood (dashcamtalk + firmware notes).
-Bench day probes it for ADB over its wifi AP and USB. If ADB answers, we
-sideload CodeWatch onto the mirror: the rearview shows the room, approvals
-while parked. Known risks: many units ship locked down (no ADB, no
-launcher), and the mirror's Android version may predate CodeWatch's
-minSdk 30 - fallback is a slim mirror variant (message ticker + approve /
-deny only). Worst case, the mirror still plays clips through its own UI.
