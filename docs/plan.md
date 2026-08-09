@@ -54,9 +54,16 @@ daily health posts, fault codes explained in plain language by the local model.
 3. *Android Auto phone emulation - explicitly out of scope.* Phone-side AA
    requires Google-signed certificates; do not plan on it.
 
-**6 - CodeWatch overlay on the rearview mirror (probe-gated).** The G900's
-mirror screen runs a basic Android under the hood (dashcamtalk + firmware
-notes). Bench day probes it for ADB over its wifi AP and USB.
+**6 - CodeWatch overlay on the rearview mirror (probe-gated, LIKELY NOT
+POSSIBLE).** Correction (Aug 9): the G900 most likely runs a CLOSED
+Novatek-family RTOS, not Android (petrus's vendor-support source; my
+earlier "basic Android" was one thin hit). Bench day still runs a 30s
+ADB probe to settle it for our exact unit, but expect nothing. If RTOS:
+the mirror keeps its stock job, and the icon strip moves to the MBUX
+dashboard render or a small dedicated display. Silver lining: a
+Novatek-family RTOS is exactly what speaks the cmd=3015 HTTP protocol
+already implemented in wolfbox.py, so this raises confidence the CLIP
+pipeline works day one.
 
 *Safety-first design (petrus: "it is important for safety"): the mirror's
 LIVE REAR FEED is never replaced or blocked.* The overlay is ICONS ONLY
