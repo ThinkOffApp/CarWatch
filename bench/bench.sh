@@ -23,12 +23,22 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq git build-essential cmake curl ffmpeg \
   wireless-tools alsa-utils python3-pip adb sox libsox-fmt-all poppler-utils
 
-echo "== llama.cpp"
+echo "== llama.cpp (baseline runtime + whisper build dep)"
 if [ ! -d "$STACK/llama.cpp" ]; then
   git clone --depth 1 https://github.com/ggml-org/llama.cpp "$STACK/llama.cpp"
   cmake -S "$STACK/llama.cpp" -B "$STACK/llama.cpp/build" -DCMAKE_BUILD_TYPE=Release
   cmake --build "$STACK/llama.cpp/build" -j "$JOBS" --target llama-server llama-bench llama-cli
 fi
+
+echo "== ik_llama.cpp (IQK-optimised, the faster Pi runtime - Potato OS)"
+# Meaningfully faster than upstream on the Pi 5, and the runtime that
+# makes the 30B MoE + SSD-offload path viable (petrus's Potato OS find).
+if [ ! -d "$STACK/ik_llama.cpp" ]; then
+  git clone --depth 1 https://github.com/ikawrakow/ik_llama.cpp "$STACK/ik_llama.cpp"
+  cmake -S "$STACK/ik_llama.cpp" -B "$STACK/ik_llama.cpp/build" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$STACK/ik_llama.cpp/build" -j "$JOBS" --target llama-server llama-bench llama-cli
+fi
+IK_BIN="$STACK/ik_llama.cpp/build/bin"
 
 echo "== whisper.cpp"
 if [ ! -d "$STACK/whisper.cpp" ]; then
@@ -53,8 +63,34 @@ if [ ! -f "$MODELS/$GEMMA_FILE" ]; then
   mv "$MODELS/$GEMMA_FILE.part" "$MODELS/$GEMMA_FILE"
 fi
 
-echo "== benchmark (tokens/sec)"
+echo "== Qwen3-30B-A3B MoE (SSD-offload path, needs the SSD mounted)"
+# The smart big-model path from Potato OS: 30B MoE, only 3B active,
+# ~8-9 tok/s on a Pi 5 8GB when experts stream off a fast SSD. Set
+# CARWATCH_SSD to a mounted SSD dir to enable; otherwise skipped (10GB
+# does not fit in 8GB RAM alone).
+QWEN_REPO="byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF"
+QWEN_FILE="Qwen3-30B-A3B-Instruct-2507-Q3_K_S.gguf"
+SSD="${CARWATCH_SSD:-}"
+if [ -n "$SSD" ] && [ -d "$SSD" ]; then
+  if [ ! -f "$SSD/$QWEN_FILE" ]; then
+    echo "  downloading $QWEN_FILE (~10GB) to the SSD..."
+    curl -L --fail -o "$SSD/$QWEN_FILE.part" \
+      "https://huggingface.co/$QWEN_REPO/resolve/main/$QWEN_FILE" && \
+      mv "$SSD/$QWEN_FILE.part" "$SSD/$QWEN_FILE"
+  fi
+else
+  echo "  (skipped: set CARWATCH_SSD=/path/to/ssd to bench the 30B MoE)"
+fi
+
+echo "== benchmark: Gemma 4 E2B on both runtimes (tokens/sec)"
+echo "-- upstream llama.cpp:"
 "$STACK/llama.cpp/build/bin/llama-bench" -m "$MODELS/$GEMMA_FILE" -t "$JOBS" || true
+echo "-- ik_llama.cpp:"
+"$IK_BIN/llama-bench" -m "$MODELS/$GEMMA_FILE" -t "$JOBS" || true
+if [ -n "$SSD" ] && [ -f "$SSD/$QWEN_FILE" ]; then
+  echo "-- ik_llama.cpp, Qwen3-30B MoE (SSD offload):"
+  "$IK_BIN/llama-bench" -m "$SSD/$QWEN_FILE" -t "$JOBS" -ngl 0 || true
+fi
 
 echo "== thermal check"
 vcgencmd measure_temp || true
