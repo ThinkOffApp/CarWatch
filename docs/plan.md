@@ -74,12 +74,17 @@ live view of the parked car in CodeWatch. Probe maps the stream endpoint
 on bench day.
 
 
-**7 - Hybrid brain routing.** Local-first: Gemma answers everything it can,
-instantly and offline. When the car is online and a mention asks for more
-(explicit opt-in like "think hard", or a handler that knows it is out of
-depth), the query escalates to a cloud model (e.g. Opus 5) using the car's
-OWN budget-capped API key - the car can never quietly burn credits. The
-room shows which brain answered.
+**7 - Hybrid brain routing.** Three tiers, best reachable wins, all through
+one ordered `brain_endpoints` list of OpenAI-compatible URLs (the voice
+loop already speaks that protocol, so no code changes to add a tier):
+
+1. *Pi local* - Gemma on the Pi, always on, fully offline.
+2. *Car LAN* - when the MacBook rides along, its bigger local model (e.g.
+   DeepSeek V4 Flash) serves over the car LAN: still offline, still zero
+   API spend, much smarter.
+3. *Cloud* - online + explicit opt-in ("think hard"), a model like Opus 5
+   on the car's OWN budget-capped key; the car can never quietly burn
+   credits. The room shows which brain answered.
 
 ## RAM budget (8 GB)
 
