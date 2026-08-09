@@ -64,9 +64,14 @@ exposes that state.
 Known risks: many units ship locked down (no ADB, no launcher), and the
 mirror's Android version may predate CodeWatch's minSdk 30 - fallback is a
 purpose-built slim overlay APK with a low minSdk. Worst case, the mirror
-still plays clips through its own UI. Related cheap add once the probe
-maps the camera's stream endpoint: the Pi relays the live feed so
-CodeWatch can show a remote live view of the parked car.
+still plays clips through its own UI.
+
+*Confirmed architecture (petrus): overlay on the mirror + the Pi taps a
+COPY of the camera stream in parallel.* The copy never sits in the
+mirror's display path; the Pi uses it for (a) local-model frame analysis
+(impact/scene understanding feeding room posts), and (b) a relayed remote
+live view of the parked car in CodeWatch. Probe maps the stream endpoint
+on bench day.
 
 ## RAM budget (8 GB)
 
