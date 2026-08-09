@@ -110,6 +110,13 @@ blinking, NO animation, NO transitions - state changes simply appear on
 the next refresh. Nothing on a driving surface may pull the eye. Alerts
 that genuinely need attention go to the phone/watch, not to the glass.
 
+**HUD content rule (petrus): the HUD is ALL about driving - no CodeWatch
+notifications there, ever.** HUD shows driving data only: speed, range,
+weather ahead, navigation-adjacent info. Approvals, messages and badges
+live on the mirror strip (parked-relevant) and the phone/watch. The
+surfaces have roles: HUD = driving, mirror = car status at a glance,
+MBUX = the full dashboard, phone/watch = interaction.
+
 **HUD hardware (route 2 reference).** Windscreen reflective film (PET HUD
 film, ~10-15 euro on amazon.de) + a high-brightness panel: standard Pi
 displays (300-400 nits) prototype fine and work at night; DAYLIGHT needs
@@ -117,6 +124,16 @@ a 1000-nit-class panel (Waveshare/Newhaven direct, ~110 euro). A salvaged
 OEM Mercedes HUD unit is the stretch path: teardown, read the TFT's model
 number, panelook it, and if LVDS/RGB a cheap HDMI driver board makes the
 Pi render through OEM optics.
+
+**8 - Cars talking to each other (petrus).** Rooms are already the fabric,
+so cars can share any room today. Ship first: CONVOY MODE - a private
+shared room for a road trip; member cars post position updates rendered
+on each MBUX dashboard, propose fuel/charging stops, relay hazard
+callouts down the line; humans and cars in one thread. Public car rooms
+come after, with hard privacy defaults: a car NEVER posts precise
+location or clips to a public room; only opt-in coarse events (hazard
+warnings). Location trails are a stalking vector; private convoy rooms
+get full detail, public rooms get almost none.
 
 ## RAM budget (8 GB)
 
