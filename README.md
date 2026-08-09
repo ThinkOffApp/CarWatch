@@ -10,6 +10,27 @@ Sibling of [CodeWatch](https://github.com/ThinkOffApp/CodeWatch) (agents on your
 wrist) and [ClawWatch](https://github.com/ThinkOffApp/ClawWatch) (health on your
 wrist). This one watches the car.
 
+## Local vs online: the strategy
+
+**Local is the product; online is the enrichment.** The car must be fully
+useful with zero connectivity, because cars live in garages, tunnels and
+countryside dead zones:
+
+- *Always local (works with no signal):* voice in and out, the assistant's
+  answers (on-Pi model), dashcam clip capture, trip/state tracking, the
+  mirror icon strip, the MBUX dashboard render, owner's-manual answers (RAG
+  ships on the SD card).
+- *Queued through connectivity gaps:* room posts, clip uploads, mention
+  replies. Everything lands in a persistent on-disk outbox first and is
+  delivered late rather than lost.
+- *Online-only, and honest about it:* weather on the strip, remote live
+  view, escalation to bigger brains - first the MacBook's local model when
+  it rides along on the car LAN (still no cloud), then a cloud model only
+  when online AND explicitly asked, on the car's own budget-capped key.
+
+Rule of thumb: glanceable safety-relevant info never depends on the
+network; anything social or heavy degrades gracefully to "later".
+
 ## Hardware (reference build)
 
 - Raspberry Pi 5, 8 GB (active cooling required — the SoC throttles without it)

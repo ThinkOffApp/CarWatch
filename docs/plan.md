@@ -60,8 +60,11 @@ notes). Bench day probes it for ADB over its wifi AP and USB.
 
 *Safety-first design (petrus: "it is important for safety"): the mirror's
 LIVE REAR FEED is never replaced or blocked.* The overlay is ICONS ONLY
-(petrus's design), a slim glyph strip in a corner: pending-approvals
-count badge, connectivity, camera-recording state, car state. No text to
+(petrus's design - mockup in docs/mirror-overlay-mockup.png): weather now
+/ +3h / +24h as icon + degrees (online-fed, cached, hides when stale),
+battery as a drawn meter + percent and remaining range (OBD/phase 4
+sourced), pending-approvals badge, message badge, camp-mode indicator,
+recording dot, connectivity. No text to
 read at a glance-critical surface; anything that needs reading lives on
 the MBUX dashboard or the phone. Rendered via Android
 `TYPE_APPLICATION_OVERLAY`, hides while reversing if the unit exposes
@@ -79,6 +82,14 @@ mirror's display path; the Pi uses it for (a) local-model frame analysis
 live view of the parked car in CodeWatch. Probe maps the stream endpoint
 on bench day.
 
+
+**Camp mode (petrus).** A parked mode that keeps the car ALIVE instead of
+quiet: camera stays recording, voice assistant stays listening, the strip
+and MBUX dashboard stay rendered, presence posts "camping" once. Toggle by
+mention ("@gle camp on/off") or a strip long-press; exits automatically on
+departure. The power budget note: camp mode is for hardwired installs with
+battery-protection cutoff (the WOLFBOX kit has one), and the Pi should
+watch voltage once OBD lands and self-shutdown below threshold.
 
 **7 - Hybrid brain routing.** Three tiers, best reachable wins, all through
 one ordered `brain_endpoints` list of OpenAI-compatible URLs (the voice
