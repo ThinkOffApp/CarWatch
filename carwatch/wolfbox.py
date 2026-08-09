@@ -83,10 +83,9 @@ class Wolfbox:
     # permanent verdict (kimi3 review P1: only True latches).
     REPROBE_SECONDS = 120
 
-    # First successful poll caps how much history can flood the room
-    # (kimi3 review: an unbounded first poll posts the camera's entire
-    # event archive).
-    MAX_CLIPS_PER_POLL = 3
+    # Flood control lives in the AGENT (newest-first, N unposted per poll,
+    # draining the backlog across polls). A hard cap here permanently hid
+    # anything older than the newest three (codexmb P1).
 
     def __init__(self, host: str):
         self.host = host
@@ -118,11 +117,11 @@ class Wolfbox:
         return self._novatek
 
     def new_event_clips(self) -> list[str]:
-        """Newest event-clip URLs, capped. Empty when unreachable.
+        """ALL event-clip URLs, oldest first. Empty when unreachable.
 
-        No time filter by design: the cap plus the agent's posted-clip
-        markers are the dedup contract (a `since` arg existed briefly,
-        unused - codexmb flagged the lie and it is gone)."""
+        No filtering here: the agent owns dedup (posted markers) and
+        flood control (bounded unposted picks per poll), so an offline
+        burst larger than any cap still drains fully over time."""
         if not self.ready():
             return []
         try:
@@ -143,7 +142,7 @@ class Wolfbox:
             if "/event/" in lowered or "_ro" in lowered:
                 clips.append(f"http://{self.host}{web}")
         clips.sort()
-        return clips[-self.MAX_CLIPS_PER_POLL:]
+        return clips
 
     def download(self, url: str, dest: str) -> str:
         """Pull one clip to local storage; returns dest."""

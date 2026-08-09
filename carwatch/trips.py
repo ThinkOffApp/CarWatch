@@ -69,9 +69,15 @@ class TripTracker:
             return State.PARKED_HOME
         if ssid and ssid in self.neutral_ssids:
             return self.state  # no signal either way: hold current state
-        # No home network: with only wifi as a v1 signal we cannot separate
-        # "driving" from "parked away" instantly; DRIVING decays into
-        # PARKED_AWAY after idle_seconds without a state change.
+        # No home network. PARKED_AWAY on continued no-signal HOLDS -
+        # classifying it back to DRIVING made the pair oscillate and post
+        # "Parked away" every idle interval forever (codexmb reproduced
+        # at 301s/622s/943s). Only a real signal change leaves PARKED_AWAY.
+        if self.state == State.PARKED_AWAY:
+            return State.PARKED_AWAY
+        # With only wifi as a v1 signal we cannot separate "driving" from
+        # "parked away" instantly; DRIVING decays into PARKED_AWAY after
+        # idle_seconds without a state change.
         return State.DRIVING
 
     def tick(self) -> list[Event]:
@@ -94,9 +100,14 @@ class TripTracker:
         prev, self.state = self.state, seen
         self._last_transition = now
 
-        if seen == State.DRIVING and prev in (State.PARKED_HOME, State.UNKNOWN):
+        if seen == State.DRIVING and prev == State.PARKED_HOME:
             self.trip_started_at = now
             events.append(Event("departure", "Departed", now))
+        elif seen == State.DRIVING and prev == State.UNKNOWN:
+            # Boot away from home wifi (or before wifi associates) is not a
+            # departure - announcing one was a false positive (codexmb).
+            # Track the trip silently; arrival still reports correctly.
+            self.trip_started_at = now
         elif seen == State.PARKED_HOME and prev != State.PARKED_HOME:
             if self.trip_started_at:
                 mins = int((now - self.trip_started_at) / 60)

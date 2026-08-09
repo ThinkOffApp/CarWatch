@@ -20,6 +20,12 @@ from .wolfbox import Wolfbox
 
 TICK_SECONDS = 20
 
+# Flood control: at most this many unposted clips per camera poll, newest
+# first; the rest stay unposted and drain on later polls, so a big offline
+# burst arrives bounded but complete (codexmb P1: the old newest-3 cap in
+# Wolfbox permanently lost anything older).
+MAX_CLIP_POSTS_PER_POLL = 3
+
 
 def main() -> None:
     cfg = Config.load()
@@ -54,24 +60,34 @@ def main() -> None:
             outbox.flush(room)
 
             # Mentions: "@gle battery", "@gle status" from any watch/phone.
-            # Marker advances only after every reply posted, so an offline
-            # stretch delays answers instead of eating them (kimi3 review).
+            # Replies go through the persistent outbox: enqueue is local
+            # and cannot fail, so the marker advances exactly once per
+            # batch - no duplicate answers when one post of several fails
+            # (codexmb P1), and delivery is the outbox's problem. A gap
+            # longer than the fetch window can still skip mentions; the
+            # window is generous for a car.
             try:
-                replies, newest_id = commands.pending_replies(room.fetch(limit=20))
+                replies, newest_id = commands.pending_replies(room.fetch(limit=50))
                 for reply in replies:
-                    room.post(f"{cfg.handle}: {reply}")
+                    outbox.enqueue(f"{cfg.handle}: {reply}")
                 commands.mark(newest_id)
+                outbox.flush(room)
             except Exception:
                 pass  # room unreachable mid-drive is routine
 
             now = time.time()
             if cam.ready() and now - last_cam_poll > cfg.wolfbox.poll_seconds:
                 last_cam_poll = now
-                for clip_url in cam.new_event_clips():
+                unposted = [
+                    u for u in cam.new_event_clips()
+                    if not os.path.exists(
+                        os.path.join(cfg.state_dir, "posted-" + u.rsplit("/", 1)[-1])
+                    )
+                ]
+                # Newest first, bounded per poll, backlog drains over time.
+                for clip_url in list(reversed(unposted))[:MAX_CLIP_POSTS_PER_POLL]:
                     name = clip_url.rsplit("/", 1)[-1]
                     marker = os.path.join(cfg.state_dir, f"posted-{name}")
-                    if os.path.exists(marker):
-                        continue  # already posted this clip
                     local = os.path.join(cfg.state_dir, name)
                     # Camera URLs only resolve on the camera's own AP, so
                     # the clip is pulled locally, then uploaded to the
