@@ -141,8 +141,14 @@ get full detail, public rooms get almost none.
    one-click parts list. Kills most of the setup friction at zero
    inventory risk.
 2. *If demand shows:* sell pre-flashed SD cards (trivial logistics).
-3. *Only on real demand:* a physical CarWatch kit box (CE marking and
-   support burden - it must earn its way in).
+3. *On real demand:* a DIY kit sold as a curated UNASSEMBLED bundle of
+   individually CE-marked off-the-shelf parts + open-source software.
+   That keeps us a distributor, not a manufacturer. EU note (not legal
+   advice, get 30 min of it before selling): the 2-year statutory
+   consumer warranty cannot be disclaimed with a DIY label; assembling
+   or branding the hardware as one new device would make us the
+   manufacturer with full CE and liability - do not cross that line
+   casually.
 
 **Cameras that can join.** The dashcam's three cameras (ours), any USB
 camera on the Pi (a ~20 euro interior cam gives camp mode eyes), and
