@@ -191,6 +191,21 @@ Custom-UI hacking is a someday/community track (buy a SECOND G900 as the
 mule; never brick the daily driver); RE notes go in the public repo to
 attract the car-hacker crowd. Never on the product's critical path.
 
+**Compute options (bench-day head-to-head, petrus flagged the Hailo).**
+Two levers, decided by measured tok/s, not bought blind:
+- *RAM (Pi 5 8GB vs 16GB)*: 16GB lets Gemma 4 E4B be the always-on brain
+  vs E2B on 8GB. ~110 euro more at scalped German retail (~40 at MSRP).
+- *Hailo-10H NPU (Raspberry Pi AI HAT+ 2, Jan 2026, sub-100 euro, 40
+  TOPS INT4, own 8GB LPDDR4X)*: runs LLMs, ~10x CPU (a 1B at 30-50 tok/s
+  vs 2-5 on CPU), OpenAI-compatible hailo-llm-server drops into our
+  stack. Caveat: supported models are a converted set (Llama 3.2 1B,
+  Qwen 2.5 1.5B, DeepSeek R1 1.5B) - Gemma 4 is NOT supported unless
+  compiled for it. So it is faster-but-different-model vs our chosen
+  model on CPU. The Hailo-8 (older AI HAT) is vision-only; only the 10H
+  runs LLMs.
+Bench day runs Gemma 4 E2B on CPU against a supported 1.5B on the Hailo
+and we pick by what feels smarter in the car.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
