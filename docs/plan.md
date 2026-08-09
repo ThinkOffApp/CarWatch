@@ -36,6 +36,20 @@ underground garage with zero signal. Fine-tuning happens OFF the Pi
 **4 - OBD health.** A Mercedes-compatible OBD dongle (NOT a BMW ENET cable),
 daily health posts, fault codes explained in plain language by the local model.
 
+**5 - MBUX integration (use the car's own computer).** Easiest first:
+
+1. *Cabin audio via Bluetooth.* The Pi pairs to MBUX as an A2DP audio
+   source so the assistant speaks through the car's speakers. Config, not
+   code (bluez + a pairing script).
+2. *MBUX screen as clip viewer.* The Pi presents as a USB mass-storage
+   gadget on the car's data port, exposing an `Events/` folder CarWatch
+   keeps fresh with the latest dashcam clips; MBUX's USB media player shows
+   them on the built-in screen. Cabling note: the Pi 5's gadget-capable
+   USB-C port is also its power input, so this needs a power-injector
+   arrangement (power the Pi separately, data lines to MBUX).
+3. *Android Auto phone emulation - explicitly out of scope.* Phone-side AA
+   requires Google-signed certificates; do not plan on it.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
