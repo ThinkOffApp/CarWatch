@@ -12,6 +12,7 @@ import traceback
 
 from .commands import Commands
 from .config import Config
+from .outbox import Outbox
 from .room import RoomClient
 from .trips import TripTracker
 from .wolfbox import Wolfbox
@@ -27,14 +28,14 @@ def main() -> None:
     trips = TripTracker(cfg.home_ssids, cfg.trip_idle_seconds)
     cam = Wolfbox(cfg.wolfbox.host)
     commands = Commands(cfg.handle, cfg.state_dir, trips)
+    outbox = Outbox(cfg.state_dir)
     last_cam_poll = 0.0
 
     # One boot announcement, then event-driven posts only - the room is a
     # logbook, not a firehose (same cadence rule the human agents follow).
-    try:
-        room.post(f"{cfg.handle} online")
-    except Exception:
-        pass  # offline boot is normal in a garage; first event will retry
+    # Everything goes through the outbox: offline events deliver late,
+    # never get lost (garages and country roads are normal, not errors).
+    outbox.enqueue(f"{cfg.handle} online")
 
     while True:
         try:
@@ -45,7 +46,8 @@ def main() -> None:
                     "parked_away": "Parked away from home",
                     "trip_summary": ev.detail,
                 }.get(ev.kind, ev.detail)
-                room.post(f"{cfg.handle}: {text}")
+                outbox.enqueue(f"{cfg.handle}: {text}")
+            outbox.flush(room)
 
             # Mentions: "@gle battery", "@gle status" from any watch/phone.
             try:
@@ -68,12 +70,13 @@ def main() -> None:
                     # room's media store once real internet is back.
                     cam.download(clip_url, local)
                     public = room.upload(local)
-                    room.post(
+                    outbox.enqueue(
                         f"{cfg.handle}: dashcam event, clip attached",
                         file_url=public,
                         file_name=name,
                         file_size=os.path.getsize(local),
                     )
+                    outbox.flush(room)
                     open(marker, "w").close()
                     os.unlink(local)
         except Exception:
