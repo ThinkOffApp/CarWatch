@@ -335,3 +335,22 @@ Pi camera/CPU at modest FPS. Tomorrow: SSD yes, Hailo not yet.
 
 Sources: raspberrypi.com/news/raspberry-pi-ai-hat ; SunFounder Dual NVMe
 Raft; Seeed PCIe-to-dual-M.2 HAT product pages.
+
+## Reactive ambient lighting (petrus, Aug 10 2026)
+
+"Hue lights in the car the Pi controls, adaptive to camera: if someone
+looks, lights go on." The physical twin of the fan cam: the car lights up
+when it catches someone admiring it.
+
+- **Hardware**: Hue in a car is awkward (needs Bridge + mains). Two paths:
+  1. Hue **Bluetooth** bulbs = Pi drives them over BLE, no bridge, power
+     via a 12V-to-mains adapter.
+  2. Better for a car: **addressable LED strip (WS2812)** on 5V straight
+     off car USB, no bridge, instant, cheap, full color/animation.
+  Recommend the LED strip for the build; keep Hue for the house.
+- **Trigger**: reuses the fan-cam/sentry detection layer (no new model).
+  Camera sees a **face oriented toward the car** within a few meters ->
+  Pi runs a light cue (welcome glow / attention pulse). True eye-gaze is
+  fuzzy; start with face-facing-car, refine later.
+- **Guardrails**: PARKED-mode only (never light up or distract while
+  driving); mind battery (lights + camera + Pi unattended draws power).
