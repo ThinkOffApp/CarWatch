@@ -358,3 +358,19 @@ when it catches someone admiring it.
   fuzzy; start with face-facing-car, refine later.
 - **Guardrails**: PARKED-mode only (never light up or distract while
   driving); mind battery (lights + camera + Pi unattended draws power).
+
+## LED strip pick: WS2815 12V (petrus, Aug 10 2026)
+
+For the car use **WS2815**, not WS2812B: 12V native (runs off car 12V, no
+buck for the LEDs), backup data line (one vibration-killed pixel does not
+break the rest), no voltage drop. 1-2 m is plenty (cabin/grille), low
+draw. Brands: BTF-Lighting, ALITOVE. Buy "no controller" - the Pi is the
+controller, car 12V is the power.
+
+Build (only 3 connections, no true zero-wiring since the Pi drives it):
+1. WS2815 strip (no controller).
+2. 12V-to-USB-C adapter to power the Pi off the car (needed anyway).
+3. Pi to strip: shared GROUND (must be common), one data pin off a GPIO,
+   plus a 3.3V-to-5V level shifter (74AHCT125, ~2 EUR) for reliable data.
+App-controlled remote kits are plug-and-play but the Pi cannot drive them.
+TODO when petrus asks: exact amazon.de links (strip + shifter + adapter).
