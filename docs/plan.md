@@ -677,3 +677,20 @@ DAILY.** So this is the recommended path for the in-car screen: zero extra
 hardware, factory-mounted safety-approved display, already part of his
 routine. Next big feature after the shoot = an AA module in CodeWatch
 (Car App Library templates + messaging category).
+
+### AA design note: templates, not a mirrored chat view (Aug 11 2026)
+
+petrus pictured CodeWatch's existing chat view showing in AA. Correction
+worth keeping: **AA does not mirror the phone app's UI.** CodeWatch does
+appear in the AA app grid, but every car screen must be rebuilt with Car
+App Library templates, and Google restricts reading long text in motion
+(safety rule, not a technical limit). So no scrollable transcript while
+driving.
+
+Target design (voice-first, which suits the car anyway):
+- LIST template of recent room messages: sender + short line, tappable.
+- Tapping READS IT ALOUD rather than showing a text wall.
+- Reply by VOICE.
+- New messages announce on arrival.
+- PARKED: Google relaxes constraints, so show fuller detail when stopped
+  (dovetails with the parked-only camera sync already planned).
