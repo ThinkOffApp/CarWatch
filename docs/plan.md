@@ -562,3 +562,31 @@ Design response - CarWatch CONTROLS the mode rather than fighting it:
   transition the trips module already detects. VERIFY it works remotely;
   if the toggle needs a physical button press, the honest answer is
   "sync when parked" and the flow stays manual.
+
+## Platform option: Android-OS rearview mirror (petrus, Aug 10 2026)
+
+petrus asked about an "Android Auto enabled" mirror. **Critical
+distinction** that decides feasibility:
+- **Android Auto / CarPlay mirror** = a projection RECEIVER for the
+  phone's screen. We CANNOT install our app on it (AA runs only
+  Google-signed apps - the dead end already noted in phase 5.3).
+- **Android OS mirror** = a full Android device in mirror form. We CAN
+  sideload our APK. **This is the one that works.**
+
+Current market (verified Aug 10 2026): 12in mirrors running **Android 13**,
+8-core, 4GB RAM / 64GB ROM, 3-channel cameras, GPS, 5GHz WiFi, which also
+do wireless CarPlay/AA on top.
+
+**Why this is strategically better than the WOLFBOX for CarWatch:** it
+dissolves three problems at once - (1) the mirror overlay runs NATIVELY
+on the mirror (the original icon-strip design, no second screen), (2) no
+closed vendor firmware to reverse or patch, (3) no parked-only WiFi
+limitation and no mirror-blanking, so camera access works while driving.
+The Pi talks to it over normal WiFi. Revives phase 6 (mirror overlay) as
+genuinely buildable via `TYPE_APPLICATION_OVERLAY`.
+
+Caveats: generic brands, camera quality typically below a dedicated 4K
+unit like the G900; some ship locked-down launchers (sideloading usually
+still works); verify Android version + that it is OS-not-just-AA before buying.
+KIT IMPLICATION: an Android-OS mirror may be the better reference device
+for the shippable kit than a closed dashcam.
