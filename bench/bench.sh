@@ -64,12 +64,14 @@ if [ ! -f "$MODELS/$GEMMA_FILE" ]; then
 fi
 
 echo "== Qwen3-30B-A3B MoE (SSD-offload path, needs the SSD mounted)"
-# The smart big-model path from Potato OS: 30B MoE, only 3B active,
-# ~8-9 tok/s on a Pi 5 8GB when experts stream off a fast SSD. Set
+# The smart big-model path: Qwen3.6-35B-A3B MoE (Apr 2026, 35B
+# total / 3B active, Apache 2.0) - the Potato OS 30B recipe applied to
+# the newer, stronger model petrus flagged. ~8-9 tok/s class on a Pi 5
+# when experts stream off a fast SSD; faster with 16GB. Set
 # CARWATCH_SSD to a mounted SSD dir to enable; otherwise skipped (10GB
 # does not fit in 8GB RAM alone).
-QWEN_REPO="byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF"
-QWEN_FILE="Qwen3-30B-A3B-Instruct-2507-Q3_K_S.gguf"
+QWEN_REPO="unsloth/Qwen3.6-35B-A3B-GGUF"
+QWEN_FILE="Qwen3.6-35B-A3B-UD-Q3_K_S.gguf"
 SSD="${CARWATCH_SSD:-}"
 if [ -n "$SSD" ] && [ -d "$SSD" ]; then
   if [ ! -f "$SSD/$QWEN_FILE" ]; then

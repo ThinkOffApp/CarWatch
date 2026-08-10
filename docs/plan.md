@@ -215,7 +215,7 @@ and we pick by what feels smarter in the car.
 
 **Runtime to beat: ik_llama.cpp (via Potato OS, petrus's find).**
 Potato OS (github.com/potato-os/core, Apache 2.0) is a Pi-optimized
-local-LLM image that runs Qwen3-30B-A3B (30B MoE, 3B active) at ~8-9
+local-LLM image that runs Qwen3.6-35B-A3B (35B MoE, 3B active, Apr 2026, stronger than the 30B) at ~8-9
 tok/s on an 8GB Pi 5 with SSD offload, plus vision. Two takeaways:
 - Swap bench.sh from plain llama.cpp to **ik_llama.cpp** (IQK-optimized
   fork), meaningfully faster on the Pi.
