@@ -644,3 +644,32 @@ runs a modern Android:
 Rule if we ever buy one: pick for **verified OS version** (Android 11+),
 deliberately as an experiment on the E-Class, NOT for review count -
 the best-reviewed units are the ones too old to be useful to us.
+
+## CORRECTION: Android Auto IS viable (as a phone app) - petrus, Aug 11 2026
+
+Phase 5.3 says "Android Auto phone emulation - explicitly out of scope".
+That remains true for what it meant: making the PI pretend to be a phone
+needs Google-signed certs. But it wrongly reads as "AA is unusable", and
+petrus's question surfaced the distinction:
+
+**With Android Auto the app runs on the PHONE; the mirror/head-unit is
+only a display.** So we do not install anything on the mirror - we add an
+AA surface to CodeWatch, which is already on petrus's phone.
+
+**Possible via AA:**
+- Room messages on the car screen, read aloud, with voice reply (the
+  messaging category is first-class) - GroupMind in the car, hands free.
+- Car status via Car App Library TEMPLATES (lists, panes, message
+  screens): battery, pending approvals, last event; approvals tappable.
+- Voice in/out through the car.
+
+**Not possible via AA:** free-form graphics. No custom icon strip drawn
+over the live rear view - Google permits only their templates while
+driving. The overlay look needs a screen we own (see the second-camera /
+own-display option) or an Android-OS mirror.
+
+**Biggest implication: the GLE likely already HAS Android Auto in MBUX**,
+so CarWatch could appear on the car's own built-in screen with NO extra
+hardware and no firmware hacking. Sideload via AA developer mode works for
+petrus's own car; Google review only matters to ship to other users.
+TODO: confirm the GLE's AA support.
