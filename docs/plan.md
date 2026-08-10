@@ -311,3 +311,27 @@ Decided: film here on the GLE (branded, coolest car, on hand). Not Finland
 3. Wire Vadelma to the GLE for power + to the WOLFBOX.
 4. Shoot: the branded car answering from the GroupMind room, online and
    offline. Keep it turnkey - no fiddling on camera.
+
+## Hailo vs SSD: the single-PCIe-lane constraint (Aug 10 2026)
+
+petrus asked "which Hailo, and we have an SSD". Verified current facts:
+
+- **Which Hailo**: the board is the **Raspberry Pi AI HAT+** (Hailo chip
+  soldered on, not a module). Hailo-8L = 13 TOPS ~70 USD; Hailo-8 = 26
+  TOPS ~110 USD. For the detection layer (person / phone-toward-car /
+  motion) the **13 TOPS 8L is plenty** - do not pay for the 26.
+- **The catch**: the Pi 5 has **one PCIe lane**. The NVMe SSD needs it
+  (random reads are what make the Qwen3.6-35B MoE offload fast), and the
+  standard AI HAT+ takes that same FPC connector. You cannot stack both.
+  To run SSD + Hailo together you need a **dual-M.2 PCIe-switch HAT**
+  (SunFounder Dual NVMe Raft, or Seeed PCIe-to-dual-M.2) plus a Hailo
+  **M.2 module** (not the integrated HAT+ board). Then they SHARE the one
+  lane (~half bandwidth each) and the connector power budget is tight.
+
+**Decision**: give the lane to the SSD for v1 (the offline LLM depends on
+it), ship without Hailo. Add real-time sentry later via a switch HAT +
+Hailo M.2 module, accepting shared bandwidth - OR run the detector on the
+Pi camera/CPU at modest FPS. Tomorrow: SSD yes, Hailo not yet.
+
+Sources: raspberrypi.com/news/raspberry-pi-ai-hat ; SunFounder Dual NVMe
+Raft; Seeed PCIe-to-dual-M.2 HAT product pages.
