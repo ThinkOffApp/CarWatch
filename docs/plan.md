@@ -226,6 +226,20 @@ Bench day: flash Potato OS on a spare card, measure Qwen3-30B on our
 unit to confirm 8-9 tok/s, then adopt ik_llama into our stack (keep our
 own agent layer rather than depending on their experimental OS).
 
+**Vision (three cameras + a VLM) - the "car with eyes" phase.**
+The G900's three feeds each earn a use, run on EVENTS not 30fps (a VLM
+frame takes seconds on a Pi, so trigger on impact/lock/question):
+- *Rear (flagship):* parked-impact forensics - describe the hit-and-run
+  in plain words + partial plate, post to the room with the clip.
+- *Front:* "what just happened" incident summaries on hard brakes,
+  read missed road/parking signs, parking-legality checks.
+- *Cabin (safety):* child/pet-left-behind alert on lock-and-walk,
+  forgot-your-bag reminders.
+- *Cross-cutting:* the car ANSWERS questions about what it saw ("what
+  colour was the car that cut me off") from recent frames, offline.
+The dashcam already triggers on motion/impact, so the model runs on the
+right frames. Needs a vision-capable model + the 16GB board.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
