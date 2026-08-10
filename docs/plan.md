@@ -445,3 +445,18 @@ a key constraint:
   at once. So use the **A2DP digital stream** (the music the Pi plays)
   for the FFT instead.
 - Net: two free sources, each for its job - car mic = voice, A2DP = music.
+
+## Wiring parts + RODE mic (petrus, Aug 10 2026)
+
+- petrus has no starter kit (only a Pi enclosure), so add wiring parts:
+  **ELEGOO breadboard + 50 male-female jumpers** /dp/**B071RG9MFT** (~7 EUR,
+  ~Aug 13). Female ends clip to Pi GPIO pins, male ends into breadboard;
+  seats the 74AHCT125, no soldering. Bigger option: /dp/B0B5TCKTQH (~13).
+- **Car charger** he chose: SUPERONE 105W multiport (Pi 5 needs ~27W PD,
+  huge headroom + phone ports). USB-C to USB-C into a PD port.
+- **RODE wireless mic** (petrus owns): demo/creator mic - clean video
+  narration AND a wireless voice input to the Pi (whisper accuracy >> car
+  mic, works outside the car for fan-cam shots). Wireless GO II / ME = USB
+  audio, plug into Pi USB-C, class-compliant no drivers. Gen-1 Wireless GO
+  = 3.5mm analog only -> use a ~5 EUR USB sound card. Shipped kit still
+  uses car mic or a fixed USB mic; RODE is a shoot asset.
