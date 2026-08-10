@@ -481,3 +481,19 @@ SUPERONE USB-C charger.
 cigarette-socket splitter + barrel pigtail). Offered links; awaiting go.
 Full order: 12V COB strip, 74AHCT125, ELEGOO breadboard+jumpers, SUPERONE
 charger, 12V tap.
+
+## 12V tap chosen + full lighting BOM (petrus, Aug 10 2026)
+
+12V tap (no fusebox work): CERRXIAN 12V cigarette-lighter plug cable,
+built-in 20A fuse, tinned bare ends - /dp/**B0C77Z9R28** (~12 EUR, ~Aug
+13). Plug into spare 12V socket, two wires to strip 12V + GND (GND also
+common to Pi). 20A fuse protects the cable; short strip draws far less.
+
+**Full lighting BOM** (all ~Aug 13-14, after the Aug 11 shoot = fast
+follow):
+- Strip: BTF FCOB SPI RGB COB WS2811 12V - /dp/B0FZ9VJC9N (~46)
+- Level shifter: POPESQ 5x 74AHCT125N - /dp/B0D93QKS26
+- Wiring: ELEGOO breadboard + M-F jumpers - /dp/B071RG9MFT (~7)
+- Pi power: SUPERONE 105W USB-C car charger (petrus chose)
+- 12V tap: CERRXIAN fused plug pigtail - /dp/B0C77Z9R28 (~12)
+Control software: OLA (DMX/Art-Net) or rpi_ws281x. Mic: RODE (demo).
