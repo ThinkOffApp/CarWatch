@@ -21,7 +21,25 @@ mkdir -p "$STACK" "$MODELS"
 echo "== apt deps"
 sudo apt-get update -qq
 sudo apt-get install -y -qq git build-essential cmake curl ffmpeg \
-  wireless-tools alsa-utils python3-pip adb sox libsox-fmt-all poppler-utils
+  wireless-tools alsa-utils python3-pip adb sox libsox-fmt-all poppler-utils \
+  pciutils
+
+echo "== PCIe / NVMe link speed (SSD is the MoE bottleneck)"
+# The Qwen MoE streams experts off the SSD, so NVMe bandwidth matters.
+# Pi 5 defaults to PCIe Gen 2; add `dtparam=pciex1_gen=3` to
+# /boot/firmware/config.txt and reboot to (roughly) double it. Gen 3 is
+# technically out of spec - if dmesg shows NVMe errors, remove the line.
+if command -v lspci >/dev/null 2>&1; then
+  lspci -vv 2>/dev/null | grep -i -A2 -E "Non-Volatile|NVMe" \
+    | grep -i "LnkSta:" | sed 's/^/  /' \
+    || echo "  (no NVMe device found on PCIe - is the SSD attached?)"
+  echo "  want: Speed 8GT/s (Gen3). If you see 5GT/s, Gen3 is not enabled."
+else
+  echo "  (install pciutils for lspci to read the link speed)"
+fi
+grep -q "pciex1_gen=3" /boot/firmware/config.txt 2>/dev/null \
+  && echo "  config.txt: pciex1_gen=3 present" \
+  || echo "  config.txt: pciex1_gen=3 NOT set (still Gen2) - add it + reboot"
 
 echo "== llama.cpp (baseline runtime + whisper build dep)"
 if [ ! -d "$STACK/llama.cpp" ]; then

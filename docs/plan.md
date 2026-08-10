@@ -306,6 +306,10 @@ Berlin, so 360 fan-cam footage is a later Finland-trip upgrade.
 Decided: film here on the GLE (branded, coolest car, on hand). Not Finland
 (only the Insta360 + Mac Mini are there; not required for v1). Runbook:
 1. Unbox + flash the 16GB Pi (Vadelma).
+1b. Enable PCIe Gen 3 for the SSD: add `dtparam=pciex1_gen=3` to
+   /boot/firmware/config.txt and reboot (Pi 5 defaults to Gen 2; Gen 3
+   ~doubles NVMe bandwidth for the Qwen MoE. Out of spec - if dmesg shows
+   NVMe errors, remove the line). bench.sh prints the negotiated speed.
 2. Run bench/bench.sh - builds llama.cpp + ik_llama.cpp + whisper + piper,
    pulls Gemma 4 E2B + Qwen3.6-35B-A3B, prints tok/s, probes WOLFBOX.
 3. Wire Vadelma to the GLE for power + to the WOLFBOX.
