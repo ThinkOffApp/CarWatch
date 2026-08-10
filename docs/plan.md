@@ -609,3 +609,21 @@ THERMAL POLICY, not continuous recording:
   event capture.
 - Where available, read the unit's own temperature/health endpoints
   before starting a long sync.
+
+### amazon.de availability check (Aug 10 2026) - do NOT buy yet
+
+Searched amazon.de for genuine Android-OS mirrors. Availability is POOR
+in Germany (my earlier enthusiasm came from the US site and did not
+transfer):
+- "3-K Android 13 4G" 12in, ~195 EUR, **2 reviews**, delivery 28 Aug-2 Sept
+- 10.26in Android 13 4+64GB, ~460 EUR, **no reviews**, delivery 4-10 Sept
+Everything well-reviewed on .de is closed-firmware (WOLFBOX G850 Pro 4.4/972,
+G840S 4.2/14.1k, AZDOME, 70mai).
+
+**Decision: keep the WOLFBOX** (works, API now mapped, hero of the shoot);
+do not return it, do not gamble on an unreviewed mirror weeks out.
+**Two-car strategy** (petrus has the E-Class too): GLE = proven demo rig
+with the closed dashcam; E-Class = experimental rig for an Android-OS
+mirror later. PRODUCT: CarWatch should support BOTH camera classes -
+closed dashcams (parked sync) and open Android units (live overlay) -
+which is a selling point, not a compromise.
