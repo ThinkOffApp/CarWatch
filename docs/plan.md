@@ -374,3 +374,22 @@ Build (only 3 connections, no true zero-wiring since the Pi drives it):
    plus a 3.3V-to-5V level shifter (74AHCT125, ~2 EUR) for reliable data.
 App-controlled remote kits are plug-and-play but the Pi cannot drive them.
 TODO when petrus asks: exact amazon.de links (strip + shifter + adapter).
+
+## LED upgrade: premium + DMX (petrus, Aug 10 2026)
+
+petrus: "best quality LEDs with DMX control." Revised pick:
+- **Best look**: addressable **COB** (dotless continuous ribbon, reads
+  premium), 12V native: BTF-Lighting **FCOB WS2811 12V**. Or **12V RGBW**
+  addressable (**WS2814**) if true whites matter more than smoothness.
+  Higher density = better.
+- **DMX control**: run **OLA (Open Lighting Architecture)** on the Pi -
+  speaks DMX512 + Art-Net/sACN natively, drives the pixel strip, and can
+  take input from DMX software/consoles. Keeps the Pi as the brain.
+  True DMX-native strips (UCS512 IC) exist but need an added RS-485 /
+  USB-DMX interface - more parts, little gain over OLA.
+- **Delivery honesty**: guest view to Berlin 10249 shows the plain WS2815
+  ~Aug 13 (not tomorrow); premium COB/DMX gear ~2-4 days. So the LED
+  feature likely misses the Aug 11 shoot. Plan: shoot the car brain +
+  room demo tomorrow, add reactive lighting as a fast follow.
+- TODO (on petrus's go): exact amazon.de links for COB strip + RGBW +
+  level shifter, each with the delivery date shown to Berlin.
