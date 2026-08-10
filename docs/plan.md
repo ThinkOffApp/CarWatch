@@ -590,3 +590,22 @@ unit like the G900; some ship locked-down launchers (sideloading usually
 still works); verify Android version + that it is OS-not-just-AA before buying.
 KIT IMPLICATION: an Android-OS mirror may be the better reference device
 for the shippable kit than a closed dashcam.
+
+## Thermal constraint: the dashcam runs HOT (petrus, Aug 10 2026)
+
+petrus, on the real unit: "it gets very hot" (he powered it off). Expected
+in part - it encodes 3x cameras at 4K AND runs a WiFi AP from a small
+passively-cooled housing, and WiFi mode adds meaningfully to the load.
+
+**Product implication for sentry/fan-cam mode:** parked recording happens
+in a closed car, potentially in summer sun - the worst thermal case there
+is, and the classic way dashcams shut down or die. So sentry mode needs a
+THERMAL POLICY, not continuous recording:
+- Trigger in BURSTS on motion/impact rather than recording continuously.
+- Back off (longer intervals, fewer channels, WiFi off between syncs)
+  as temperature rises.
+- Prefer the Pi's own cheap camera for always-on watching (it can be
+  mounted where there is airflow), reserving the WOLFBOX for high-quality
+  event capture.
+- Where available, read the unit's own temperature/health endpoints
+  before starting a long sync.
