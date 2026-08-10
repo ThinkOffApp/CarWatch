@@ -497,3 +497,17 @@ follow):
 - Pi power: SUPERONE 105W USB-C car charger (petrus chose)
 - 12V tap: CERRXIAN fused plug pigtail - /dp/B0C77Z9R28 (~12)
 Control software: OLA (DMX/Art-Net) or rpi_ws281x. Mic: RODE (demo).
+
+## LED control upgrade: ESP32-S3 + WLED (petrus, Aug 10 2026)
+
+petrus is adding an **ESP32-S3 DevKitC-1**. Great call for the lights:
+flash **WLED** -> polished phone app, hundreds of effects, built-in
+music-reactive, no code. Speaks Art-Net/DMX/E1.31, so the **Pi stays the
+brain** and sends light cues over WiFi (camera sees admirer -> Pi tells
+WLED to glow). Wins: ESP does precise WS timing better than a Linux Pi;
+frees the Pi for vision + voice. The 74AHCT125 now level-shifts ESP->strip
+(nothing wasted). Strip verified swap: 12V B0FZ9VJC9N (was 24V/10m).
+
+Revised control architecture: Pi (vision/voice/room brain) --WiFi/Art-Net-->
+ESP32-S3 running WLED --data via 74AHCT125--> WS2811 12V COB strip
+(powered from car 12V via CERRXIAN fused plug, common ground).
