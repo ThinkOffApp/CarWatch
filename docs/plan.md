@@ -412,3 +412,22 @@ Two cases:
 leave factory MBUX alone. Factory-lighting sync = later read-first CAN
 reverse-engineering track, done PARKED, never while driving, research not
 a v1 feature. (Awaiting petrus: which kind are his existing strips?)
+
+## LED shopping list + music control (petrus, Aug 10 2026)
+
+Confirmed on amazon.de (Berlin 10249, guest view):
+- **Strip**: BTF-LIGHTING FCOB SPI RGB COB WS2811, 5M 720LEDs/m, **12V**,
+  /dp/**B0FZ9VJC9N**, ~45.99 EUR, delivery ~Fri 14 Aug. (12V addressable
+  COB = dotless premium look + car-friendly. Avoid the 24V FCOB variants.)
+- **Level shifter (optional)**: exact chip **74AHCT125** (NOT a generic
+  bidirectional module - those misbehave on WS281x). Short runs often
+  work without it.
+- **Pi power in car**: 12V-to-USB-C PD car adapter, 30W+.
+- **DMX control**: **OLA** on the Pi = real DMX512 + Art-Net in software,
+  no hardware. Physical DMX console only = add a USB-DMX interface.
+- **Music-reactive**: FREE in software - the Pi is already in the audio
+  path (BT A2DP), so a software FFT drives beat/color reactive lighting.
+  For ambient music not through the Pi, add a cheap USB mic.
+
+Delivery reality: strip lands Aug 13-14, AFTER the Aug 11 shoot. Plan:
+film the car brain + room demo tomorrow; lighting is the fast follow.
