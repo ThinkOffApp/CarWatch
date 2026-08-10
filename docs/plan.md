@@ -306,7 +306,8 @@ Berlin, so 360 fan-cam footage is a later Finland-trip upgrade.
 Decided: film here on the GLE (branded, coolest car, on hand). Not Finland
 (only the Insta360 + Mac Mini are there; not required for v1). Runbook:
 1. Unbox + flash the 16GB Pi (Vadelma).
-1b. Enable PCIe Gen 3 for the SSD: add `dtparam=pciex1_gen=3` to
+1b. (NVMe M.2 SSD only - SKIP for a USB external SSD, which is what
+   petrus has) Enable PCIe Gen 3 for the SSD: add `dtparam=pciex1_gen=3` to
    /boot/firmware/config.txt and reboot (Pi 5 defaults to Gen 2; Gen 3
    ~doubles NVMe bandwidth for the Qwen MoE. Out of spec - if dmesg shows
    NVMe errors, remove the line). bench.sh prints the negotiated speed.
@@ -530,3 +531,15 @@ JOINS the dashcam WiFi and pulls clips/frames via the Novatek HTTP API
 join one net at a time (dashcam AP vs car/home) - a USB WiFi dongle or the
 cam's station mode resolves that later; not needed for physical install.
 Next when powered: point the Pi at its WiFi + grab first frame (offered).
+
+## SSD confirmed: USB external (petrus, Aug 10 2026)
+
+petrus has: the Pi, a microSD card, and an **external (USB) SSD** - NOT an
+NVMe M.2. So:
+- Plug the SSD into a **blue USB 3.0** port (not black USB 2.0). No M.2
+  HAT needed. USB 3.0 is plenty fast for streaming the Qwen MoE experts;
+  NVMe-on-HAT is marginally faster, optional later.
+- **SKIP** the `dtparam=pciex1_gen=3` line (NVMe-only; does nothing for
+  USB). bench.sh still prints link speed but it is irrelevant here.
+- Roles: microSD = boot/OS; USB SSD = holds the big Qwen model (bench.sh
+  downloads it there via CARWATCH_SSD=/path/to/mounted/ssd).
