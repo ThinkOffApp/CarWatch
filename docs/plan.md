@@ -543,3 +543,22 @@ NVMe M.2. So:
   USB). bench.sh still prints link speed but it is irrelevant here.
 - Roles: microSD = boot/OS; USB SSD = holds the big Qwen model (bench.sh
   downloads it there via CARWATCH_SSD=/path/to/mounted/ssd).
+
+## CONSTRAINT: camera WiFi is PARKED-ONLY (petrus, Aug 10 2026)
+
+petrus observed on the real unit: **while the G900's WiFi mode is on, the
+mirror displays the WiFi info screen instead of the live rear view**, so
+it is not safe to drive with WiFi enabled. This is a hard product
+constraint, not a bug.
+
+Design response - CarWatch CONTROLS the mode rather than fighting it:
+- **Parked** (the main use case): camera WiFi ON. Pi pulls impact clips,
+  sentry/fan-cam footage, syncs to the room. All the events we care about
+  happen while parked anyway.
+- **Driving**: camera WiFi OFF so the mirror keeps a clean rear view
+  (safety rule already in this plan). Pi still does voice, OBD, room chat
+  - none of which need the camera link.
+- Automate via `setwifiswitch.cgi` (seen in firmware) on the parked/driving
+  transition the trips module already detects. VERIFY it works remotely;
+  if the toggle needs a physical button press, the honest answer is
+  "sync when parked" and the flow stays manual.
