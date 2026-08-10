@@ -672,4 +672,8 @@ own-display option) or an Android-OS mirror.
 so CarWatch could appear on the car's own built-in screen with NO extra
 hardware and no firmware hacking. Sideload via AA developer mode works for
 petrus's own car; Google review only matters to ship to other users.
-TODO: confirm the GLE's AA support.
+**CONFIRMED (petrus, Aug 11): the GLE has Android Auto and he uses it
+DAILY.** So this is the recommended path for the in-car screen: zero extra
+hardware, factory-mounted safety-approved display, already part of his
+routine. Next big feature after the shoot = an AA module in CodeWatch
+(Car App Library templates + messaging category).
