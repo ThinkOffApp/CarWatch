@@ -278,3 +278,36 @@ its pull. Two modes off one detector: guardian vs fan cam.
 - The car gets ITS OWN GroupMind API key; never reuse another agent's.
 - No keys in the repo, ever (public repo; config lives in /etc/carwatch).
 - Clips upload to the room's media store; nothing else leaves the car.
+
+## Name: Vadelma (petrus, Aug 10 2026)
+
+The Pi (and by extension this build) is named **Vadelma** - Finnish for
+raspberry. It is the car's offline brain. Positioning tagline from petrus:
+"Smart car with the fam online or offline with the Vadelma" - the car is
+a room agent that talks to the family/team, using the cloud when it can
+reach it and running fully offline on Vadelma when it cannot (tunnel,
+dead zone, privacy). Online/offline hybrid is the 3-tier brain routing
+already in the plan.
+
+## Optional camera: Insta360 (petrus, Aug 10 2026)
+
+petrus has an Insta360 that can stream. It is a DEMO/premium input, not
+the shippable default (the WOLFBOX dashcam stays the kit's cameras).
+Value: true 360 coverage catches admirers/threats from any angle at once,
+not just where a fixed lens points - ideal for fan cam and sentry on a
+parked car. Path: Insta360 in USB webcam mode -> Pi grabs frames with
+ffmpeg (or pull its wifi stream) -> one-line ffmpeg de-warp of the
+equirectangular image -> VLM reads the region -> post the cropped angle.
+Caveat: the Insta360 lives in Finland; the shoot is on the branded GLE in
+Berlin, so 360 fan-cam footage is a later Finland-trip upgrade.
+
+## Tomorrow's shoot (Aug 11 2026, Berlin, branded GLE)
+
+Decided: film here on the GLE (branded, coolest car, on hand). Not Finland
+(only the Insta360 + Mac Mini are there; not required for v1). Runbook:
+1. Unbox + flash the 16GB Pi (Vadelma).
+2. Run bench/bench.sh - builds llama.cpp + ik_llama.cpp + whisper + piper,
+   pulls Gemma 4 E2B + Qwen3.6-35B-A3B, prints tok/s, probes WOLFBOX.
+3. Wire Vadelma to the GLE for power + to the WOLFBOX.
+4. Shoot: the branded car answering from the GroupMind room, online and
+   offline. Keep it turnkey - no fiddling on camera.
