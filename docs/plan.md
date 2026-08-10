@@ -240,6 +240,21 @@ frame takes seconds on a Pi, so trigger on impact/lock/question):
 The dashcam already triggers on motion/impact, so the model runs on the
 right frames. Needs a vision-capable model + the 16GB board.
 
+**Smart sentry (petrus: store clips when people look at or shoot the
+car).** While parked, the dashcam's own parking mode captures raw
+motion/impact clips cheaply; the Pi's vision layer PROMOTES the
+interesting ones - periodically asks "is someone paying attention to
+this car?" and on yes saves the clip, describes the behaviour ("a person
+at the driver door for 40s, looking in" / "someone raised a phone at the
+car"), posts to the room. Sudden hits come from the impact trigger, then
+get annotated. It is Tesla Sentry Mode that TALKS, on any car. Design
+constraints: POWER (Pi+cameras parked draws more than the dashcam alone
+- runs off the hardwire kit's battery cutoff, cap how often the vision
+model wakes); PRIVACY/LAW (own-car protection filming is broadly EU-OK
+like any parking mode, but continuous FACE analysis of passersby is
+sensitive GDPR - keep it event-triggered and describe BEHAVIOUR, not
+identity). Lives under camp mode.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
