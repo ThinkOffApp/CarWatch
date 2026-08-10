@@ -393,3 +393,22 @@ petrus: "best quality LEDs with DMX control." Revised pick:
   room demo tomorrow, add reactive lighting as a fast follow.
 - TODO (on petrus's go): exact amazon.de links for COB strip + RGBW +
   level shifter, each with the delivery date shown to Berlin.
+
+## Central light control from the Pi (petrus, Aug 10 2026)
+
+petrus: "car also has multi color strips, control all centrally from Pi."
+Two cases:
+- **Aftermarket strips** (footwell/door RGB he added, own remote/app):
+  Pi CAN take them over - drive directly if addressable, or replace their
+  controller if dumb RGB. Feasible + safe. Bring them under OLA with the
+  new COB/RGBW as one console, reactive to camera + car state.
+- **Factory MBUX ambient** (64-color Mercedes interior): lives on the
+  car's internal CAN with proprietary MB messages, no public API.
+  Controlling it = injecting interior-CAN frames - partly reverse-
+  engineered by enthusiasts but car/MY-specific, brittle, and writing to
+  interior CAN risks confusing other body modules.
+
+**Decision**: v1/shoot = Pi centrally drives ADD-ON strips via OLA only;
+leave factory MBUX alone. Factory-lighting sync = later read-first CAN
+reverse-engineering track, done PARKED, never while driving, research not
+a v1 feature. (Awaiting petrus: which kind are his existing strips?)
