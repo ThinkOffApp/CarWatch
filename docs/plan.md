@@ -627,3 +627,20 @@ with the closed dashcam; E-Class = experimental rig for an Android-OS
 mirror later. PRODUCT: CarWatch should support BOTH camera classes -
 closed dashcams (parked sync) and open Android units (live overlay) -
 which is a selling point, not a compromise.
+
+### Android-mirror market reality (verified Aug 10 2026)
+
+The category splits badly, with NO option that is both well-reviewed and
+runs a modern Android:
+- **Established brands** (Junsun A880/A930, Podofo): genuine reviews, 4G,
+  GPS, ADAS - but run **Android 5.1 (2015)**. CodeWatch needs minSdk 30
+  (Android 11), so our app CANNOT install. Would need a separate
+  stripped-down low-minSdk overlay APK (real work, loses most features).
+  This is exactly the "mirror's Android may predate our minSdk" risk
+  already flagged in phase 6.
+- **Android 13 units**: correct OS for us, but no-name, ~0-2 reviews,
+  195-460 EUR, delivery weeks out.
+
+Rule if we ever buy one: pick for **verified OS version** (Android 11+),
+deliberately as an experiment on the E-Class, NOT for review count -
+the best-reviewed units are the ones too old to be useful to us.
