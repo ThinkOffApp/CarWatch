@@ -431,3 +431,17 @@ Confirmed on amazon.de (Berlin 10249, guest view):
 
 Delivery reality: strip lands Aug 13-14, AFTER the Aug 11 shoot. Plan:
 film the car brain + room demo tomorrow; lighting is the fast follow.
+
+## Audio sources: car mic vs A2DP (petrus, Aug 10 2026)
+
+petrus: "you can listen to the room with the car microphone." True, with
+a key constraint:
+- **Voice / push-to-talk**: use the CAR MIC over Bluetooth HFP (hands-
+  free). The Pi hears the cabin, no USB mic needed. Great for speech.
+- **Music-reactive lighting**: do NOT use the car mic. (1) HFP mic is
+  speech-tuned (echo cancel, noise suppression, AGC, mono 8-16kHz) - it
+  wrecks music. (2) Opening the HFP mic (SCO call channel) SUSPENDS the
+  A2DP music stream - can't capture mic and play hi-fi music on one link
+  at once. So use the **A2DP digital stream** (the music the Pi plays)
+  for the FFT instead.
+- Net: two free sources, each for its job - car mic = voice, A2DP = music.
