@@ -460,3 +460,24 @@ a key constraint:
   audio, plug into Pi USB-C, class-compliant no drivers. Gen-1 Wireless GO
   = 3.5mm analog only -> use a ~5 EUR USB sound card. Shipped kit still
   uses car mic or a fixed USB mic; RODE is a shoot asset.
+
+## LED electrical: power + control wiring (petrus, Aug 10 2026)
+
+**Power**: strip runs on CAR 12V, never from the Pi. Fused 12V line (add-
+a-fuse tap at fusebox, or spare accessory socket) -> strip 12V + GND.
+Inline fuse (5A fine for short strip). Draw ~1-3A for 1-2m at scene
+brightness; full 5m white is much more (keep it short). CRITICAL: strip
+GND tied to Pi GND (common ground) or data glitches. Caveat: car 12V
+rises to ~14.4V running (alternator) - tolerable but bright/warm; for
+permanent install add a small 12V buck to hold steady 12V.
+
+**Control**: only DATA from the Pi. Pi GPIO -> 74AHCT125 (3.3V->5V) ->
+strip DIN. Software: OLA (DMX512 + Art-Net) OR rpi_ws281x script; both run
+reactive + music effects. Three worlds meet at the strip: car 12V (fused)
+powers LEDs, Pi sends data via shifter, all grounds common. Pi powered by
+SUPERONE USB-C charger.
+
+**Still to buy**: a 12V tap (add-a-fuse kit + inline fuse holder, or a 2nd
+cigarette-socket splitter + barrel pigtail). Offered links; awaiting go.
+Full order: 12V COB strip, 74AHCT125, ELEGOO breadboard+jumpers, SUPERONE
+charger, 12V tap.
