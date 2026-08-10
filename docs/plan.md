@@ -511,3 +511,22 @@ frees the Pi for vision + voice. The 74AHCT125 now level-shifts ESP->strip
 Revised control architecture: Pi (vision/voice/room brain) --WiFi/Art-Net-->
 ESP32-S3 running WLED --data via 74AHCT125--> WS2811 12V COB strip
 (powered from car 12V via CERRXIAN fused plug, common ground).
+
+## WOLFBOX G900 TriPro install in the GLE (petrus, Aug 10 2026)
+
+petrus received the mirror cam. Install:
+1. **Mount**: straps OVER the OEM GLE mirror (two rubber bands). Front cam
+   + IR cabin cam are BOTH in the mirror unit (nothing else up front).
+2. **Power (demo)**: included car charger into a 12V socket, cord up the
+   A-pillar, tuck into headliner to the mirror. Parking/sentry mode later
+   = the hardwire kit (fusebox constant power); skip for the demo.
+3. **Rear cam**: only cable run to the back - plug into mirror, route along
+   headliner, mount on rear glass (or plate = bumper version).
+4. Power on, format SD, set time.
+
+**Pi link = wireless**: G900 has its own 5.8GHz WiFi; the Pi (Vadelma)
+JOINS the dashcam WiFi and pulls clips/frames via the Novatek HTTP API
+(cmd=3015). No cable dashcam<->Pi. Note: Pi's single WiFi radio can only
+join one net at a time (dashcam AP vs car/home) - a USB WiFi dongle or the
+cam's station mode resolves that later; not needed for physical install.
+Next when powered: point the Pi at its WiFi + grab first frame (offered).
