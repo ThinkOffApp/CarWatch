@@ -255,6 +255,14 @@ like any parking mode, but continuous FACE analysis of passersby is
 sensitive GDPR - keep it event-triggered and describe BEHAVIOUR, not
 identity). Lives under camp mode.
 
+*Fan cam (petrus: "interested in people taking photos of my car bc its
+so cool").* Same person/phone-toward-car detector, positive framing: log
+admiration events ("photographed outside the cafe at 14:20" + clip) and
+tally them ("turned 6 heads today"). Lighter power/privacy than threat
+monitoring (curiosity log, not surveillance) and on-brand marketing
+telemetry - the ThinkOff car is a rolling billboard and this measures
+its pull. Two modes off one detector: guardian vs fan cam.
+
 ## RAM budget (8 GB)
 
 | What | ~RAM |
