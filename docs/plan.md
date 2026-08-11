@@ -849,3 +849,21 @@ nothing outside it. As sensors land, facts move from "cannot sense" into
 the block. Also: reasoning models need `--reasoning off --reasoning-budget 0`
 server-side (the in-prompt `/no_think` switch was IGNORED), and answers
 need enough max_tokens or they truncate mid-sentence.
+
+## CORRECTION: the ENET cable is NOT useless on the GLE (Aug 11 2026)
+
+Earlier notes (phase 4 and the OBD advice) say petrus's OTRCORIC ENET
+cable is "BMW-only, useless on the Mercedes". **That is WRONG for his
+car** and was stated twice without checking. Verified Aug 11:
+- The 2020 GLE is a **W167**, which supports **DoIP** (diagnostics over
+  IP, ISO 13400) through the OBD port. ENET/VOE-style OBD-to-RJ45 cables
+  are used for exactly this on Mercedes, including with XENTRY.
+  (The PRE-facelift W166 is the CAN/K-Line one that needs SD Connect.)
+
+Practical split, unchanged in substance:
+- **DoIP (ENET cable)** = the manufacturer-level channel where the deep
+  data lives (true battery state of health, every ECU). But the Pi must
+  implement **UDS over IP** itself - days of work, not an afternoon.
+- **ELM327 Bluetooth** = the fast path to speed, revs, coolant, fuel and
+  DTCs, working same-day. Still the recommended first step.
+Worth probing what answers on the wire once the cable is plugged in.
