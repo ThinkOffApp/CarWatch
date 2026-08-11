@@ -123,15 +123,20 @@ def _load_index():
 # prints. Expansion only ADDS search terms, so a query that already matched
 # still matches - it can only widen recall, never narrow it.
 ALIASES: dict[str, tuple[str, ...]] = {
-    # mains sockets: people say any voltage, Mercedes prints one of them
-    "230v": ("115", "socket", "power"),
-    "240v": ("115", "socket", "power"),
-    "220v": ("115", "socket", "power"),
-    "115v": ("115", "socket"),
-    "mains": ("115", "socket", "power"),
+    # mains sockets: people say any voltage, the manual prints whichever its
+    # region uses (petrus's European GLE: 230V; the North American book: 115V).
+    # Map every spoken voltage to BOTH numbers plus the section words, and let
+    # the indexed edition's own text decide which chunk scores. Never assume
+    # the region in code - that is how the 230V->115V inversion happened.
+    "230v": ("230", "115", "socket", "power"),
+    "240v": ("230", "115", "socket", "power"),
+    "220v": ("230", "115", "socket", "power"),
+    "115v": ("115", "230", "socket", "power"),
+    "110v": ("115", "230", "socket", "power"),
+    "mains": ("230", "115", "socket", "power"),
     "plug": ("socket",),
     "outlet": ("socket",),
-    "inverter": ("115", "socket"),
+    "inverter": ("230", "115", "socket"),
     # everyday words vs manual words
     "boot": ("cargo", "compartment"),
     "trunk": ("cargo", "compartment"),
