@@ -41,19 +41,19 @@ def main() -> None:
         sys.exit(1)
 
     ctx = manual_context(q) if use_manual else ""
-    if ctx:
-        prompt = (
-            "You are the assistant built into a 2020 Mercedes GLE. Using ONLY the "
-            "owner-manual excerpts below, answer in 2 short sentences and cite the page.\n\n"
-            f"{ctx}\n\nQUESTION: {q}\nAnswer briefly."
-        )
-    else:
-        prompt = f"You are the assistant in a Mercedes GLE. Answer briefly.\n\n{q}"
+    # One grounding path for every surface: the model may assert only what
+    # carwatch.grounding puts in KNOWN FACTS.
+    sys.path.insert(0, REPO)
+    from carwatch.grounding import build_system_prompt, default_state
+    facts, cannot = default_state(engine_on=False, parked=True)
+    system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
+    prompt = q
 
     start = time.time()
     req = urllib.request.Request(
         URL,
-        data=json.dumps({"messages": [{"role": "user", "content": prompt}],
+        data=json.dumps({"messages": [{"role": "system", "content": system},
+                                      {"role": "user", "content": prompt}],
                          "max_tokens": 900}).encode(),
         headers={"Content-Type": "application/json"},
     )

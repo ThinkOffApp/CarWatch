@@ -121,5 +121,36 @@ class TestWolfbox(unittest.TestCase):
         )
 
 
+class GroundingTests(unittest.TestCase):
+    """The car must never assert state it cannot actually sense."""
+
+    def test_unsensed_state_is_never_a_fact(self):
+        from carwatch.grounding import build_system_prompt, default_state
+        facts, cannot = default_state(engine_on=False, parked=True)
+        prompt = build_system_prompt(facts, cannot)
+        # what we DO know
+        self.assertIn("engine: OFF", prompt)
+        # what we do NOT: must be listed as unsensable, not omitted
+        for unknown in ("fuel level", "battery voltage", "tyre pressures"):
+            self.assertIn(unknown, prompt)
+        self.assertIn("NOT connected yet", prompt)
+
+    def test_engine_unknown_is_not_asserted(self):
+        from carwatch.grounding import build_system_prompt, default_state
+        facts, cannot = default_state()  # engine state genuinely unknown
+        prompt = build_system_prompt(facts, cannot)
+        self.assertNotIn("engine: ON", prompt)
+        self.assertNotIn("engine: OFF", prompt)
+        self.assertIn("whether your engine is running", prompt)
+
+    def test_manual_claim_requires_actual_excerpts(self):
+        from carwatch.grounding import build_system_prompt, default_state
+        facts, cannot = default_state(engine_on=False)
+        self.assertIn("do not claim to have read the manual",
+                      build_system_prompt(facts, cannot))
+        self.assertIn("may cite their page numbers",
+                      build_system_prompt(facts, cannot, manual_excerpts="p.344: ..."))
+
+
 if __name__ == "__main__":
     unittest.main()
