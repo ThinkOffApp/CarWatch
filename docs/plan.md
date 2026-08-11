@@ -1170,3 +1170,28 @@ Options (NOT actioned - petrus decides): run Qwen on 3 threads (often
 cooler and can be faster by avoiding throttle); refit the stock active
 cooler (the config that measured faster); improve airflow; or accept it,
 since ~3.3 t/s is usable and the delta is small.
+
+### ROOT CAUSE of the thermal regression: the SoC lid came off (Aug 11 2026)
+
+The Pi 5's **processor heat spreader detached along with the stock active
+cooler** when petrus removed it to fit the Argon case - the cooler's
+adhesive gripped the lid harder than the lid was bonded to the package.
+This is a **known Pi 5 active-cooler failure mode**, not user clumsiness
+(worth citing in the warranty Widerspruch, it supports his case).
+
+Consequence: the bare die now sits LOWER than the lid did, so a standard
+thin pad cannot bridge the gap -> poor heat transfer -> 85 C and active
+throttling, and the ~6% slower benchmark. The Argon was never the problem.
+
+Fixes (petrus to choose, NOT actioned):
+1. **Recommended: a THICKER thermal pad (~1-1.5 mm)** in the Argon to
+   bridge the gap. Cheap, zero risk.
+2. Refit the OLD cooler (the lid is still stuck to it, so it restores
+   roughly the original height) with a thin smear of paste on the bare
+   die - and it is the cooler that measured faster. Risk: aligning a lid
+   you cannot see; only if it sits obviously flat.
+
+CAUTIONS with an exposed die: never tighten a cooler to force contact
+(cracks the die), and clean residue gently with isopropyl, no scraping.
+Expect it to run warmer than a factory Pi permanently - factor that into
+the in-car thermal plan.
