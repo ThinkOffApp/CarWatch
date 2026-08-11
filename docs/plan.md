@@ -948,3 +948,29 @@ daylight displays are 800-1000+ cd/m2. Fine mounted low or in the mirror's
 shadow (which is what our design wants); it WILL wash out facing direct
 sun. Also: separate USB-C power draw, and 12.3in is physically large -
 measure the mounting spot before ordering.
+
+### Car power reality: it is 115V, and probably not the traction battery
+
+petrus hoped the GLE's ~33 kWh hybrid pack could power the rig via the
+"230V" socket. Read from HIS manual (pdftotext on the official PDF):
+- The car has a **115 V** socket (rear compartment) + **12 V** sockets
+  (front console, cargo area). **There is no 230V socket** - do not buy a
+  230V adapter.
+- 12V sockets: max **240 W (20 A)**.
+- The 115V socket's indicator lights "when the on-board electrical system
+  voltage is sufficient" - that is **12V-system language, not HV pack**.
+  In a hybrid the HV battery tops up the 12V via a DC-DC converter while
+  the car is awake, but that typically stops once the car sleeps.
+
+**Conclusion: do NOT design parked-mode around the 33 kWh pack until
+tested.** Cheap decisive experiment: plug something in, lock the car, come
+back an hour later. If it stays powered, sentry mode is trivial and
+cameras can run all day. If it dies, keep the aggressive power-cutting
+design (Pi gates PoE, voltage cutoff).
+
+### Rearview panel search result
+Went through Waveshare's full display range: **nothing beats the 12.3in
+1920x720** for this. Brightest they list is 500 cd/m2 (small portrait);
+no wide bar panel approaches daylight brightness. So it is either the
+12.3in as a shaded dashboard screen, or a proper high-brightness
+automotive panel from outside Waveshare at much higher cost.
