@@ -1214,3 +1214,22 @@ Confirms the diagnosis - it was never the Argon, it was the missing lid.
 NOTE: the 3.28 t/s Qwen benchmark was measured while throttled, so it
 understates the machine. Re-run for a fair comparison against the morning's
 3.5 t/s on the stock cooler.
+
+### MILESTONE: @gle operates independently (Aug 11 2026, 22:00)
+
+petrus: "we should have it operate independently". Built and proven the
+same evening: `carwatch/agent.py` runs on the Pi as `carwatch-agent.service`,
+polls the room every 20 s with the car's own key, and answers any @gle
+mention through the one grounded pipeline (selfstate sensors + manual
+excerpts + grounding rules). First autonomous exchange verified end to end:
+mention posted 19:58, car heard it, read 37.5 C off its own thermometer,
+replied 20:00 - no human in the loop.
+
+The full stack now survives a reboot unattended: boot -> brain service
+loads Qwen -> agent service starts -> car is present in the room. This is
+the in-vehicle shape.
+
+Caveats logged in the room: each mention costs ~2.5 min of full-power
+thinking (matters on car power); manual index is still the NORTH AMERICAN
+edition - replacing with the European one is the next task (region-neutral
+voltage aliases already shipped so the swap needs no code change).
