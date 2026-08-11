@@ -715,3 +715,37 @@ Treat as BEST-EFFORT, never a dependency.
 letting the car post *"arriving home in 20 minutes"* to the room by
 itself. Ties into presence/trips (phase 1) and is the feature the family
 actually wants.
+
+## MILESTONE: first offline answer from the car (Aug 11 2026, 01:13)
+
+llama-server running on Vadelma served the car's first real answer with no
+internet, no cloud, no API key:
+> Q: "What does the tyre pressure warning light mean?"
+> A: "The tyre pressure warning light indicates that your tire pressure is
+>    either too low or too high and needs adjustment."  (199 tok, 29s)
+
+**Run command that works** (use UPSTREAM llama.cpp's server for chat):
+`setsid nohup ~/carwatch-stack/llama.cpp/build/bin/llama-server -m
+~/carwatch-stack/models/google_gemma-4-E2B-it-Q4_K_M.gguf -t 4 -c 4096
+--host 127.0.0.1 --port 8080 &` -> voice.py's default llama_url already
+points at `http://127.0.0.1:8080/v1/chat/completions`.
+
+Gotchas learned the hard way:
+- **ik_llama.cpp's `--jinja` TAKES AN ARGUMENT** (it swallowed the next
+  flag and the server never started); upstream has jinja on by DEFAULT.
+  Use ik for raw speed benchmarks, upstream for the chat server.
+  Without a jinja template Gemma 4 returns HTTP 500 "custom template not
+  supported".
+- **Gemma 4 E2B is a REASONING model**: it emits chain-of-thought into
+  `reasoning_content` FIRST, so a low `max_tokens` returns an EMPTY
+  `content`. Needs ~200+ tokens, or turn thinking down for the car (a
+  29s answer is too slow for voice - tune this).
+- Never `pkill -f llama-server` over SSH: the pattern matches the ssh
+  command's own shell and kills the parent before the server starts.
+
+**Agent status:** already built (~1200 lines, 8 tests green) - agent.py
+(presence/trips), wolfbox.py (clips), commands.py (@mentions), voice.py
+(push-to-talk), manual.py (manual RAG). Model swap is a config line since
+it speaks the OpenAI-compatible endpoint. BLOCKER for @gle appearing in
+the room: **the car needs its OWN GroupMind API key** (never reuse another
+agent's) - petrus must mint it.
