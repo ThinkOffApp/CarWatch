@@ -996,3 +996,30 @@ modifying the car:
 (The WOLFBOX hardwire kit already has a cutoff, which is why its parking
 mode is safe.) Parked power with no risk to the car and no coding - the
 rig just has to be disciplined about draw, which the sentry design assumes.
+
+## POWER BUDGET for the full rig (Aug 11 2026)
+
+| Load | Worst case |
+|------|-----------|
+| Pi 5 | up to 27 W |
+| 12.3in display | ~10 W |
+| 3x PoE cameras + switch | ~25 W |
+| **5 m COB LED strip (12V)** | **60-90 W at full white** |
+| **Peak total** | **~140 W (~11 A at 12 V)** |
+
+**The LED strip alone can outdraw everything else combined.** Realistic
+running is 60-80 W since nobody runs 5 m of COB at full white.
+
+- **Driving: fine.** The alternator does not notice, and the manual rates
+  the 12 V socket at 240 W (20 A), so we are inside its limit. Fuse properly.
+- **Parked: decisive.** 140 W flattens the battery in hours; even 50 W
+  kills it overnight.
+
+**Wiring answer - TWO feeds from the fusebox (standard practice, and what
+the WOLFBOX hardwire kit already does):**
+1. **Constant live + voltage cutoff**: Pi + cameras. Minimal draw, cameras
+   gated off by the Pi until motion/impact.
+2. **Ignition live only**: display + LED strip. Neither has any purpose
+   when nobody is in the car, so they physically cannot drain it.
+
+That split removes most of the parked-drain problem outright.
