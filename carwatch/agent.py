@@ -75,10 +75,22 @@ def _post(config: dict, body: str) -> None:
 
 
 def _mentions_me(msg: dict, handle: str) -> bool:
+    """Addressed to the car, not merely about it.
+
+    Within minutes of going live the car answered a status post that
+    mentioned "@gle" in passing - 2.5 minutes of full-power thinking
+    spent replying to nobody. So a bare mention is not enough: the
+    message must LEAD with the handle or ask a question. People talking
+    ABOUT the car ("mention @gle and it answers") no longer trigger it;
+    people talking TO it ("@gle how are you", "are you ok @gle?") do.
+    """
     sender = (msg.get("from") or "").lstrip("@").lower()
     if sender == handle.lstrip("@").lower():
         return False
-    return handle.lower() in (msg.get("body") or "").lower()
+    body = (msg.get("body") or "").strip()
+    if handle.lower() not in body.lower():
+        return False
+    return body.lower().startswith(handle.lower()) or "?" in body
 
 
 def _think(question: str, asker: str) -> str:
