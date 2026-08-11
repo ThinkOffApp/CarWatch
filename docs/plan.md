@@ -901,3 +901,33 @@ quality is mostly ISP tuning, not the sensor; automotive heat/vibration/
 power-cycling/loop-recording reliability.
 
 Prototype on the **E-Class** (the experiment car); GLE stays the working demo.
+
+### Camera + power spec for the modular rig (Aug 11 2026)
+
+**Centralised PoE** (petrus's call, right architecture): one PoE switch
+feeds every camera - single cable each, one place to fuse and switch, and
+any future camera just plugs into a spare port. **Buy a switch with a 12V
+DC INPUT** (sold for vehicles/boats/solar); most PoE switches want mains
+or 48V and would force an inverter into the boot.
+
+**Power budget:** ~4-8W per PoE camera (~25W for three) + up to 27W for
+the Pi = ~50W. Trivial while driving; PARKED it would flatten the battery
+in a day or two. Centralised power turns this into a FEATURE: the Pi cuts
+camera power when idle, wakes them on motion/impact, then sleeps - which
+is exactly the sentry design. Add a voltage cutoff so the car protects its
+own battery.
+
+**IR: only on the CABIN camera.** IR illuminators do not work through
+glass - the infrared reflects off the windscreen back into the lens and
+washes out the image. That is why dashcams (including the WOLFBOX) put IR
+only on the interior camera and rely on light-sensitive sensors (STARVIS)
+for the road-facing ones. So: IR inside, no-IR / IR-switchable outside.
+
+**Sourcing (amazon.de):** cheap mini PoE cams (~45-50 EUR) have the right
+features but poor ratings (3.3-3.6 on very few reviews) - a bad bet for
+something wired permanently into a car. **Reolink** is the credible PoE
+brand there (real RTSP/ONVIF, no cloud lock-in, well reviewed, ~100 EUR+),
+and petrus already runs Reolink at home ([[project-reolink-dashboard]]).
+UNSOLVED by shopping: none are automotive temperature-rated; parked summer
+sun exceeds home-camera ratings. Decide fair-weather prototype vs
+summer-proof build before buying.
