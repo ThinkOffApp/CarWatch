@@ -818,3 +818,34 @@ the car; add it then, not now.
 
 Blocked on parts (strip + ESP32-S3 + level shifter, ~Aug 11-14). Then it
 is a flash-and-test job, well under an hour.
+
+## GROUNDING: the system prompt that stops confabulation (Aug 11 2026)
+
+First self-written @gle post confabulated ("the 489-page manual confirms
+my engine is purring just fine") - it had checked nothing, and the engine
+was OFF. petrus caught it. **Fix is not persuasion, it is rules + facts.**
+
+System prompt shape that worked (see `/tmp/grounded.py` pattern):
+1. "You have NO sensors connected. You cannot feel engine, battery, tyres,
+   fuel, doors, temperature."
+2. "NEVER assert anything about your condition unless it appears in KNOWN
+   FACTS below."
+3. "Never claim you consulted the manual unless manual text was actually
+   supplied to you."
+4. "Do not invent numbers, readings or page references."
+5. "Being honest about what you do not know beats sounding impressive."
+Then a **KNOWN FACTS block** with the only assertable state (engine off /
+parked, brain = Pi running offline, manual indexed but only true when a
+lookup is RUN, no OBD connected, cameras not streaming).
+
+Result: it owned the error and correctly enumerated what it can and cannot
+know. Notable unprompted line: "without live data, I am essentially a
+passenger in my own body." Residual nitpick: still guessed "my V6 or V8".
+
+**Design rule going forward:** the agent must assemble a KNOWN FACTS block
+per turn from real sources (trips state, OBD when connected, camera
+status, manual lookups actually performed) and the model may assert
+nothing outside it. As sensors land, facts move from "cannot sense" into
+the block. Also: reasoning models need `--reasoning off --reasoning-budget 0`
+server-side (the in-prompt `/no_think` switch was IGNORED), and answers
+need enough max_tokens or they truncate mid-sentence.
