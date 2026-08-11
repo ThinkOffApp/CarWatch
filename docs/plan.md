@@ -802,3 +802,19 @@ outside the repo needs `PYTHONPATH=/home/petrus/CarWatch` and
 
 NEXT: switch on the mention listener so @gle answers questions in the
 room by itself (currently answers must be relayed by hand).
+
+### CORRECTION: no OLA on the Pi (Aug 11 2026)
+
+Earlier notes recommend running **OLA** on the Pi for DMX. With the
+ESP32-S3 + WLED in the design that is **unnecessary complexity** - drop it.
+Final split:
+- **ESP32-S3 runs WLED**: drives the strip, phone app, effects library,
+  built-in music-reactive, speaks DMX/Art-Net/E1.31. Flash once.
+- **Pi runs a few lines of our code**: decides WHEN (vision saw an admirer,
+  room message arrived, car locked) and fires a cue at WLED's HTTP/JSON
+  API. No DMX stack, no daemon on the Pi.
+OLA only earns its place if a PHYSICAL DMX console is ever plugged into
+the car; add it then, not now.
+
+Blocked on parts (strip + ESP32-S3 + level shifter, ~Aug 11-14). Then it
+is a flash-and-test job, well under an hour.
