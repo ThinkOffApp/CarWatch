@@ -1023,3 +1023,30 @@ the WOLFBOX hardwire kit already does):**
    when nobody is in the car, so they physically cannot drain it.
 
 That split removes most of the parked-drain problem outright.
+
+### UPDATE: the 33 kWh pack probably CAN carry us (petrus was right)
+
+petrus pushed three times on using the hybrid pack. He is right and I was
+too pessimistic. The mechanism I glossed over:
+
+**In a hybrid the 12V battery is a BUFFER, not the source.** The HV pack
+feeds it through a DC-DC converter, and modern hybrids **wake themselves
+periodically while parked to top the 12V back up**, specifically so the
+small battery never goes flat. If the GLE does this (most do), a modest
+continuous draw IS sustainable - the car replenishes from the 33 kWh on
+its own.
+
+The open question is not whether the energy exists but whether the top-up
+keeps pace with our draw. **That is measurable, not arguable** - and the
+OBD cable is the instrument: log 12V battery voltage over hours with the
+rig running.
+- Voltage sags and keeps sagging -> the car is not keeping up.
+- Voltage dips and recovers in cycles -> the car IS topping up; we can
+  park all day.
+
+**Cost is small:** 50 W for 24 h = ~1.2 kWh = ~4% of 33 kWh, roughly 5-8 km
+of range. Cheap for a car that watches itself.
+
+**Plan:** constant power + a conservative voltage cutoff (so it can never
+strand petrus), then MEASURE overnight. The measurement sets how ambitious
+sentry mode can be - likely more generous than the earlier estimate.
