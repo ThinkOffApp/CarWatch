@@ -749,3 +749,29 @@ Gotchas learned the hard way:
 it speaks the OpenAI-compatible endpoint. BLOCKER for @gle appearing in
 the room: **the car needs its OWN GroupMind API key** (never reuse another
 agent's) - petrus must mint it.
+
+## Owner's-manual RAG LIVE (Aug 11 2026)
+
+Official **2020 GLE V167 operator's manual (489 pages, 8.3MB)** downloaded
+to the Pi from Mercedes' own CDN and indexed by `carwatch.manual` in **2
+seconds** -> 1041 chunks at `/home/petrus/.carwatch/manual-index.json`.
+Source URL: static.oneweb.mercedes-benz.com/css-oom-assets/en-ca/pdf/
+mercedes-gle-suv-2020-march-v167-mbux-operators-manual-1.pdf
+
+End-to-end proof (manual retrieval -> local model -> cited answer, offline):
+> Q: "what does the tire pressure warning light mean"
+> A: "The pressure telltale illuminates when there is a substantial
+>    pressure loss or if the tires are significantly under-inflated... (p.344)"
+
+**How petrus talks to it** (`tools/ask.py`, installed on the Pi as `~/ask`):
+- `./ask "question"` - answers from the GLE manual with page citations
+- `./ask --no-manual "..."` - model only
+- `./start-brain.sh` - starts llama-server if it is not running
+NOTE: `carwatch.manual` needs `CARWATCH_STATE` set to find its index;
+ask.py sets it (`/home/petrus/.carwatch`) - a subprocess without it
+silently returns no context and the model replies "provide the excerpts".
+
+**Open tuning item:** 83s per answer is too slow for voice. Cause is
+Gemma 4's reasoning mode - it emits chain-of-thought into
+`reasoning_content` and most of those tokens are discarded. Turn thinking
+down/off for the car loop; that is the single biggest latency win available.
