@@ -931,3 +931,20 @@ and petrus already runs Reolink at home ([[project-reolink-dashboard]]).
 UNSOLVED by shopping: none are automotive temperature-rated; parked summer
 sun exceeds home-camera ratings. Decide fair-weather prototype vs
 summer-proof build before buying.
+
+### Display candidate: Waveshare 12.3in 1920x720 (verified Aug 11 2026)
+
+petrus found waveshare.com/product/displays/12.3inch-1920x720-lcd. Specs
+read off the page, not guessed:
+- **12.3in, 1920x720** - a true bar aspect, exactly the icon-strip shape
+- **HDMI + USB-C**, driver-free on Raspberry Pi OS, **10-point touch**
+  (touch matters: tap an approval rather than only reading it)
+- IPS, 178 deg viewing, DDC/CI brightness control, 3.5mm audio out
+  (useful later for voice), **$109.99**
+- **Brightness: 300 cd/m2** <- the decisive number
+
+**Verdict: a night-and-shade screen, not a sunlight one.** Automotive
+daylight displays are 800-1000+ cd/m2. Fine mounted low or in the mirror's
+shadow (which is what our design wants); it WILL wash out facing direct
+sun. Also: separate USB-C power draw, and 12.3in is physically large -
+measure the mounting spot before ordering.
