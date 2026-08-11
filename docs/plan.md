@@ -1254,3 +1254,21 @@ Manual: petrus sent the QR link from his car - **mercedes-benz.fi
 gle-suv-2019-09-v167-mbux** (Finnish market, Sept 2019, his actual
 edition). Mercedes' viewer renders blank in the headless pane so PDF
 extraction is still open; the online article tree exists as fallback.
+
+### EUROPEAN manual indexed (Aug 11, 22:25) - wrong-region bug CLOSED
+
+petrus sent the QR link from his Mercedes me app (mercedes-benz.fi,
+gle-suv-2019-09-v167-mbux) and then the direct fi-fi PDF asset URL. The
+asset path pattern revealed the siblings; **en-ie** (Irish English,
+European market, same Sept 2019 V167 edition) exists:
+`static.oneweb.mercedes-benz.com/css-oom-assets/en-ie/pdf/mercedes-gle-suv-2019-september-v167-mbux-owners-manual-1.pdf`
+745 pages -> 1549 chunks, replaces the NA index on the Pi
+(NA kept as manual-index.NA-backup.json; Finnish PDF kept at
+~/gle-manual-eu... no, ~/gle-fi.pdf locally in scratchpad + Pi has EU PDF
+at ~/gle-manual-eu.pdf).
+
+Ground truth recovered: **p.156 "Using the 230 V socket in the rear
+passenger compartment", max 150 W (0.65 A)** - the socket exists on the
+European car exactly as petrus said, and its 150 W limit rules it out as
+the main power feed for our hardware. The de-de edition also exists at the
+same pattern for future German-language needs.
