@@ -694,3 +694,24 @@ Target design (voice-first, which suits the car anyway):
 - New messages announce on arrival.
 - PARKED: Google relaxes constraints, so show fuller detail when stopped
   (dovetails with the parked-only camera sync already planned).
+
+### Route/ETA access (petrus, Aug 11 2026)
+
+Q: can we read Maps route info (time/distance left) via Android Auto?
+**No official API** - AA does not expose one app's navigation to another,
+and Maps has no public "current trip" interface.
+
+**Practical route:** while navigating, Maps posts a persistent PHONE
+notification containing remaining time, remaining distance and next turn.
+A `NotificationListenerService` (CodeWatch is already on the phone) can
+read it - the standard technique behind third-party HUD/smartwatch nav
+apps. Works whether or not AA is running.
+
+Caveats: it parses TEXT, so it is language- and format-dependent and a
+Maps redesign can break it; needs a one-time notification-access grant.
+Treat as BEST-EFFORT, never a dependency.
+
+**Best use is not displaying an ETA petrus can already see** - it is
+letting the car post *"arriving home in 20 minutes"* to the room by
+itself. Ties into presence/trips (phase 1) and is the feature the family
+actually wants.
