@@ -974,3 +974,25 @@ Went through Waveshare's full display range: **nothing beats the 12.3in
 no wide bar panel approaches daylight brightness. So it is either the
 12.3in as a shaded dashboard screen, or a proper high-brightness
 automotive panel from outside Waveshare at much higher cost.
+
+### RESOLVED: parked power without touching the car (Aug 11 2026)
+
+petrus confirmed the sockets ARE cut when the car is switched off, and
+proposed changing that "with the OBD cable". Two corrections:
+- **The OBD cable cannot switch power circuits** - it is a data
+  connection. Changing when sockets stay live means altering the car's
+  power-management CODING with dealer-level software: possible, but that
+  is how you get flat batteries and confused modules. **Not doing that.**
+- **Not needed, because the OBD port is PERMANENTLY LIVE** (pin 16 has
+  battery power ignition-on or off). That is exactly how OBD dashcams and
+  trackers work with no coding. The WOLFBOX hardwire kit does the same
+  from a constant fuse.
+
+**Design:** take power from a permanently-live source (OBD pin 16 or a
+constant fuse), then protect the battery in SOFTWARE rather than by
+modifying the car:
+1. Voltage cutoff - shut the rig down below ~12.0-12.2 V.
+2. Pi gates the PoE switch so cameras only draw when something happens.
+(The WOLFBOX hardwire kit already has a cutoff, which is why its parking
+mode is safe.) Parked power with no risk to the car and no coding - the
+rig just has to be disciplined about draw, which the sentry design assumes.
