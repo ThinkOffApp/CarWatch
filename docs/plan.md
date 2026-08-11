@@ -1119,3 +1119,20 @@ only sagging = it is not. One night of data settles it.
   (Widerspruch) sent; his case is stronger than it first sounded because
   the latch failed under intended use one day after purchase (statutory
   presumption puts the burden on the seller within 12 months).
+
+### LED hardware ACTUAL (Aug 11 2026): Gledopto ESP32 WLED controller
+
+petrus bought a **GLEDOPTO ESP32 WLED Digital LED Controller (4 outputs)**
+plus a 5 m strip - better than the bare ESP32-S3 dev board we planned:
+- Ships with **WLED already flashed** (no flashing step).
+- Has real output drivers, so the **74AHCT125 level shifter is no longer
+  needed** (now spare).
+- Accepts a wide DC input range, so car 12 V feeds it directly.
+
+Setup: strip to output 1 (V+ / D / GND, get GND right) -> power 12 V ->
+it broadcasts `WLED-AP` (pw `wled1234`) -> join it, open **4.3.2.1** ->
+set home WiFi -> set **LED type + count** (the step that matters). Then the
+Pi drives it over WLED's HTTP/JSON API exactly as designed.
+
+OPEN: confirm the strip's chipset (WS2811 / WS2812B / WS2815 / COB) and
+voltage so WLED's LED type is set correctly.
