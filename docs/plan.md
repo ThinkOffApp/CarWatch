@@ -867,3 +867,37 @@ Practical split, unchanged in substance:
 - **ELM327 Bluetooth** = the fast path to speed, revs, coolant, fuel and
   DTCs, working same-day. Still the recommended first step.
 Worth probing what answers on the wire once the cable is plugged in.
+
+## "Custom WOLFBOX" / modular camera rig (petrus, Aug 11 2026)
+
+petrus: build a custom mirror unit with top-grade display and cameras;
+"put the wires in once and you can then upgrade cameras as new ones come
+out"; 3D-print a mirror housing for the E-Class.
+
+**HARD CONSTRAINT: the Raspberry Pi 5 has NO hardware video encoder.**
+(Pi 4 had one; Pi 5 dropped it and only does HEVC *decode*.) So the Pi can
+never be the thing that turns camera pixels into recorded files - software
+encoding 3x4K is hopeless on 4 cores. The WOLFBOX manages it because the
+Hi3519DV500 has dedicated encode silicon.
+
+**Solution that makes petrus's idea buildable: cameras that encode
+THEMSELVES.** IP/network cameras (or UVC cameras with onboard H.264)
+deliver a finished H.264/H.265 stream and the Pi only *stores* it - the
+standard NVR pattern. This also IS the upgrade path: a newer camera
+arrives, the Pi does not care.
+
+**Design:** wire power + network to three camera positions ONCE, mount
+whatever cameras are best that year, Pi records and thinks, our own
+display up front (the elongated bar screen = the icon strip).
+
+petrus's modularity argument beats the "don't compete with WOLFBOX on
+image quality" framing: a sealed dashcam is frozen at its shipped sensor
+forever. Modularity, not image quality, is the product case.
+
+Other things a from-scratch mirror would need (why we do NOT rebuild the
+recorder): mirror-form display must be a MIRROR when off and beat sunlight
+through glass (specialist transflective glass, not a Pi panel); image
+quality is mostly ISP tuning, not the sensor; automotive heat/vibration/
+power-cycling/loop-recording reliability.
+
+Prototype on the **E-Class** (the experiment car); GLE stays the working demo.
