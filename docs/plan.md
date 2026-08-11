@@ -1070,3 +1070,24 @@ exactly the sentry features we want. Do not chase it.
 Spend nothing: wire to constant power with a cutoff, log voltage one
 night, then decide. If the car will not sustain us, that is the moment to
 consider dealer tools - and we would know exactly what to ask for.
+
+### Web search result on the 115V/HV-battery question (Aug 11 2026)
+
+**Confirmed:** the GLE 350de pack is **31.2 kWh** (petrus said 33). The
+general hybrid principle holds - the **DC-DC converter** keeps the 12V
+topped up from the HV pack, and it is *commanded on by the vehicle's
+energy management* rather than running continuously.
+
+**NOT findable:** whether THIS car powers the 115V socket from the
+traction pack, or whether/how often it wakes to top up the 12V while
+parked. Undocumented, varies by model and software version. Do not claim
+an answer the sources do not contain.
+
+**Moot anyway: petrus already owns the WOLFBOX hardwire kit** - constant
+12V from the fusebox WITH a built-in low-voltage cutoff, which is exactly
+the design we settled on. Powers the rig parked, today, with protection,
+no coding, no workshop, no purchase.
+
+Once wired, the car answers the question itself: voltage recovering
+overnight = the pack IS topping up and sentry can be generous; voltage
+only sagging = it is not. One night of data settles it.
