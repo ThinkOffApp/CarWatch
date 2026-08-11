@@ -1091,3 +1091,31 @@ no coding, no workshop, no purchase.
 Once wired, the car answers the question itself: voltage recovering
 overnight = the pack IS topping up and sentry can be generous; voltage
 only sagging = it is not. One night of data settles it.
+
+## END OF DAY STATE (Aug 11 2026, evening)
+
+**Working now:**
+- `@gle` is a real GroupMind agent, posts in its own voice, grounded by
+  `carwatch/grounding.py` (no invented sensor readings).
+- Offline phone chat page live as a systemd service (`carwatch-chat`,
+  port 8088, auto-starts on boot) -> talk to the car from any phone on the
+  same network, no laptop.
+- Owner's manual RAG answering with page citations, fully offline.
+- Both models benchmarked; currently serving the SMALL model (Gemma) on
+  :8081 while thermals are marginal.
+
+**Open items:**
+- **Thermal**: pad refitted, improved (3 throttle flags -> 1) but still
+  ~83C and hitting the soft limit under sustained 4-core load in the new
+  case. Watch in a hot car; consider better airflow.
+- **SSD**: petrus bought a Samsung 990 = bare M.2 NVMe, which needs the
+  PCIe port he broke. Needs a ~20-30 EUR USB-to-NVMe enclosure; until then
+  everything runs off the 119GB microSD (~89GB free), which is fine.
+- **Networks**: ONLY home WiFi is configured. No phone hotspot, no car
+  hotspot, no fallback AP - so Vadelma has no connectivity away from home.
+  Needs petrus to supply SSIDs (he types the passwords).
+- **PCIe connector**: broken but irrelevant to CarWatch. Repairable at a
+  board-repair shop (~30-60 EUR) only for resale/NVMe use. Warranty claim
+  (Widerspruch) sent; his case is stronger than it first sounded because
+  the latch failed under intended use one day after purchase (statutory
+  presumption puts the burden on the seller within 12 months).
