@@ -1050,3 +1050,23 @@ of range. Cheap for a car that watches itself.
 **Plan:** constant power + a conservative voltage cutoff (so it can never
 strand petrus), then MEASURE overnight. The measurement sets how ambitious
 sentry mode can be - likely more generous than the earlier estimate.
+
+### "Standby mode" is NOT camp mode (from the manual, Aug 11 2026)
+
+The GLE has a **standby mode** in the MBUX settings (Settings > Vehicle;
+engine off, ignition on). It is for STORING the car: it minimises energy
+loss for long non-operation and explicitly DISABLES the anti-theft alarm,
+the interior motion sensor, the tow-away alarm and **parked-collision
+detection**. So it is the opposite of camp mode and would switch off
+exactly the sentry features we want. Do not chase it.
+
+**And do not rent XENTRY/workshop tools for this** (petrus offered):
+1. Parked power needs no coding - OBD pin 16 and the fusebox are already
+   permanently live, which is how every hardwired dashcam does parking mode.
+2. Coding would only change when the CAR'S OWN sockets stay live, a
+   different and unnecessary problem.
+3. The real unknown (does the hybrid top up the 12V while parked?) cannot
+   be fixed by coding at all - it is a MEASUREMENT.
+Spend nothing: wire to constant power with a cutoff, log voltage one
+night, then decide. If the car will not sustain us, that is the moment to
+consider dealer tools - and we would know exactly what to ask for.
