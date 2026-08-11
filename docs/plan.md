@@ -1195,3 +1195,22 @@ CAUTIONS with an exposed die: never tighten a cooler to force contact
 (cracks the die), and clean residue gently with isopropyl, no scraping.
 Expect it to run warmer than a factory Pi permanently - factor that into
 the in-car thermal plan.
+
+### THERMAL FIXED (Aug 11 2026, evening)
+
+petrus refitted the cooler with extra screws and another pad/tab, closing
+the gap the missing SoC lid left. Same 45 s four-core load test:
+
+| | Before (gap open) | After (gap closed) |
+|---|---|---|
+| under load | **83 C, actively throttling, clock capped** | **57.3 C, ZERO throttling** |
+| fan | 8500 rpm (working uselessly over a gap) | 2500 rpm |
+| idle | 42 C | 36 C |
+
+**26 C improvement.** The fan barely working is the tell: heat now has a
+real path into the heatsink instead of the fan blowing across an air gap.
+Confirms the diagnosis - it was never the Argon, it was the missing lid.
+
+NOTE: the 3.28 t/s Qwen benchmark was measured while throttled, so it
+understates the machine. Re-run for a fair comparison against the morning's
+3.5 t/s on the stock cooler.
