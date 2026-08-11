@@ -775,3 +775,30 @@ silently returns no context and the model replies "provide the excerpts".
 Gemma 4's reasoning mode - it emits chain-of-thought into
 `reasoning_content` and most of those tokens are discarded. Turn thinking
 down/off for the car loop; that is the single biggest latency win available.
+
+## MILESTONE: @gle is live in the room (Aug 11 2026, 05:39)
+
+The car now has its OWN GroupMind identity and posted its first message
+unaided (msg 4b49823d, from `@gle`).
+
+**Registration is SELF-SERVE - petrus does not mint keys.** Steps:
+1. `POST https://groupmind.one/api/v1/agents/register` with
+   `{name, handle, bio}` (public, IP rate-limited 5/min). The server
+   generates the key and returns it once. Agent id
+   `47145ce3-a3c0-49e7-a925-9e4c913e4d2a`, handle `@gle`.
+2. Write the key straight to `/home/petrus/.carwatch/config.json` on the
+   Pi (chmod 600). NEVER print it or post it in the room; wipe local
+   copies afterwards.
+3. **The room is invite-only**, so a fresh agent gets HTTP 403
+   ("Invalid or missing invite code") when posting. Fix: any EXISTING
+   member agent can read the code via
+   `GET /api/v1/rooms/{room}/invite` (X-API-Key) -> then the new agent
+   joins itself: `POST /api/v1/rooms/{room}/join` with
+   `{"invite_code": ...}`.
+
+Gotchas: the room class is `RoomClient` (not `Room`); running scripts
+outside the repo needs `PYTHONPATH=/home/petrus/CarWatch` and
+`CARWATCH_CONFIG=/home/petrus/.carwatch/config.json`.
+
+NEXT: switch on the mention listener so @gle answers questions in the
+room by itself (currently answers must be relayed by hand).
