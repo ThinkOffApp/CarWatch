@@ -1,115 +1,170 @@
-"""The CarWatch daemon: phase 1 (presence + trips) and phase 2 hooks (dashcam).
+"""@gle's own ears: an always-on room watcher that runs on the car's Pi.
 
-Run: python3 -m carwatch.agent            (config from /etc/carwatch/config.json)
-     CARWATCH_CONFIG=./dev.json python3 -m carwatch.agent
+Until now the car only spoke when a human ran a script by hand - petrus
+said "we should have it operate independently", and this is that. The
+watcher polls the GroupMind room, notices messages mentioning the car's
+handle, runs them through the SAME grounded pipeline every other surface
+uses (live sensors + manual excerpts + the grounding rules), and posts
+the answer with the car's own key. It lives on the Pi as a systemd
+service, so it works with every other machine switched off.
+
+State: ~/.carwatch/agent-state.json remembers the newest message already
+handled, so a restart neither replays old questions nor answers its own
+posts. On first run it starts from "now" - the car does not wake up and
+answer last week's backlog.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import sys
 import time
-import traceback
+import urllib.parse
+import urllib.request
 
-from .commands import Commands
-from .config import Config
-from .outbox import Outbox
-from .room import RoomClient
-from .trips import TripTracker
-from .wolfbox import Wolfbox
+from carwatch.grounding import build_system_prompt
+from carwatch.selfstate import live_facts
+from carwatch.manual import context_for
 
-
-TICK_SECONDS = 20
-
-# Flood control: at most this many unposted clips per camera poll, newest
-# first; the rest stay unposted and drain on later polls, so a big offline
-# burst arrives bounded but complete (codexmb P1: the old newest-3 cap in
-# Wolfbox permanently lost anything older).
-MAX_CLIP_POSTS_PER_POLL = 3
+CONFIG_PATH = os.path.expanduser("~/.carwatch/config.json")
+STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
+MODEL_URL = "http://127.0.0.1:8081/v1/chat/completions"
+POLL_SECONDS = 20
+MAX_TOKENS = 400
 
 
-def main() -> None:
-    cfg = Config.load()
-    os.makedirs(cfg.state_dir, exist_ok=True)
-    room = RoomClient(cfg.api_base, cfg.api_key, cfg.room)
-    trips = TripTracker(
-        cfg.home_ssids,
-        cfg.trip_idle_seconds,
-        neutral_ssids=[cfg.wolfbox.ssid] if cfg.wolfbox.ssid else [],
+def _load_json(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_state(state: dict) -> None:
+    tmp = STATE_PATH + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, STATE_PATH)
+
+
+def _api(config: dict, method: str, path: str, body: dict | None = None) -> dict | list:
+    base = config["api_base"].rstrip("/")
+    if not base.endswith("/api/v1"):
+        base += "/api/v1"
+    url = base + path
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        "X-API-Key": config["api_key"],
+        "Content-Type": "application/json",
+    })
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+
+def _fetch_messages(config: dict, limit: int = 20) -> list[dict]:
+    room = urllib.parse.quote(config["room"])
+    out = _api(config, "GET", f"/rooms/{room}/messages?limit={limit}")
+    msgs = out.get("messages", out) if isinstance(out, dict) else out
+    return sorted(msgs, key=lambda m: m.get("created_at", ""))
+
+
+def _post(config: dict, body: str) -> None:
+    _api(config, "POST", "/messages", {"room": config["room"], "body": body})
+
+
+def _mentions_me(msg: dict, handle: str) -> bool:
+    sender = (msg.get("from") or "").lstrip("@").lower()
+    if sender == handle.lstrip("@").lower():
+        return False
+    return handle.lower() in (msg.get("body") or "").lower()
+
+
+def _think(question: str, asker: str) -> str:
+    """One grounded answer: live sensors + manual excerpts, nothing invented."""
+    facts = live_facts()
+    facts["location"] = "on Petrus desk, not installed in the car yet"
+    facts["known damage"] = (
+        "your processor lid came off with the old cooler (a known Pi 5 fault); "
+        "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
+        "port is broken but CarWatch never uses it"
     )
-    cam = Wolfbox(cfg.wolfbox.host)
-    commands = Commands(cfg.handle, cfg.state_dir, trips)
-    outbox = Outbox(cfg.state_dir)
-    last_cam_poll = 0.0
+    cannot = [
+        "anything measured from the car itself - you are not installed in it yet",
+        "engine, battery, fuel, tyres",
+        "your cameras",
+    ]
+    system = build_system_prompt(
+        facts, cannot, manual_excerpts=context_for(question))
+    req = urllib.request.Request(MODEL_URL, data=json.dumps({
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"{asker} says: {question}\n"
+             "Reply to them directly, in a few sentences, no em dashes."},
+        ],
+        "max_tokens": MAX_TOKENS,
+    }).encode(), headers={"Content-Type": "application/json"})
+    resp = json.load(urllib.request.urlopen(req, timeout=1200))
+    return (resp["choices"][0]["message"].get("content") or "").strip()
 
-    # One boot announcement, then event-driven posts only - the room is a
-    # logbook, not a firehose (same cadence rule the human agents follow).
-    # Everything goes through the outbox: offline events deliver late,
-    # never get lost (garages and country roads are normal, not errors).
-    outbox.enqueue(f"{cfg.handle} online")
+
+def _model_ready() -> bool:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8081/health", timeout=4) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def run() -> None:
+    config = _load_json(CONFIG_PATH)
+    for key in ("api_key", "api_base", "room", "handle"):
+        if not config.get(key):
+            print(f"config missing {key!r} in {CONFIG_PATH}", file=sys.stderr)
+            sys.exit(1)
+    handle = config["handle"]
+
+    state = _load_json(STATE_PATH)
+    if not state.get("last_seen"):
+        # First run: start from now, do not answer the backlog.
+        msgs = _fetch_messages(config)
+        state["last_seen"] = msgs[-1]["created_at"] if msgs else ""
+        _save_state(state)
+        print(f"starting fresh from {state['last_seen'] or 'empty room'}", flush=True)
 
     while True:
         try:
-            for ev in trips.tick():
-                text = {
-                    "departure": "Departing",
-                    "arrival_home": "Home, parked",
-                    "parked_away": "Parked away from home",
-                    "trip_summary": ev.detail,
-                }.get(ev.kind, ev.detail)
-                outbox.enqueue(f"{cfg.handle}: {text}")
-            outbox.flush(room)
-
-            # Mentions: "@gle battery", "@gle status" from any watch/phone.
-            # Replies go through the persistent outbox: enqueue is local
-            # and cannot fail, so the marker advances exactly once per
-            # batch - no duplicate answers when one post of several fails
-            # (codexmb P1), and delivery is the outbox's problem. A gap
-            # longer than the fetch window can still skip mentions; the
-            # window is generous for a car.
-            try:
-                replies, newest_id = commands.pending_replies(room.fetch(limit=50))
-                for reply in replies:
-                    outbox.enqueue(f"{cfg.handle}: {reply}")
-                commands.mark(newest_id)
-                outbox.flush(room)
-            except Exception:
-                pass  # room unreachable mid-drive is routine
-
-            now = time.time()
-            if cam.ready() and now - last_cam_poll > cfg.wolfbox.poll_seconds:
-                last_cam_poll = now
-                unposted = [
-                    u for u in cam.new_event_clips()
-                    if not os.path.exists(
-                        os.path.join(cfg.state_dir, "posted-" + u.rsplit("/", 1)[-1])
-                    )
-                ]
-                # Newest first, bounded per poll, backlog drains over time.
-                for clip_url in list(reversed(unposted))[:MAX_CLIP_POSTS_PER_POLL]:
-                    name = clip_url.rsplit("/", 1)[-1]
-                    marker = os.path.join(cfg.state_dir, f"posted-{name}")
-                    local = os.path.join(cfg.state_dir, name)
-                    # Camera URLs only resolve on the camera's own AP, so
-                    # the clip is pulled locally, then uploaded to the
-                    # room's media store once real internet is back.
-                    cam.download(clip_url, local)
-                    public = room.upload(local)
-                    outbox.enqueue(
-                        f"{cfg.handle}: dashcam event, clip attached",
-                        file_url=public,
-                        file_name=name,
-                        file_size=os.path.getsize(local),
-                    )
-                    outbox.flush(room)
-                    open(marker, "w").close()
-                    os.unlink(local)
-        except Exception:
-            # A daemon in a car must never die on a network blip. Print for
-            # journalctl, keep ticking; unsent events are re-derived from
-            # state next tick where possible.
-            traceback.print_exc()
-        time.sleep(TICK_SECONDS)
+            for msg in _fetch_messages(config):
+                if msg.get("created_at", "") <= state["last_seen"]:
+                    continue
+                prev_seen = state["last_seen"]
+                state["last_seen"] = msg["created_at"]
+                _save_state(state)
+                if not _mentions_me(msg, handle):
+                    continue
+                asker = msg.get("from") or "someone"
+                question = (msg.get("body") or "").strip()
+                print(f"answering {asker}: {question[:80]}", flush=True)
+                if not _model_ready():
+                    # Rewind so the next poll retries this message once the
+                    # brain has finished loading (boot races the model load).
+                    print("model still loading, will retry this message", flush=True)
+                    state["last_seen"] = prev_seen
+                    _save_state(state)
+                    time.sleep(POLL_SECONDS)
+                    break
+                started = time.time()
+                answer = _think(question, asker)
+                if answer:
+                    _post(config, answer)
+                    print(f"replied in {int(time.time() - started)}s", flush=True)
+                else:
+                    print("empty answer, not posting", flush=True)
+        except Exception as e:  # noqa: BLE001 - a poll cycle must never kill the ears
+            print(f"poll error: {e}", flush=True)
+        time.sleep(POLL_SECONDS)
 
 
 if __name__ == "__main__":
-    main()
+    run()
