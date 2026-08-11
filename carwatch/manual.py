@@ -112,6 +112,64 @@ def _load_index():
     return _cache
 
 
+# Bridging what people SAY to what the manual PRINTS.
+#
+# petrus asked @gle about the "230V power source"; the search returned
+# nothing because his GLE has a 115V socket and the string "230V" appears
+# nowhere in the book. The lookup was literal, so a question phrased in
+# ordinary words missed a section that was right there on page 121.
+#
+# Each key maps a term a person might use to the words the manual actually
+# prints. Expansion only ADDS search terms, so a query that already matched
+# still matches - it can only widen recall, never narrow it.
+ALIASES: dict[str, tuple[str, ...]] = {
+    # mains sockets: people say any voltage, Mercedes prints one of them
+    "230v": ("115", "socket", "power"),
+    "240v": ("115", "socket", "power"),
+    "220v": ("115", "socket", "power"),
+    "115v": ("115", "socket"),
+    "mains": ("115", "socket", "power"),
+    "plug": ("socket",),
+    "outlet": ("socket",),
+    "inverter": ("115", "socket"),
+    # everyday words vs manual words
+    "boot": ("cargo", "compartment"),
+    "trunk": ("cargo", "compartment"),
+    "bonnet": ("engine", "hood"),
+    "hood": ("engine", "hood"),
+    "petrol": ("fuel",),
+    "gas": ("fuel",),
+    "diesel": ("fuel",),
+    "windscreen": ("windshield",),
+    "tyre": ("tire",),
+    "tyres": ("tire",),
+    "aircon": ("air", "conditioning", "climate"),
+    "ac": ("air", "conditioning", "climate"),
+    "sat": ("navigation",),
+    "satnav": ("navigation",),
+    "cruise": ("cruise", "control"),
+    "handbrake": ("parking", "brake"),
+    "wipers": ("windshield", "wiper"),
+    "indicator": ("turn", "signal"),
+    "blinker": ("turn", "signal"),
+    "reversing": ("reverse", "rear", "view"),
+    "battery": ("battery", "starter"),
+    "charging": ("charge", "charging"),
+    "warning": ("warning", "indicator", "lamp"),
+    "light": ("lamp", "light"),
+}
+
+
+def _expand(tokens: list[str]) -> list[str]:
+    """Add the manual's own vocabulary to the user's words."""
+    out = list(tokens)
+    for t in tokens:
+        for extra in ALIASES.get(t, ()):
+            if extra not in out:
+                out.append(extra)
+    return out
+
+
 def search(query: str, top: int = 3) -> list[dict]:
     """Top chunks by lexical score: presence of query terms weighted by
     rarity across chunks (set membership, no term frequency - chunks are
@@ -119,7 +177,7 @@ def search(query: str, top: int = 3) -> list[dict]:
     cache = _load_index()
     if cache is None:
         return []
-    q = _tokens(query)
+    q = _expand(_tokens(query))
     if not q:
         return []
     index, chunk_tokens, df = cache["index"], cache["chunk_tokens"], cache["df"]

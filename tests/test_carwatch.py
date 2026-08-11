@@ -152,5 +152,30 @@ class GroundingTests(unittest.TestCase):
                       build_system_prompt(facts, cannot, manual_excerpts="p.344: ..."))
 
 
+class ManualQueryExpansionTests(unittest.TestCase):
+    """A question phrased in ordinary words must still find the manual's section."""
+
+    def test_voltage_synonyms_reach_the_manual_wording(self):
+        from carwatch.manual import _expand
+        # petrus asked about "230V"; the GLE prints 115V. Must bridge.
+        for said in ("230v", "240v", "mains"):
+            expanded = _expand([said])
+            self.assertIn("115", expanded, f"{said} should reach the manual's 115")
+            self.assertIn("socket", expanded)
+
+    def test_everyday_words_map_to_manual_words(self):
+        from carwatch.manual import _expand
+        self.assertIn("cargo", _expand(["boot"]))
+        self.assertIn("windshield", _expand(["windscreen"]))
+        self.assertIn("tire", _expand(["tyre"]))
+
+    def test_expansion_only_widens_never_drops(self):
+        from carwatch.manual import _expand
+        original = ["tyre", "pressure", "warning"]
+        expanded = _expand(original)
+        for t in original:
+            self.assertIn(t, expanded)
+
+
 if __name__ == "__main__":
     unittest.main()
