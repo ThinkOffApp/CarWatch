@@ -1233,3 +1233,24 @@ Caveats logged in the room: each mention costs ~2.5 min of full-power
 thinking (matters on car power); manual index is still the NORTH AMERICAN
 edition - replacing with the European one is the next task (region-neutral
 voltage aliases already shipped so the swap needs no code change).
+
+### Thermal fix CONFIRMED faster (Aug 11, 22:17) + serving-path numbers
+
+Same ik llama-bench tg64, apples to apples:
+| morning, stock cooler | broken pad (85 C, throttling) | fixed pad (Argon + screws + extra tab) |
+|---|---|---|
+| 3.5 t/s | 3.28 t/s | **3.56 t/s @ 65 C, zero throttling** |
+The fixed Argon is now the best measured configuration. ±0.02 variance =
+running steady, nowhere near a limit.
+
+Live SERVING path (upstream llama-server, the real @gle route): ~3.15 t/s,
+67 C, zero throttling - server overhead makes it a touch slower than bench.
+
+Quant facts for the record (petrus's X thread): Unsloth **UD-Q3_K_S**
+dynamic quant, 14.3 GB file, context 4096, memory-mapped; 15.0 GB resident
+on the 16 GB Pi, swap 173 MB. No Q1, no squeezed context.
+
+Manual: petrus sent the QR link from his car - **mercedes-benz.fi
+gle-suv-2019-09-v167-mbux** (Finnish market, Sept 2019, his actual
+edition). Mercedes' viewer renders blank in the headless pane so PDF
+extraction is still open; the online article tree exists as fallback.
