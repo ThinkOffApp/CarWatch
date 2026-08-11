@@ -1145,3 +1145,28 @@ Pi drives it over WLED's HTTP/JSON API exactly as designed.
 - **WLED settings: LED type = WS2811.** Pixel count differs from physical
   LED count on COB - start at 360 for 5 m and adjust until the lit section
   reaches exactly the end.
+
+### Qwen re-benchmark in the Argon case (Aug 11 2026, evening)
+
+Measured fresh after the case swap + thermal pad refit:
+| | This morning (stock active cooler) | Now (Argon + pad) |
+|---|---|---|
+| generation | 3.5 t/s | **3.28 t/s** |
+| prompt read | ~30 t/s | **25.2 t/s** |
+Peak 85.1 C with `throttled=0xe0006` = **actively** frequency-capped and
+thermally throttled during the run (not merely "has occurred"). Cools back
+to ~49 C afterwards, so nothing is faulty.
+
+**Conclusion: the Argon cools slightly WORSE than the stock Pi 5 active
+cooler for sustained load** - about 6% slower because it runs pinned at the
+thermal limit. Small, but the wrong direction for a device going into a hot car.
+
+**CORRECTION to an earlier claim in this doc/room:** I told petrus real
+inference only reaches ~70 C and that the 83 C busy-loop test was an
+unrealistic worst case. **That was wrong for Qwen** - the 35B model does
+drive the Pi to its thermal limit, so the synthetic test was representative.
+
+Options (NOT actioned - petrus decides): run Qwen on 3 threads (often
+cooler and can be faster by avoiding throttle); refit the stock active
+cooler (the config that measured faster); improve airflow; or accept it,
+since ~3.3 t/s is usable and the delta is small.
