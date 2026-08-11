@@ -1134,5 +1134,14 @@ it broadcasts `WLED-AP` (pw `wled1234`) -> join it, open **4.3.2.1** ->
 set home WiFi -> set **LED type + count** (the step that matters). Then the
 Pi drives it over WLED's HTTP/JSON API exactly as designed.
 
-OPEN: confirm the strip's chipset (WS2811 / WS2812B / WS2815 / COB) and
-voltage so WLED's LED type is set correctly.
+**Strip CONFIRMED from the label: `FCOB-12V-720L-B-IP30-SPI`**
+- 12V flexible COB, addressable (SPI, single data line), 720 LEDs/m
+- **Max 10 W/m -> 50 W for the full 5 m** (my earlier 60-90 W estimate was
+  too high; revise the power budget down)
+- **Operating -40 to +85 C** - a genuinely wide range, the least
+  heat-worrying component in the whole build
+- **IP30 = DRY LOCATIONS ONLY -> strictly interior.** Not the grille, not
+  exterior, no moisture at all. Exterior lighting would need IP65/IP67.
+- **WLED settings: LED type = WS2811.** Pixel count differs from physical
+  LED count on COB - start at 360 for 5 m and adjust until the lit section
+  reaches exactly the end.
