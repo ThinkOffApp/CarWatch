@@ -9,7 +9,10 @@ Wants=network-online.target
 # tunnel URL changes on restart, so reach.sh re-announces it to the room.
 Type=simple
 User=petrus
-ExecStart=/usr/bin/env bash -lc '$HOME/CarWatch/reach.sh'
+# %h is systemd's home-dir specifier. A literal $HOME here is mangled by
+# systemd's own variable expansion ("Invalid environment variable name
+# ... HOME/CarWatch/reach.sh"), which crash-looped this service.
+ExecStart=/usr/bin/env bash -lc '%h/CarWatch/reach.sh'
 Restart=on-failure
 RestartSec=15
 
