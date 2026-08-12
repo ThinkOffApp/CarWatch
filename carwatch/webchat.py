@@ -115,6 +115,34 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, PAGE)
+        elif self.path.startswith("/api/status"):
+            # Machine-readable twin of /dash. CodeWatch local mode polls
+            # this when the phone shares a network with the car (hotspot
+            # or Vadelma AP); online it reads the same facts via the UIK
+            # intent doc that carwatch.presence publishes. One source,
+            # three consumers: browser HTML, UIK online, CodeWatch offline.
+            import subprocess as _sp
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from carwatch.selfstate import live_facts
+            def run(cmd):
+                try:
+                    return _sp.run(cmd, capture_output=True, text=True, timeout=8).stdout
+                except Exception:
+                    return ""
+            payload = {
+                "device": "vadelma",
+                "facts": live_facts(),
+                "top": run(["ps", "-eo", "pcpu,pmem,comm", "--sort=-pcpu"]).splitlines()[1:6],
+                "journal": run(["journalctl", "-u", "carwatch-agent", "-n", "8",
+                                "--no-pager", "-o", "cat"]).splitlines()[-8:],
+            }
+            body = json.dumps(payload).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         elif self.path.startswith("/dash"):
             # One-phone-screen dashboard petrus asked for: temp + top
             # processes + latest journal lines + the Termux ssh line.
