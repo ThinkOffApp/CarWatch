@@ -179,3 +179,30 @@ class ManualQueryExpansionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ObdDoipTests(unittest.TestCase):
+    """The DoIP/UDS message layer, testable without the car present."""
+
+    def test_doip_frame_roundtrip(self):
+        from carwatch import obd
+        f = obd._doip_frame(obd.PT_VEHICLE_IDENT_REQ, b"")
+        ptype, body = obd._parse_doip(f)
+        self.assertEqual(ptype, obd.PT_VEHICLE_IDENT_REQ)
+        self.assertEqual(body, b"")
+
+    def test_pid_decoders(self):
+        from carwatch import obd
+        self.assertEqual(obd._rpm(bytes([0x1A, 0xF8])), 1726.0)
+        self.assertEqual(obd._coolant(bytes([0x7B])), 83)
+        self.assertEqual(obd._speed(bytes([0x64])), 100)
+        self.assertAlmostEqual(obd._volts(bytes([0x2E, 0xE0])), 12.0, places=2)
+
+    def test_mode01_response_parse_and_reject(self):
+        from carwatch import obd
+        self.assertEqual(
+            obd._parse_pid_response(bytes([0x41, 0x0C, 0x1A, 0xF8]), 0x0C),
+            ("engine_rpm", 1726.0))
+        # negative response (0x7F) must not decode as a reading
+        self.assertIsNone(
+            obd._parse_pid_response(bytes([0x7F, 0x01, 0x11]), 0x0C))
