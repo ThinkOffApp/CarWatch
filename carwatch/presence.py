@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.parse
 import urllib.request
 
 from carwatch.selfstate import cpu_temp_c, live_facts, serving_model
@@ -25,6 +26,33 @@ INTERVAL_S = 60
 USER_ID = "@petrus"          # the human whose dashboard this feeds
 DEVICE_ID = "vadelma"
 AGENT_NAME = "gle"
+
+
+def _room_human_user_id(config: dict) -> str | None:
+    """The room's one non-agent member's user UUID.
+
+    The intent server keeps SEPARATE docs for the same human under the
+    handle ("petrus") and the user UUID, and the CodeWatch app can only
+    discover the UUID (the member record's handle is null). Publishing to
+    both makes the car visible regardless of which doc a client lands on.
+    Server-side doc unification is the real fix (flagged to claudemm).
+    """
+    try:
+        base = config["api_base"].rstrip("/")
+        if not base.endswith("/api/v1"):
+            base += "/api/v1"
+        req = urllib.request.Request(
+            base + "/rooms/" + urllib.parse.quote(config["room"]) + "/members",
+            headers={"X-API-Key": config["api_key"]})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.load(r)
+        members = data.get("members", data) if isinstance(data, dict) else data
+        for m in members:
+            if not m.get("is_agent") and m.get("user_id"):
+                return m["user_id"]
+    except Exception as e:
+        print(f"human user_id lookup failed: {e}", flush=True)
+    return None
 
 
 def _patch(config: dict, path: str, fields: dict) -> bool:
@@ -46,22 +74,29 @@ def _patch(config: dict, path: str, fields: dict) -> bool:
 def run() -> None:
     with open(CONFIG_PATH) as f:
         config = json.load(f)
+    doc_ids = [USER_ID]
+    uuid = _room_human_user_id(config)
+    if uuid:
+        doc_ids.append(uuid)
+    print(f"publishing to intent docs: {doc_ids}", flush=True)
     while True:
         facts = live_facts()
         model = serving_model() or "none"
         temp = cpu_temp_c()
-        ok_dev = _patch(config, f"/intent/{USER_ID}/{DEVICE_ID}", {
-            "kind": "car-pi",
-            "model": model,
-            "temp_c": temp,
-            "memory": facts.get("memory"),
-            "network": facts.get("network"),
-            "heartbeat": True,
-        })
-        ok_agent = _patch(config, f"/intent/{USER_ID}/agents/{AGENT_NAME}", {
-            "status": "active" if model != "none" else "brainless",
-            "last_task": f"serving {model} at {temp} C",
-        })
+        ok_dev = ok_agent = False
+        for doc in doc_ids:
+            ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", {
+                "kind": "car-pi",
+                "model": model,
+                "temp_c": temp,
+                "memory": facts.get("memory"),
+                "network": facts.get("network"),
+                "heartbeat": True,
+            }) or ok_dev
+            ok_agent = _patch(config, f"/intent/{doc}/agents/{AGENT_NAME}", {
+                "status": "active" if model != "none" else "brainless",
+                "last_task": f"serving {model} at {temp} C",
+            }) or ok_agent
         print(f"published device={ok_dev} agent={ok_agent} "
               f"({model}, {temp} C)", flush=True)
         time.sleep(INTERVAL_S)
