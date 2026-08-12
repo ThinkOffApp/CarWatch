@@ -80,6 +80,8 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>
 <div style="color:#6cf">SSH (Termux)</div>
 <pre style="margin:2px 0;color:#fc6">ssh petrus@__IP__</pre>
+<div style="color:#6cf;margin-top:6px">CAR SOFTWARE</div>
+<div style="margin:4px 0"><button onclick="updateNow()" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">update now</button> <span id=updout style="color:#888"></span></div>
 <div style="color:#6cf;margin-top:6px">OBD (car engine)</div>
 <div style="margin:4px 0"><button onclick="probeObd()" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">probe car connection</button></div>
 <pre id=obdout style="margin:2px 0;white-space:pre-wrap;color:#9cf;max-height:160px;overflow:auto"></pre>
@@ -117,6 +119,12 @@ async function tick(){
   }catch(e){
     document.getElementById("sub").textContent = "unreachable: " + e;
   }
+}
+async function updateNow(){
+  var u=document.getElementById("updout"); u.textContent="updating... (~30s, page may blink)";
+  try{ const r=await fetch("/api/update",{method:"POST"}); const d=await r.json();
+    u.textContent = d.ok ? "updated - reload the page" : ("update issue: "+(d.error||"see log"));
+  }catch(e){ u.textContent="updated (page dropped as services restarted) - reload"; }
 }
 async function probeObd(){
   var o=document.getElementById("obdout"); o.textContent="probing the car... (up to 40s)";
@@ -259,6 +267,24 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
+        if self.path == "/api/update":
+            # One-tap self-update from the dashboard, from ANYWHERE (petrus
+            # was blocked getting a fix onto the car while it was on his
+            # hotspot behind NAT). The Pi pulls the latest code from GitHub
+            # itself - no ssh, no home wifi needed.
+            import subprocess as _sp, os as _os
+            try:
+                r = _sp.run(
+                    ["bash", "-lc",
+                     "curl -sSL https://raw.githubusercontent.com/ThinkOffApp/CarWatch/main/update.sh | bash"],
+                    capture_output=True, text=True, timeout=90,
+                    env={**_os.environ})
+                out = (r.stdout + r.stderr).strip()[-1500:]
+                return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         if self.path == "/api/obd":
             # One-tap OBD probe from the dashboard, so trying the car
             # connection needs no ssh/Termux in the car (petrus was stranded
