@@ -121,9 +121,10 @@ def _think(question: str, asker: str) -> str:
         "port is broken but CarWatch never uses it"
     )
     cannot = [
-        "anything measured from the car itself - you are not installed in it yet",
+        "anything measured from the car itself - the OBD reading software "
+        "is not built yet, even when the cable is plugged in",
         "engine, battery, fuel, tyres",
-        "your cameras",
+        "your cameras and your microphone - voice input is not built yet",
     ]
     system = build_system_prompt(
         facts, cannot, manual_excerpts=context_for(question))
