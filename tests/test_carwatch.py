@@ -206,3 +206,32 @@ class ObdDoipTests(unittest.TestCase):
         # negative response (0x7F) must not decode as a reading
         self.assertIsNone(
             obd._parse_pid_response(bytes([0x7F, 0x01, 0x11]), 0x0C))
+
+
+class CarFactsIntegrationTests(unittest.TestCase):
+    """OBD readings must flow into grounded facts, and vanish when no link."""
+
+    def test_engine_readings_become_facts(self):
+        import json, os, tempfile
+        from unittest import mock
+        from carwatch import selfstate, obd
+        cfgdir = tempfile.mkdtemp()
+        cfg = os.path.join(cfgdir, "config.json")
+        json.dump({"obd": {"enabled": True, "gateway_ip": "169.254.1.1"}}, open(cfg, "w"))
+        with mock.patch.object(os.path, "expanduser", return_value=cfg), \
+             mock.patch.object(obd, "connect", return_value=mock.Mock()), \
+             mock.patch.object(obd, "read_all", return_value={
+                 "engine_rpm": 820.0, "coolant_c": 88, "module_voltage": 14.2}):
+            facts = selfstate.car_facts()
+        self.assertEqual(facts["engine"], "running at 820 rpm")
+        self.assertEqual(facts["coolant"], "88 C")
+        self.assertEqual(facts["car 12V battery"], "14.2 V")
+
+    def test_no_facts_when_obd_disabled(self):
+        import json, os, tempfile
+        from unittest import mock
+        from carwatch import selfstate
+        cfg = os.path.join(tempfile.mkdtemp(), "config.json")
+        json.dump({}, open(cfg, "w"))
+        with mock.patch.object(os.path, "expanduser", return_value=cfg):
+            self.assertEqual(selfstate.car_facts(), {})

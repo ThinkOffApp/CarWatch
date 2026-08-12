@@ -197,3 +197,49 @@ def live_facts() -> dict[str, str]:
 if __name__ == "__main__":
     for k, v in live_facts().items():
         print(f"{k}: {v}")
+
+
+# The car's own engine, when the DoIP link is up. Gated behind a config
+# flag + a fast connect so it costs nothing when the cable is not present
+# or the reader is not proven yet. Being unable to read the car is the
+# normal state until OBD is verified on the real GLE - it simply omits
+# the facts, exactly like every other unsensable thing.
+def car_facts() -> dict:
+    """Live engine readings over DoIP, or {} if no link. Never blocks long."""
+    import json as _json
+    try:
+        cfg_path = os.path.expanduser("~/.carwatch/config.json")
+        with open(cfg_path) as f:
+            cfg = _json.load(f)
+    except Exception:
+        return {}
+    obd_cfg = (cfg.get("obd") or {})
+    if not obd_cfg.get("enabled"):
+        return {}
+    gateway = obd_cfg.get("gateway_ip")
+    if not gateway:
+        return {}
+    try:
+        from carwatch import obd
+        link = obd.connect(gateway, timeout=2.0)
+        if not link:
+            return {}
+        readings = obd.read_all(link)
+        try:
+            link.sock.close()
+        except Exception:
+            pass
+    except Exception:
+        return {}
+    facts = {}
+    if "engine_rpm" in readings:
+        rpm = readings["engine_rpm"]
+        facts["engine"] = (f"running at {rpm:.0f} rpm" if rpm > 0
+                           else "off (0 rpm)")
+    if "coolant_c" in readings:
+        facts["coolant"] = f"{readings['coolant_c']} C"
+    if "speed_kmh" in readings:
+        facts["speed"] = f"{readings['speed_kmh']} km/h"
+    if "module_voltage" in readings:
+        facts["car 12V battery"] = f"{readings['module_voltage']:.1f} V"
+    return facts
