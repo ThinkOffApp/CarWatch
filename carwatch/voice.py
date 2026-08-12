@@ -49,10 +49,17 @@ def transcribe(wav_path: str) -> str:
             capture_output=True, text=True, timeout=120).stdout
         # -nt strips timestamps; join the spoken lines, drop blanks.
         text = " ".join(line.strip() for line in out.splitlines() if line.strip())
-        # whisper emits "[BLANK_AUDIO]" / "(silence)" markers for no speech.
-        if text.lower().strip("[]()") in ("blank_audio", "silence", ""):
+        # whisper emits bracketed markers for non-speech: [BLANK_AUDIO],
+        # [MUSIC PLAYING], (silence), etc. Drop anything that is ONLY such a
+        # marker, and drop tiny fragments ("So...", "Hmm") that are ambient
+        # noise, not a real question - they were false-triggering Qwen.
+        import re as _re
+        stripped = _re.sub(r"[\[(].*?[\])]", "", text).strip()
+        stripped = stripped.strip(" .,-").strip()
+        words = [w for w in _re.split(r"\s+", stripped) if w]
+        if len(words) < 2 or len(stripped) < 6:
             return ""
-        return text.strip()
+        return stripped
     except Exception as e:
         print(f"transcribe failed: {e}", file=sys.stderr)
         return ""
