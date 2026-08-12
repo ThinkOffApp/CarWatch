@@ -1272,3 +1272,28 @@ passenger compartment", max 150 W (0.65 A)** - the socket exists on the
 European car exactly as petrus said, and its 150 W limit rules it out as
 the main power feed for our hardware. The de-de edition also exists at the
 same pattern for future German-language needs.
+
+### CodeWatch local mode SHIPPED to the phone (Aug 12, 10:17)
+
+petrus: "make it part of codewatch for local mode ... accessible both from
+the browser as a local page and for codewatch to access online or offline".
+The contract now has all three consumers live:
+
+1. **Browser**: `/dash` on the Pi - updates in place every 2 s like `top`
+   (petrus), fed by `/api/status`; plus `/journal` phone view.
+2. **Online**: `carwatch-presence.service` PATCHes the UIK intent doc
+   every 60 s (device `vadelma`: temp/model/memory; agent `gle`: status).
+3. **Offline app**: CodeWatch PR #104 - a "Local devices" dashboard column
+   polling `/api/status` over the LAN (home IP + Vadelma AP 10.42.0.1,
+   cleartext allowlisted for exactly those two). Verified rendering live
+   car data on the S26 (43.0 C metric, Qwen card, journal tail). mDNS
+   discovery is the follow-up so nothing stays hardcoded.
+
+Also fixed after petrus misread "11.5GB free" as Qwen-not-loaded:
+selfstate.memory() now says "model held in memory, 0.3GB truly free" -
+MemAvailable counts the mmap'd model as evictable cache, technically
+correct and humanly wrong.
+
+WiFi is fully proven: home + phone hotspot (live join test) + Vadelma AP
+with 12-min auto-revert; hotspot credentials stored on the Pi and in
+~/.carwatch-wifi-home on the MacBook, never in this repo or the room.
