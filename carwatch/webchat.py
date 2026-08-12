@@ -80,6 +80,9 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>
 <div style="color:#6cf">SSH (Termux)</div>
 <pre style="margin:2px 0;color:#fc6">ssh petrus@__IP__</pre>
+<div style="color:#6cf;margin-top:6px">OBD (car engine)</div>
+<div style="margin:4px 0"><button onclick="probeObd()" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">probe car connection</button></div>
+<pre id=obdout style="margin:2px 0;white-space:pre-wrap;color:#9cf;max-height:160px;overflow:auto"></pre>
 <div style="color:#6cf;margin-top:6px">VOICE</div>
 <div style="margin:4px 0"><span id=voicestate style="color:#888">...</span> <button onclick="setListen(true)" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">listen on</button> <button onclick="setListen(false)" style="background:#333;color:#f66;border:1px solid #555;padding:8px 10px;font:13px monospace">listen off</button></div>
 <div style="color:#6cf;margin-top:6px">NETWORK</div>
@@ -114,6 +117,12 @@ async function tick(){
   }catch(e){
     document.getElementById("sub").textContent = "unreachable: " + e;
   }
+}
+async function probeObd(){
+  var o=document.getElementById("obdout"); o.textContent="probing the car... (up to 40s)";
+  try{ const r=await fetch("/api/obd",{method:"POST"}); const d=await r.json();
+    o.textContent = d.ok ? d.output : ("error: "+d.error);
+  }catch(e){ o.textContent="request failed: "+e; }
 }
 async function setListen(on){
   const r = await fetch("/api/listen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({on})});
@@ -250,6 +259,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
+        if self.path == "/api/obd":
+            # One-tap OBD probe from the dashboard, so trying the car
+            # connection needs no ssh/Termux in the car (petrus was stranded
+            # by "permission denied" last trip). Runs the read-only DoIP
+            # probe and returns exactly what it printed.
+            import subprocess as _sp, os as _os
+            try:
+                r = _sp.run(
+                    ["python3", _os.path.expanduser("~/CarWatch/tools/doip_probe.py")],
+                    capture_output=True, text=True, timeout=40,
+                    env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
+                out = (r.stdout + r.stderr).strip()[-3000:]
+                return self._send(200, json.dumps({"ok": True, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         if self.path == "/api/listen":
             # Voice-listener on/off from the dashboard (petrus: "have a
             # setting for that on the dashboard"). Toggles the systemd
