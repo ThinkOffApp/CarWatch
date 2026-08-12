@@ -80,6 +80,8 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>
 <div style="color:#6cf">SSH (Termux)</div>
 <pre style="margin:2px 0;color:#fc6">ssh petrus@__IP__</pre>
+<div style="color:#6cf;margin-top:6px">VOICE</div>
+<div style="margin:4px 0"><span id=voicestate style="color:#888">...</span> <button onclick="setListen(true)" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">listen on</button> <button onclick="setListen(false)" style="background:#333;color:#f66;border:1px solid #555;padding:8px 10px;font:13px monospace">listen off</button></div>
 <div style="color:#6cf;margin-top:6px">NETWORK</div>
 <div style="margin:4px 0">
 <button onclick="wifi('hotspot')" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">phone hotspot</button>
@@ -108,9 +110,15 @@ async function tick(){
       (f["throttling"]||"") + " \u00b7 " + (f["memory"]||"");
     document.getElementById("top").textContent = (d.top||[]).join("\\n");
     document.getElementById("jrnl").textContent = (d.journal||[]).join("\\n");
+    var vs=document.getElementById("voicestate"); if(vs){ vs.textContent = d.listening ? "listening: ON" : "listening: off"; vs.style.color = d.listening ? "#6f6" : "#888"; }
   }catch(e){
     document.getElementById("sub").textContent = "unreachable: " + e;
   }
+}
+async function setListen(on){
+  const r = await fetch("/api/listen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({on})});
+  const d = await r.json();
+  var vs=document.getElementById("voicestate"); if(vs) vs.textContent = d.ok ? (d.listening?"listening: ON":"listening: off") : ("error: "+d.error);
 }
 tick(); setInterval(tick, 2000);
 async function wifi(target){
@@ -188,8 +196,10 @@ class Handler(BaseHTTPRequestHandler):
                     return _sp.run(cmd, capture_output=True, text=True, timeout=8).stdout
                 except Exception:
                     return ""
+            listening = run(["systemctl", "is-active", "carwatch-listen"]).strip() == "active"
             payload = {
                 "device": "vadelma",
+                "listening": listening,
                 "facts": live_facts(),
                 "top": run(["ps", "-eo", "pcpu,pmem,comm", "--sort=-pcpu"]).splitlines()[1:6],
                 "journal": run(["journalctl", "-u", "carwatch-agent", "-n", "8",
@@ -240,6 +250,30 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
+        if self.path == "/api/listen":
+            # Voice-listener on/off from the dashboard (petrus: "have a
+            # setting for that on the dashboard"). Toggles the systemd
+            # service so the choice survives reboots.
+            import subprocess as _sp
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                on = bool(body.get("on"))
+                if on:
+                    _sp.run(["sudo", "systemctl", "enable", "--now",
+                             "carwatch-listen"], timeout=20, capture_output=True)
+                else:
+                    _sp.run(["sudo", "systemctl", "disable", "--now",
+                             "carwatch-listen"], timeout=20, capture_output=True)
+                    _sp.run(["pkill", "-9", "arecord"], capture_output=True)
+                st = _sp.run(["systemctl", "is-active", "carwatch-listen"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+                return self._send(200, json.dumps(
+                    {"ok": True, "listening": st == "active"}),
+                    "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps(
+                    {"ok": False, "error": str(e)}), "application/json")
         if self.path == "/api/wifi":
             # Network switching from the phone dashboard (petrus: "can you
             # have switch to hotspot / key in wifi details in the dashboard").
