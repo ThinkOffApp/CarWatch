@@ -80,6 +80,18 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>
 <div style="color:#6cf">SSH (Termux)</div>
 <pre style="margin:2px 0;color:#fc6">ssh petrus@__IP__</pre>
+<div style="color:#6cf;margin-top:6px">NETWORK</div>
+<div style="margin:4px 0">
+<button onclick="wifi('hotspot')" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">phone hotspot</button>
+<button onclick="wifi('home')" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">home wifi</button>
+<button onclick="wifi('ap')" style="background:#333;color:#6cf;border:1px solid #555;padding:8px 10px;font:13px monospace">own network</button>
+</div>
+<details style="margin:4px 0;color:#888"><summary>join another wifi</summary>
+<input id=ssid placeholder=network style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
+<input id=psk placeholder=password type=password style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
+<button onclick="wifiAdd()" style="background:#333;color:#fc6;border:1px solid #555;padding:6px 10px;font:13px monospace">join</button>
+</details>
+<div id=netmsg style="color:#fc6"></div>
 <div style="color:#555">links: <a href="/" style="color:#6cf">chat</a>
 <a href="/journal" style="color:#6cf">full journal</a> &middot; live, 2s</div>
 <script>
@@ -101,6 +113,17 @@ async function tick(){
   }
 }
 tick(); setInterval(tick, 2000);
+async function wifi(target){
+  if(!confirm("Switch the car to " + target + "? This page will drop and come back on the new network.")) return;
+  const r = await fetch("/api/wifi", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({target})});
+  document.getElementById("netmsg").textContent = (await r.json()).note || "switching...";
+}
+async function wifiAdd(){
+  const ssid = document.getElementById("ssid").value, password = document.getElementById("psk").value;
+  if(!ssid || password.length < 8){ document.getElementById("netmsg").textContent = "need network name + password (8+)"; return; }
+  const r = await fetch("/api/wifi", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({target:"add", ssid, password})});
+  document.getElementById("netmsg").textContent = (await r.json()).note || (await r.json()).error;
+}
 </script></body></html>'''
 
 
@@ -217,6 +240,48 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
+        if self.path == "/api/wifi":
+            # Network switching from the phone dashboard (petrus: "can you
+            # have switch to hotspot / key in wifi details in the dashboard").
+            # LAN-local by nature: whoever can reach this page shares the
+            # car's network already. The switch is backgrounded because it
+            # tears down the very connection carrying this response.
+            import subprocess as _sp
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                target = str(body.get("target", ""))
+                profiles = {"hotspot": "phone-hotspot",
+                            "home": "PYUR 53A99",
+                            "ap": "vadelma-ap"}
+                if target == "add":
+                    ssid = str(body.get("ssid", "")).strip()
+                    psk = str(body.get("password", "")).strip()
+                    if not ssid or len(psk) < 8:
+                        return self._send(400, json.dumps(
+                            {"ok": False, "error": "need ssid and password (8+ chars)"}),
+                            "application/json")
+                    _sp.Popen(["sudo", "nmcli", "dev", "wifi", "connect",
+                               ssid, "password", psk, "ifname", "wlan0"],
+                              start_new_session=True)
+                    return self._send(200, json.dumps(
+                        {"ok": True, "note": f"joining {ssid}; page may drop"}),
+                        "application/json")
+                profile = profiles.get(target)
+                if not profile:
+                    return self._send(400, json.dumps(
+                        {"ok": False, "error": f"unknown target {target}"}),
+                        "application/json")
+                _sp.Popen(["sh", "-c",
+                           f"sleep 1; sudo nmcli con up '{profile}'"],
+                          start_new_session=True)
+                return self._send(200, json.dumps(
+                    {"ok": True, "note": f"switching to {profile}; this page "
+                     "will drop and come back on the new network"}),
+                    "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps(
+                    {"ok": False, "error": str(e)}), "application/json")
         if self.path != "/ask":
             return self._send(404, "not found")
         try:
