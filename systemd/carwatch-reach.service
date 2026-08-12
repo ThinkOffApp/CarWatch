@@ -1,0 +1,17 @@
+[Unit]
+Description=CarWatch dial-out reachability (public tunnel to the car dashboard)
+After=network-online.target carwatch-chat.service
+Wants=network-online.target
+
+[Service]
+# Dials OUT so the car is reachable behind any NAT (phone hotspot included),
+# ending the park-and-wait trap. Restarts if the tunnel drops; the quick
+# tunnel URL changes on restart, so reach.sh re-announces it to the room.
+Type=simple
+User=petrus
+ExecStart=/usr/bin/env bash -lc '$HOME/CarWatch/reach.sh'
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

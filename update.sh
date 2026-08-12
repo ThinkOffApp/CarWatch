@@ -25,6 +25,22 @@ git fetch -q origin main
 git reset --hard -q origin/main
 echo "code updated to $(git rev-parse --short HEAD)"
 
+# Install/refresh systemd unit files from the repo. The old updater only
+# restarted EXISTING services, so a newly added unit (like carwatch-reach)
+# never got picked up - part of why fixes did not land. Copy every unit,
+# reload, and enable the always-on ones.
+if [ -d "$DIR/systemd" ]; then
+  echo "installing service units..."
+  sudo cp "$DIR"/systemd/*.service "$DIR"/systemd/*.timer /etc/systemd/system/ 2>/dev/null || true
+  sudo systemctl daemon-reload
+  # Dial-out reachability: makes the car reachable from anywhere so no future
+  # fix needs a physical trip or anyone typing creds into the car.
+  sudo systemctl enable --now carwatch-reach.service 2>/dev/null || true
+  sudo systemctl enable --now carwatch-update.timer 2>/dev/null || true
+fi
+
 echo "restarting services..."
 sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence
-echo "DONE - @gle now reads its location from the network, not a stale note"
+# Bring up the dial-out tunnel now (also (re)announces the reach URL to the room).
+sudo systemctl restart carwatch-reach.service 2>/dev/null || true
+echo "DONE - car pulls its own updates AND dials out so it is reachable anywhere"
