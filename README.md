@@ -35,9 +35,11 @@ your phone or watch via [CodeWatch](https://codewatch.app).
 The build log with every dead end included lives in
 [docs/plan.md](docs/plan.md).
 
-Sibling of [CodeWatch](https://github.com/ThinkOffApp/CodeWatch) (agents on your
-wrist) and [ClawWatch](https://github.com/ThinkOffApp/ClawWatch) (health on your
-wrist). This one watches the car.
+Sibling of [CodeWatch](https://codewatch.app) (agents on your wrist;
+source: [codewatch-cli](https://github.com/ThinkOffApp/codewatch-cli)) and
+[ClawWatch](https://github.com/ThinkOffApp/ClawWatch) (health on your wrist;
+[v2 launch video](https://clawwatch.app)). This one watches the car.
+The rest of the family lives at [thinkoff.io](https://thinkoff.io).
 
 ## Architecture
 
