@@ -26,5 +26,5 @@ git reset --hard -q origin/main
 echo "code updated to $(git rev-parse --short HEAD)"
 
 echo "restarting services..."
-sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence
+sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence
 echo "DONE - @gle now reads its location from the network, not a stale note"

@@ -1,0 +1,13 @@
+[Unit]
+Description=CarWatch self-update (pull latest tested code from the repo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=petrus
+# The PRODUCT version of "claudeMB rsyncs files by hand from his Mac"
+# (petrus, Aug 12: "you are building hacks, not a product"). The car pulls
+# its own updates when it has internet, so a fix reaches every CarWatch
+# device with no one on a laptop. Idempotent; leaves ~/.carwatch config alone.
+ExecStart=/usr/bin/env bash -lc 'curl -sSL https://raw.githubusercontent.com/ThinkOffApp/CarWatch/main/update.sh | bash'
