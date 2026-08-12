@@ -131,6 +131,31 @@ def network() -> str | None:
     return "no network"
 
 
+def manual_status() -> str | None:
+    """Whether the owner's manual is indexed on this machine, and which one.
+
+    petrus asked @gle "do you have the manual now indexed" and it said no
+    while 1549 chunks of the European manual sat on its own disk - the
+    index existed but was not part of the car's self-knowledge, so the
+    grounding rules made it (correctly, given its facts) deny it. Facts
+    about what the car has must come from looking, like everything else.
+    """
+    try:
+        import json as _json
+
+        from carwatch.manual import INDEX_PATH
+        with open(INDEX_PATH) as f:
+            idx = _json.load(f)
+        n = len(idx.get("chunks", []))
+        src = idx.get("source", "owner's manual")
+        if n:
+            return (f"{src} indexed on your disk, {n} sections; relevant "
+                    "excerpts are searched and given to you per question")
+    except Exception:
+        pass
+    return None
+
+
 def live_facts() -> dict[str, str]:
     """Sensor readings the car may legitimately assert about itself."""
     facts: dict[str, str] = {}
@@ -149,6 +174,7 @@ def live_facts() -> dict[str, str]:
         ("storage", disk_free()),
         ("brain", serving_model()),
         ("network", network()),
+        ("your manual", manual_status()),
     ):
         if val:
             facts[key] = val

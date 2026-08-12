@@ -121,9 +121,33 @@ def _think(question: str, asker: str) -> str:
              "Reply to them directly, in a few sentences, no em dashes."},
         ],
         "max_tokens": MAX_TOKENS,
+        "stream": True,
     }).encode(), headers={"Content-Type": "application/json"})
-    resp = json.load(urllib.request.urlopen(req, timeout=1200))
-    return (resp["choices"][0]["message"].get("content") or "").strip()
+    # Stream so the answer is visible AS it forms (journalctl -fu
+    # carwatch-agent) and so faster surfaces (webchat, voice in the car)
+    # can speak while the model is still generating, instead of everyone
+    # staring at silence for two minutes.
+    parts: list[str] = []
+    line_buf = ""
+    with urllib.request.urlopen(req, timeout=1200) as resp:
+        for raw in resp:
+            raw = raw.decode("utf-8", "ignore").strip()
+            if not raw.startswith("data: ") or raw == "data: [DONE]":
+                continue
+            try:
+                delta = json.loads(raw[6:])["choices"][0]["delta"].get("content") or ""
+            except Exception:
+                continue
+            if not delta:
+                continue
+            parts.append(delta)
+            line_buf += delta
+            if len(line_buf) >= 60 or "\n" in delta:
+                print(f"  ... {line_buf.strip()}", flush=True)
+                line_buf = ""
+    if line_buf.strip():
+        print(f"  ... {line_buf.strip()}", flush=True)
+    return "".join(parts).strip()
 
 
 def _model_ready() -> bool:
