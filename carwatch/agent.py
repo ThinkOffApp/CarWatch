@@ -114,7 +114,7 @@ def _think(question: str, asker: str) -> str:
         facts["location"] = ("in the car, offline mode, serving your own "
                              "Vadelma network")
     else:
-        facts["location"] = "at home on Petrus's desk, on home wifi"
+        facts["location"] = "at home, on home wifi (Petrus's desk)"
     facts["known damage"] = (
         "your processor lid came off with the old cooler (a known Pi 5 fault); "
         "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
