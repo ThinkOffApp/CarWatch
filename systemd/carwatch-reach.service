@@ -9,10 +9,11 @@ Wants=network-online.target
 # tunnel URL changes on restart, so reach.sh re-announces it to the room.
 Type=simple
 User=petrus
-# %h is systemd's home-dir specifier. A literal $HOME here is mangled by
-# systemd's own variable expansion ("Invalid environment variable name
-# ... HOME/CarWatch/reach.sh"), which crash-looped this service.
-ExecStart=/usr/bin/env bash -lc '%h/CarWatch/reach.sh'
+# Absolute path on purpose: a literal $HOME is mangled by systemd's own
+# variable expansion, and %h resolves to /root for a SYSTEM service (not the
+# User= home) - both crash-looped this service. CarWatch is a single-user Pi
+# deployment (update.sh assumes $HOME/CarWatch = /home/petrus/CarWatch).
+ExecStart=/usr/bin/env bash -lc '/home/petrus/CarWatch/reach.sh'
 Restart=on-failure
 RestartSec=15
 
