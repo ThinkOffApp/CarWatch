@@ -111,7 +111,31 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        self._send(200, PAGE) if self.path in ("/", "/index.html") else self._send(404, "not found")
+        if self.path in ("/", "/index.html"):
+            self._send(200, PAGE)
+        elif self.path.startswith("/journal"):
+            # The car's thinking, phone-readable: last agent-journal lines,
+            # auto-refreshing. petrus asked "how can I see the journal" -
+            # the SSH answer only works at a keyboard; in the car the phone
+            # is the screen.
+            import subprocess as _sp
+            try:
+                log = _sp.run(
+                    ["journalctl", "-u", "carwatch-agent", "-n", "60",
+                     "--no-pager", "-o", "short-iso"],
+                    capture_output=True, text=True, timeout=10).stdout
+            except Exception as e:
+                log = f"journal unavailable: {e}"
+            import html as _html
+            self._send(200, "<!doctype html><html><head><meta charset=utf-8>"
+                       "<meta http-equiv=refresh content=5>"
+                       "<meta name=viewport content='width=device-width,initial-scale=1'>"
+                       "<title>gle journal</title></head>"
+                       "<body style='background:#111;color:#9e9;font:12px monospace;"
+                       "padding:8px;word-wrap:break-word'><pre style='white-space:pre-wrap'>"
+                       + _html.escape(log) + "</pre></body></html>")
+        else:
+            self._send(404, "not found")
 
     def do_POST(self):
         if self.path != "/ask":
