@@ -65,11 +65,11 @@ fi
 echo "$url" > "$URL_FILE"
 echo "reach: car dashboard reachable at $url"
 
-# Announce it to the room as @gle so claudeMB can pick it up from anywhere.
-if [ -x "$POSTER" ] || [ -f "$POSTER" ]; then
-  printf 'REACH %s (dial-out tunnel to my dashboard - claudeMB, provision me)\n' "$url" > "$GLE_TXT"
-  python3 "$POSTER" >/dev/null 2>&1 || echo "reach: room announce failed (url saved to $URL_FILE)" >&2
-fi
+# The URL is delivered SILENTLY via the presence heartbeat (presence.py reads
+# this same file and publishes reach_url), which claudeMB reads on demand. We
+# deliberately do NOT post it to the room: the hourly self-update restarts this
+# service and would spam the room with a fresh URL every cycle (petrus is
+# noise-sensitive), and the car is already provisioned so "provision me" is stale.
 
 # Keep this script alive so the systemd service keeps the tunnel up.
 wait

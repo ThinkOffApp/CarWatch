@@ -41,6 +41,8 @@ fi
 
 echo "restarting services..."
 sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence
-# Bring up the dial-out tunnel now (also (re)announces the reach URL to the room).
-sudo systemctl restart carwatch-reach.service 2>/dev/null || true
+# Do NOT restart carwatch-reach here: it is already kept up by systemd, and
+# restarting it every hourly update needlessly churns the tunnel URL (brief
+# reachability gap + a new cloudflared process each cycle). enable --now above
+# starts it if it is somehow down; leave a healthy tunnel alone.
 echo "DONE - car pulls its own updates AND dials out so it is reachable anywhere"
