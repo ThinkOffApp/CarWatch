@@ -73,8 +73,11 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <title>vadelma dash</title></head>
 <body style="background:#111;color:#ddd;font:14px monospace;margin:0;padding:10px">
 <div id=temp style="font-size:34px;color:#6f6">...</div>
+<div style="color:#666;font-size:11px">CPU temperature (goes red at 75C) &middot; fan speed in rpm</div>
 <div id=sub style="color:#888"></div>
-<div style="color:#6cf;margin-top:8px">TOP</div>
+<div style="color:#666;font-size:11px">throttling state &middot; memory used / total</div>
+<div style="color:#6cf;margin-top:8px">TOP <span style="color:#888;font-size:11px">- busiest processes right now</span></div>
+<div style="color:#666;font-size:11px">columns: %CPU (share of processor) &middot; %MEM (share of the 16GB RAM) &middot; process name</div>
 <pre id=top style="margin:2px 0;white-space:pre-wrap"></pre>
 <div style="color:#6cf">JOURNAL</div>
 <pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>

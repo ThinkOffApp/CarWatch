@@ -83,6 +83,16 @@ def run() -> None:
         facts = live_facts()
         model = serving_model() or "none"
         temp = cpu_temp_c()
+        # Carry the dial-out reach URL in the heartbeat too. The room-announce
+        # in reach.sh depends on a helper that may be absent; the heartbeat is
+        # the ONE channel proven to always reach claudeMB, so publish the URL
+        # here so a fix is reachable even when the announce path fails.
+        reach_url = ""
+        try:
+            with open(os.path.expanduser("~/.carwatch/reach-url.txt")) as _rf:
+                reach_url = _rf.read().strip()
+        except Exception:
+            reach_url = ""
         ok_dev = ok_agent = False
         for doc in doc_ids:
             ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", {
@@ -91,6 +101,7 @@ def run() -> None:
                 "temp_c": temp,
                 "memory": facts.get("memory"),
                 "network": facts.get("network"),
+                "reach_url": reach_url,
                 "heartbeat": True,
             }) or ok_dev
             ok_agent = _patch(config, f"/intent/{doc}/agents/{AGENT_NAME}", {
