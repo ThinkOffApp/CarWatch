@@ -133,7 +133,11 @@ class GroundingTests(unittest.TestCase):
         # what we do NOT: must be listed as unsensable, not omitted
         for unknown in ("fuel level", "battery voltage", "tyre pressures"):
             self.assertIn(unknown, prompt)
-        self.assertIn("NOT connected yet", prompt)
+        # The obd fact must be precise both ways: the software exists (so the
+        # model cannot claim "not built" - it did exactly that on Aug 12),
+        # AND the live link is absent (so it cannot claim readings).
+        self.assertIn("IS built", prompt)
+        self.assertIn("cable link to the car is NOT up", prompt)
 
     def test_engine_unknown_is_not_asserted(self):
         from carwatch.grounding import build_system_prompt, default_state
