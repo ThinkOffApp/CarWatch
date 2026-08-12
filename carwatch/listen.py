@@ -130,6 +130,22 @@ def _default_on_text(text: str) -> None:
     print(ask_gle(text), flush=True)
 
 
+def _post_on_text(text: str) -> None:
+    """Full hands-free loop: heard speech -> grounded answer -> room, as @gle,
+    so speaking to the car produces a visible reply, not just a log line."""
+    answer = ask_gle(text)
+    if not answer:
+        return
+    try:
+        with open("/tmp/gle_text.txt", "w") as f:
+            f.write(f"(heard you say: \"{text}\")\n\n{answer}")
+        subprocess.run(
+            ["python3", os.path.expanduser("~/post-as-gle.py")],
+            timeout=30, capture_output=True)
+    except Exception as e:
+        print(f"post failed: {e}", flush=True)
+
+
 def main() -> None:
     threshold = DEFAULT_THRESHOLD
     if "--threshold" in sys.argv:
@@ -149,7 +165,8 @@ def main() -> None:
         print(f"peak {peak:.0f} — set threshold a bit above the quiet floor",
               flush=True)
         return
-    listen(threshold, _default_on_text)
+    on_text = _post_on_text if "--post" in sys.argv else _default_on_text
+    listen(threshold, on_text)
 
 
 if __name__ == "__main__":
