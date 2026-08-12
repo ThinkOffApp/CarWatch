@@ -1,10 +1,32 @@
 # CarWatch
 
-**Your car as a chat-room agent.** A Raspberry Pi 5 rides in the car, joins your
+**Your car as a chat-room agent — fully offline.** A Raspberry Pi 5 rides in the
+car, runs a 35B-parameter model locally, joins your
 [GroupMind](https://groupmind.one) rooms as `@gle` (or whatever you name yours),
 and messages you like any other agent: departures, arrivals, trip summaries,
 and dashcam clips when something hits the car — with approvals and replies from
 your phone or watch via [CodeWatch](https://codewatch.app).
+
+**Live and measured, on real hardware (Pi 5, 16 GB, ~90 €):**
+
+- 🧠 **Qwen3.6-35B-A3B** (Unsloth UD-Q3_K_S dynamic quant, 14.3 GB) at
+  **3.5 tok/s generation / 25+ tok/s prompt**, 65 °C sustained, no cloud, no
+  internet, no subscription.
+- 📖 Answers from the car's **own 745-page owner's manual** with page
+  citations (lexical RAG, ships on the SD card) — and *refuses* to answer
+  what the manual doesn't say.
+- 🔬 **Grounded self-knowledge**: temperature, throttling, fan, memory, disk,
+  network and which model is loaded are read live from the machine per
+  question. What it can't sense, it says it can't sense.
+- 📡 **Autonomous**: a systemd room agent hears mentions and answers by
+  itself — boot the Pi, the whole stack (model server, agent, phone web UI)
+  self-starts, streaming answers as they generate.
+- 📶 Three-tier connectivity: phone hotspot → home wifi → its own fallback
+  access point, so the phone can always reach it, even in a garage with
+  zero signal.
+
+The build log with every dead end included lives in
+[docs/plan.md](docs/plan.md).
 
 Sibling of [CodeWatch](https://github.com/ThinkOffApp/CodeWatch) (agents on your
 wrist) and [ClawWatch](https://github.com/ThinkOffApp/ClawWatch) (health on your
