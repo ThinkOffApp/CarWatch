@@ -68,6 +68,42 @@ f.onsubmit=async e=>{e.preventDefault();const text=q.value.trim();if(!text)retur
   b.disabled=false;q.focus()}
 </script></body></html>"""
 
+DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>vadelma dash</title></head>
+<body style="background:#111;color:#ddd;font:14px monospace;margin:0;padding:10px">
+<div id=temp style="font-size:34px;color:#6f6">...</div>
+<div id=sub style="color:#888"></div>
+<div style="color:#6cf;margin-top:8px">TOP</div>
+<pre id=top style="margin:2px 0;white-space:pre-wrap"></pre>
+<div style="color:#6cf">JOURNAL</div>
+<pre id=jrnl style="margin:2px 0;white-space:pre-wrap;color:#9e9"></pre>
+<div style="color:#6cf">SSH (Termux)</div>
+<pre style="margin:2px 0;color:#fc6">ssh petrus@__IP__</pre>
+<div style="color:#555">links: <a href="/" style="color:#6cf">chat</a>
+<a href="/journal" style="color:#6cf">full journal</a> &middot; live, 2s</div>
+<script>
+async function tick(){
+  try{
+    const r = await fetch("/api/status"); const d = await r.json();
+    const f = d.facts || {};
+    const t = parseFloat((f["your temperature"]||"").split(" ")[0]);
+    const el = document.getElementById("temp");
+    el.textContent = (isNaN(t) ? "?" : t) + "\u00b0C  " +
+      ((f["your fan"]||"").split(" ")[0]||"0") + " rpm";
+    el.style.color = t >= 75 ? "#f66" : "#6f6";
+    document.getElementById("sub").textContent =
+      (f["throttling"]||"") + " \u00b7 " + (f["memory"]||"");
+    document.getElementById("top").textContent = (d.top||[]).join("\n");
+    document.getElementById("jrnl").textContent = (d.journal||[]).join("\n");
+  }catch(e){
+    document.getElementById("sub").textContent = "unreachable: " + e;
+  }
+}
+tick(); setInterval(tick, 2000);
+</script></body></html>'''
+
+
 
 def manual_context(question: str) -> str:
     """Real manual excerpts, or empty - never a claim we did not earn."""
@@ -144,42 +180,18 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         elif self.path.startswith("/dash"):
-            # One-phone-screen dashboard petrus asked for: temp + top
-            # processes + latest journal lines + the Termux ssh line.
+            # One-phone-screen dashboard. Updates in place every 2s like
+            # `top` (petrus: "make the dashboard updating like top") -
+            # fetches /api/status via JS instead of reloading the page,
+            # so no flicker and no scroll reset.
             import subprocess as _sp
-            import html as _html
-            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            from carwatch.selfstate import cpu_temp_c, fan_rpm, throttling, memory
-            def run(cmd):
-                try:
-                    return _sp.run(cmd, capture_output=True, text=True, timeout=8).stdout
-                except Exception as e:
-                    return str(e)
-            top = "\n".join(run(["ps", "-eo", "pcpu,pmem,comm", "--sort=-pcpu"]).splitlines()[:7])
-            jrnl = "\n".join(run(["journalctl", "-u", "carwatch-agent", "-n", "8",
-                                   "--no-pager", "-o", "cat"]).splitlines()[-8:])
-            ip = (run(["hostname", "-I"]).split() or ["?"])[0]
-            temp = cpu_temp_c()
-            hot = temp is not None and temp >= 75
-            self._send(200,
-                "<!doctype html><html><head><meta charset=utf-8>"
-                "<meta http-equiv=refresh content=5>"
-                "<meta name=viewport content='width=device-width,initial-scale=1'>"
-                "<title>vadelma dash</title></head>"
-                "<body style='background:#111;color:#ddd;font:14px monospace;margin:0;padding:10px'>"
-                f"<div style='font-size:34px;color:{'#f66' if hot else '#6f6'}'>"
-                f"{temp if temp is not None else '?'}&deg;C"
-                f"<span style='font-size:14px;color:#888'> fan {fan_rpm() or 0} rpm</span></div>"
-                f"<div style='color:#888'>{_html.escape(throttling() or '')} &middot; {_html.escape(memory() or '')}</div>"
-                "<div style='color:#6cf;margin-top:8px'>TOP</div>"
-                f"<pre style='margin:2px 0;white-space:pre-wrap'>{_html.escape(top)}</pre>"
-                "<div style='color:#6cf'>JOURNAL</div>"
-                f"<pre style='margin:2px 0;white-space:pre-wrap;color:#9e9'>{_html.escape(jrnl)}</pre>"
-                "<div style='color:#6cf'>SSH (Termux)</div>"
-                f"<pre style='margin:2px 0;color:#fc6'>ssh petrus@{ip}</pre>"
-                "<div style='color:#555'>links: <a href='/' style='color:#6cf'>chat</a> "
-                "<a href='/journal' style='color:#6cf'>full journal</a> &middot; refreshes 5s</div>"
-                "</body></html>")
+            ip = "?"
+            try:
+                ip = (_sp.run(["hostname", "-I"], capture_output=True,
+                              text=True, timeout=5).stdout.split() or ["?"])[0]
+            except Exception:
+                pass
+            self._send(200, DASH_PAGE.replace("__IP__", ip))
         elif self.path.startswith("/journal"):
             # The car's thinking, phone-readable: last agent-journal lines,
             # auto-refreshing. petrus asked "how can I see the journal" -
