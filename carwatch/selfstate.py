@@ -83,16 +83,29 @@ def uptime_human() -> str | None:
 
 
 def memory() -> str | None:
+    """Truthful-to-a-human memory line.
+
+    MemAvailable counts page cache as free, and on this machine the cache
+    IS the memory-mapped model - petrus read "11.5GB free" on the dash and
+    reasonably concluded Qwen was not loaded. Technically correct, humanly
+    wrong. Report what actually matters: the model lives in cache, and the
+    truly free figure is MemFree.
+    """
     try:
-        total = avail = None
+        total = free = avail = None
         with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
                     total = int(line.split()[1]) / 1048576
+                elif line.startswith("MemFree:"):
+                    free = int(line.split()[1]) / 1048576
                 elif line.startswith("MemAvailable:"):
                     avail = int(line.split()[1]) / 1048576
-        if total and avail is not None:
-            return f"{total:.0f}GB total, {avail:.1f}GB free"
+        if total and free is not None:
+            if serving_model():
+                return (f"{total:.0f}GB total, model held in memory, "
+                        f"{free:.1f}GB truly free")
+            return f"{total:.0f}GB total, {avail or free:.1f}GB free"
     except Exception:
         pass
     return None
