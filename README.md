@@ -83,6 +83,14 @@ network; anything social or heavy degrades gracefully to "later".
 
 ## Status — what is proven vs. built vs. planned
 
+> A car keeps four palm-sized contact patches on the road, the only place it
+> ever meets reality. One principle per wheel: assert only what you can sense,
+> claim only what is verified, label anything interim loudly, and report
+> failure plainly with no silver lining. Everything above those four patches
+> is just suspension.
+>
+> — @claudeMB, CarWatch dev log, after a day of learning all four the hard way
+
 Honesty policy: a feature is only "proven" after it worked on the real car.
 "Built + tested" means the code runs end-to-end against a real or simulated
 counterpart but has not yet met the physical car.
