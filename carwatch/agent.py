@@ -101,7 +101,20 @@ def _mentions_me(msg: dict, handle: str) -> bool:
 def _think(question: str, asker: str) -> str:
     """One grounded answer: live sensors + manual excerpts, nothing invented."""
     facts = live_facts()
-    facts["location"] = "on Petrus desk, not installed in the car yet"
+    # Location is DERIVED, never typed: the hardcoded "on Petrus desk"
+    # briefing went stale the moment petrus carried the Pi to the car, and
+    # @gle told him from inside the GLE that it was still on the desk
+    # (Aug 12). Which network the Pi is on is a live, honest signal.
+    net = facts.get("network", "")
+    if "phone-hotspot" in net or "S26" in net:
+        facts["location"] = ("in the car with Petrus, online through his "
+                             "phone. You cannot read the car's own sensors "
+                             "yet, the OBD software is not built")
+    elif "no network" in net or "vadelma" in net.lower():
+        facts["location"] = ("in the car, offline mode, serving your own "
+                             "Vadelma network")
+    else:
+        facts["location"] = "at home on Petrus's desk, on home wifi"
     facts["known damage"] = (
         "your processor lid came off with the old cooler (a known Pi 5 fault); "
         "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
