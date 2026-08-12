@@ -107,9 +107,7 @@ def _think(question: str, asker: str) -> str:
     # (Aug 12). Which network the Pi is on is a live, honest signal.
     net = facts.get("network", "")
     if "phone-hotspot" in net or "S26" in net:
-        facts["location"] = ("in the car with Petrus, online through his "
-                             "phone. You cannot read the car's own sensors "
-                             "yet, the OBD software is not built")
+        facts["location"] = "in the car with Petrus, online through his phone"
     elif "no network" in net or "vadelma" in net.lower():
         facts["location"] = ("in the car, offline mode, serving your own "
                              "Vadelma network")
@@ -120,11 +118,33 @@ def _think(question: str, asker: str) -> str:
         "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
         "port is broken but CarWatch never uses it"
     )
+    # OBD is a LIVE fact, never a hardcoded one: on Aug 12 this function
+    # said "the OBD software is not built" HOURS after it was built and
+    # running, because the claim was baked into two string literals here
+    # instead of read from the machine (the same stale-briefing trap the
+    # location fix above exists for). Read the cable state directly.
+    try:
+        with open("/sys/class/net/eth0/carrier") as _f:
+            _carrier_up = _f.read().strip() == "1"
+    except Exception:
+        _carrier_up = False
+    if _carrier_up:
+        facts["obd"] = ("your OBD reading software is built and running, and "
+                        "the diagnostic cable has a live link right now - a "
+                        "reading attempt happens automatically")
+    else:
+        facts["obd"] = ("your OBD reading software is built, tested, and "
+                        "running on board, watching the diagnostic cable - "
+                        "but the cable has no live link to the car right "
+                        "now, so no engine data yet")
+    facts["voice"] = ("you have working ears: a continuous on-board listener "
+                      "(whisper) hears speech near your microphone and routes "
+                      "it to you")
     cannot = [
-        "anything measured from the car itself - the OBD reading software "
-        "is not built yet, even when the cable is plugged in",
-        "engine, battery, fuel, tyres",
-        "your cameras and your microphone - voice input is not built yet",
+        "live engine, battery, fuel or tyre readings (no OBD link is up "
+        "right now)" if not _carrier_up else
+        "tyre pressures and fuel level (not in the first OBD reading set)",
+        "anything you would see out of your cameras",
     ]
     system = build_system_prompt(
         facts, cannot, manual_excerpts=context_for(question))

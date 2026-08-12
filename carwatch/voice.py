@@ -67,10 +67,15 @@ def transcribe(wav_path: str) -> str:
 
 def ask_gle(question: str) -> str:
     """Route the transcribed question through the SAME grounded pipeline the
-    room agent uses, so voice answers are as honest as text ones."""
+    room agent uses, so voice answers are as honest as text ones.
+
+    In-repo module, NOT the old loose ~/gle-ask.py: that script hardcoded a
+    stale location/OBD briefing and sat outside self-update's reach, so voice
+    answers contradicted the (fixed) room agent. carwatch.ask -> agent._think
+    is the one shared brain path."""
     try:
         r = subprocess.run(
-            ["python3", os.path.expanduser("~/gle-ask.py"), question],
+            ["python3", "-m", "carwatch.ask", question],
             capture_output=True, text=True, timeout=1200,
             cwd=os.path.expanduser("~/CarWatch"),
             env={**os.environ, "CARWATCH_STATE": os.path.expanduser("~/.carwatch")})
