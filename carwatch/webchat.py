@@ -106,8 +106,8 @@ async function tick(){
     el.style.color = t >= 75 ? "#f66" : "#6f6";
     document.getElementById("sub").textContent =
       (f["throttling"]||"") + " \u00b7 " + (f["memory"]||"");
-    document.getElementById("top").textContent = (d.top||[]).join("\n");
-    document.getElementById("jrnl").textContent = (d.journal||[]).join("\n");
+    document.getElementById("top").textContent = (d.top||[]).join("\\n");
+    document.getElementById("jrnl").textContent = (d.journal||[]).join("\\n");
   }catch(e){
     document.getElementById("sub").textContent = "unreachable: " + e;
   }
