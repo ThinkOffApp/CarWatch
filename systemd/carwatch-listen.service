@@ -1,0 +1,16 @@
+[Unit]
+Description=CarWatch voice listener (hands-free: hears speech, asks @gle)
+After=carwatch-brain.service
+
+[Service]
+User=petrus
+WorkingDirectory=/home/petrus/CarWatch
+Environment=CARWATCH_STATE=/home/petrus/.carwatch
+Environment=PYTHONPATH=/home/petrus/CarWatch
+# Sole owner of the mic - never run another arecord alongside it.
+ExecStart=/usr/bin/python3 -u -m carwatch.listen --threshold 850
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
