@@ -116,6 +116,12 @@ def _parse_pid_response(uds: bytes, pid: int):
 class DoipLink:
     sock: socket.socket
     target_addr: int
+    # Stream reassembly buffer: DoIP frames do not align with recv() calls.
+    buf: bytearray = None  # type: ignore[assignment]
+
+    def __post_init__(self):
+        if self.buf is None:
+            self.buf = bytearray()
 
 
 def routing_activation(sock: socket.socket) -> bool:
@@ -134,10 +140,13 @@ def routing_activation(sock: socket.socket) -> bool:
 
 
 def connect(gateway_ip: str, target_addr: int = DEFAULT_TARGET_ADDR,
-            timeout: float = 4.0) -> DoipLink | None:
-    """TCP-connect and routing-activate. None on any failure."""
+            timeout: float = 4.0, port: int = DOIP_PORT) -> DoipLink | None:
+    """TCP-connect and routing-activate. None on any failure.
+
+    `port` is overridable so the full flow can be exercised against a local
+    fake gateway (tests/fake_gateway.py) - the pre-car proof of this code."""
     try:
-        s = socket.create_connection((gateway_ip, DOIP_PORT), timeout=timeout)
+        s = socket.create_connection((gateway_ip, port), timeout=timeout)
     except Exception:
         return None
     if not routing_activation(s):
@@ -146,15 +155,37 @@ def connect(gateway_ip: str, target_addr: int = DEFAULT_TARGET_ADDR,
     return DoipLink(s, target_addr)
 
 
-def read_pid(link: DoipLink, pid: int):
-    link.sock.sendall(_diag_message(link.target_addr, _uds_read_pid(pid)))
-    link.sock.settimeout(3)
-    deadline = time.time() + 3
+def _recv_frame(link: DoipLink, deadline: float) -> tuple[int, bytes] | None:
+    """Read exactly one DoIP frame from the TCP stream, buffering across
+    recv() calls. DoIP is a stream protocol: the gateway's ACK (0x8002) and
+    the diagnostic answer (0x8001) routinely arrive in ONE packet, and the
+    old recv-per-frame parsing silently discarded everything after the first
+    frame - found by the fake-gateway end-to-end test (3 of 4 PIDs lost),
+    would have failed identically in the car."""
     while time.time() < deadline:
+        while len(link.buf) >= 8:
+            _v, _i, ptype, plen = struct.unpack(">BBHI", link.buf[:8])
+            if len(link.buf) < 8 + plen:
+                break  # need more bytes for this frame's payload
+            body = bytes(link.buf[8:8 + plen])
+            del link.buf[:8 + plen]
+            return ptype, body
+        link.sock.settimeout(max(0.1, deadline - time.time()))
         try:
-            parsed = _parse_doip(link.sock.recv(256))
+            chunk = link.sock.recv(4096)
         except socket.timeout:
             return None
+        if not chunk:
+            return None
+        link.buf.extend(chunk)
+    return None
+
+
+def read_pid(link: DoipLink, pid: int):
+    link.sock.sendall(_diag_message(link.target_addr, _uds_read_pid(pid)))
+    deadline = time.time() + 3
+    while True:
+        parsed = _recv_frame(link, deadline)
         if not parsed:
             return None
         ptype, body = parsed
@@ -162,7 +193,6 @@ def read_pid(link: DoipLink, pid: int):
             continue  # ack precedes the real answer
         if ptype == PT_DIAG_MESSAGE and len(body) >= 4:
             return _parse_pid_response(body[4:], pid)
-    return None
 
 
 def read_all(link: DoipLink) -> dict[str, object]:

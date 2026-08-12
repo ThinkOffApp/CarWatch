@@ -36,6 +36,9 @@ if [ -d "$DIR/systemd" ]; then
   # Dial-out reachability: makes the car reachable from anywhere so no future
   # fix needs a physical trip or anyone typing creds into the car.
   sudo systemctl enable --now carwatch-reach.service 2>/dev/null || true
+  # Zero-touch OBD: watches the ENET cable, reads the engine, posts to the
+  # room - petrus does nothing in the car.
+  sudo systemctl enable --now carwatch-obd.service 2>/dev/null || true
   sudo systemctl enable --now carwatch-update.timer 2>/dev/null || true
 fi
 

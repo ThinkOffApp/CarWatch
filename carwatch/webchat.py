@@ -289,15 +289,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
         if self.path == "/api/obd":
-            # One-tap OBD probe from the dashboard, so trying the car
-            # connection needs no ssh/Termux in the car (petrus was stranded
-            # by "permission denied" last trip). Runs the read-only DoIP
-            # probe and returns exactly what it printed.
+            # One-tap OBD from the dashboard: runs the COMPLETE session
+            # (eth0 up -> gateway discovery -> routing activation -> PID
+            # reads) and returns the stage-by-stage JSON trace, so a failure
+            # says exactly how far it got. Same code path the zero-touch
+            # obdwatch daemon uses; proven end-to-end against the fake
+            # gateway before ever touching the car.
             import subprocess as _sp, os as _os
             try:
                 r = _sp.run(
-                    ["python3", _os.path.expanduser("~/CarWatch/tools/doip_probe.py")],
-                    capture_output=True, text=True, timeout=40,
+                    ["sudo", "python3", "-m", "carwatch.obd_session"],
+                    capture_output=True, text=True, timeout=60,
+                    cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
                 out = (r.stdout + r.stderr).strip()[-3000:]
                 return self._send(200, json.dumps({"ok": True, "output": out}),

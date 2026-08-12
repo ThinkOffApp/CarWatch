@@ -1,0 +1,17 @@
+[Unit]
+Description=CarWatch zero-touch OBD (watch the cable, read the engine, post)
+After=network.target
+
+[Service]
+Type=simple
+User=petrus
+WorkingDirectory=/home/petrus/CarWatch
+# Absolute paths only in ExecStart ($HOME is mangled, %h = /root for system
+# services - both crash-looped carwatch-reach on Aug 12).
+ExecStart=/usr/bin/python3 -m carwatch.obdwatch
+# eth0 bring-up inside obd_session uses sudo (passwordless on the Pi).
+Restart=on-failure
+RestartSec=20
+
+[Install]
+WantedBy=multi-user.target
