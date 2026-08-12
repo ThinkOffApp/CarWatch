@@ -84,7 +84,14 @@ def default_state(
     if obd_connected:
         facts["obd"] = "connected, so live vehicle data is available"
     else:
-        facts["obd"] = "NOT connected yet"
+        # Precise wording matters: on Aug 12 the model embellished a bare
+        # "NOT connected yet" into "my OBD software is not built", right
+        # after the software WAS built - a grounding fact must leave no
+        # room for that. State exactly what exists and what is missing.
+        facts["obd"] = (
+            "your OBD reading software IS built, tested, and running on "
+            "board, watching the diagnostic cable - but the cable link to "
+            "the car is NOT up right now, so no live vehicle data yet")
         cannot += [
             "fuel level",
             "battery voltage or state of health",
