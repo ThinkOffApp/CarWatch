@@ -3,12 +3,19 @@
   "api_key": "PUT-THE-CAR-AGENTS-KEY-HERE-NEVER-COMMIT-IT",
   "room": "your-room-slug",
   "handle": "@gle",
-  "home_ssids": ["YourHomeWifi"],
+  "home_ssids": [
+    "YourHomeWifi"
+  ],
   "trip_idle_seconds": 300,
   "wolfbox": {
     "ssid": "WOLFBOX_G900_XXXX",
     "password": "",
     "host": "192.168.1.254",
     "poll_seconds": 60
+  },
+  "wled": {
+    "host": "",
+    "led_count": 30,
+    "brightness": 128
   }
 }
