@@ -56,8 +56,14 @@ def fmt_readings(r: dict) -> str:
         parts.append(f"coolant {r['coolant_c']} C")
     if "speed_kmh" in r:
         parts.append(f"speed {r['speed_kmh']} km/h")
+    if "fuel_level_pct" in r:
+        parts.append(f"fuel {r['fuel_level_pct']}%")
+    if "hybrid_battery_pct" in r:
+        parts.append(f"hybrid battery {r['hybrid_battery_pct']}%")
     if "module_voltage" in r:
-        parts.append(f"battery/system {r['module_voltage']:.1f} V")
+        parts.append(f"12V system {r['module_voltage']:.1f} V")
+    if "intake_air_c" in r:
+        parts.append(f"outside-ish air {r['intake_air_c']} C")
     return ", ".join(parts) or "no readings"
 
 
@@ -72,34 +78,69 @@ def failure_hint(result: dict) -> str:
     return "session up but no PID data returned"
 
 
+# ELM327 serial device paths, checked in order. /dev/ttyUSB* is the USB
+# cable; /dev/rfcomm0 is the bound Bluetooth dongle (Vgate iCar Pro 2S).
+ELM_PORTS = ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
+
+
+def elm_port_present() -> str | None:
+    for p in ELM_PORTS:
+        if os.path.exists(p):
+            return p
+    return None
+
+
 def run() -> None:
-    print("obdwatch: watching eth0 for the car", flush=True)
+    # Two paths, one daemon. The Aug 13 real-GLE verdict: the ENET/DoIP path
+    # has no gateway to talk to on a Mercedes, so the PRIMARY path is now a
+    # standard ELM327 adapter (USB or bound Bluetooth) on the CAN bus. The
+    # eth0/DoIP watch stays as a harmless secondary - if a car that speaks
+    # DoIP ever appears on the cable, it still gets read.
+    from carwatch import elm327
+    print("obdwatch: watching for an ELM327 adapter "
+          f"({', '.join(ELM_PORTS)}) and eth0 carrier", flush=True)
+    was_present = ""
     was_up = False
     last_post_readings = ""
     next_try = 0.0
     while True:
+        port = elm_port_present()
         up = carrier_up()
-        if up and not was_up:
-            print("link UP - car detected, settling then reading", flush=True)
+        if port and port != was_present:
+            print(f"ELM327 adapter appeared at {port}", flush=True)
             time.sleep(SETTLE_S)
             next_try = 0.0
-        if not up and was_up:
-            print("link DOWN", flush=True)
+        if not port and was_present:
+            print("ELM327 adapter gone", flush=True)
             last_post_readings = ""
+        if up and not was_up:
+            print("eth0 link UP", flush=True)
+            time.sleep(SETTLE_S)
+            next_try = 0.0
+        if not up and not port and was_up:
+            last_post_readings = ""
+        was_present = port or ""
         was_up = up
-        if up and time.time() >= next_try:
-            result = run_session()
+        if (port or up) and time.time() >= next_try:
+            if port:
+                result = elm327.run_session(port)
+            else:
+                result = run_session()  # legacy DoIP path via eth0
             print(json.dumps(result), flush=True)
             if result["ok"]:
                 text = fmt_readings(result["readings"])
+                dtcs = result.get("dtcs") or []
+                if dtcs:
+                    text += f" | stored fault codes: {', '.join(dtcs)}"
                 if text != last_post_readings:
                     post(f"Engine read (live from my OBD port): {text}")
                     last_post_readings = text
                 next_try = time.time() + 60
             else:
                 if not last_post_readings:
-                    post("OBD: cable link is up but no engine data yet - "
-                         + failure_hint(result))
+                    hint = (result.get("summary", "no data")
+                            if port else failure_hint(result))
+                    post(f"OBD: adapter/link present but no engine data yet - {hint}")
                     last_post_readings = "(failed)"
                 next_try = time.time() + RETRY_COOLDOWN_S
         time.sleep(POLL_S)
