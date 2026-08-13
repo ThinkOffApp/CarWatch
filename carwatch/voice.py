@@ -57,7 +57,10 @@ def transcribe(wav_path: str) -> str:
         stripped = _re.sub(r"[\[(].*?[\])]", "", text).strip()
         stripped = stripped.strip(" .,-").strip()
         words = [w for w in _re.split(r"\s+", stripped) if w]
-        if len(words) < 2 or len(stripped) < 6:
+        # 3+ words: "on thix" (a 5am ambient-noise fragment) passed the old
+        # 2-word bar and @gle answered the furniture. Real questions to a
+        # car are practically never under three words.
+        if len(words) < 3 or len(stripped) < 10:
             return ""
         return stripped
     except Exception as e:
