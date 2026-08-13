@@ -52,7 +52,10 @@ sleep 1
 # Wait for the public URL to appear in the log (up to ~40s).
 url=""
 for _ in $(seq 1 20); do
-  url="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$CF_LOG" 2>/dev/null | head -1)"
+  # Quick-tunnel hostnames are multi-word (word-word-word-word); a bare
+  # [a-z0-9-]+ also matched "api.trycloudflare.com" from cloudflared's own
+  # error lines and we published a dead URL (seen Aug 13). Require a dash.
+  url="$(grep -oE 'https://[a-z0-9]+(-[a-z0-9]+)+\.trycloudflare\.com' "$CF_LOG" 2>/dev/null | head -1)"
   [ -n "$url" ] && break
   sleep 2
 done

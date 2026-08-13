@@ -127,6 +127,47 @@ def own_ipv4s() -> set[str]:
     return ips
 
 
+def stage_hunt(trace: list[dict]) -> list[tuple[str, int]]:
+    """The cable links but the gateway ignored our broadcast hello - hunt it.
+
+    First real-car result (Aug 13, GLE): carrier=1, no 0x0004 reply. Many
+    gateways never answer broadcast identification; find the host instead:
+      1. IPv6 all-nodes multicast ping on eth0 - modern DoIP (ISO 13400-2)
+         prefers IPv6 link-local, and every IPv6 host answers ff02::1.
+      2. The kernel neighbour table - if the car ARPed/NDP'd us at link-up,
+         its address is already sitting there.
+    Returns candidate (host, port) pairs for a direct TCP session attempt,
+    and records everything seen so even a failed run maps the car's network.
+    """
+    candidates: list[tuple[str, int]] = []
+    seen: list[str] = []
+
+    _sh(["ping6", "-c", "3", "-I", ETH_IF, "ff02::1"], timeout=8)
+    neigh = _sh(["ip", "-6", "neigh", "show", "dev", ETH_IF]) + "\n" + \
+        _sh(["ip", "-4", "neigh", "show", "dev", ETH_IF])
+    for line in neigh.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        host = parts[0]
+        if host.startswith("fe80") or ("." in host and
+                                       not host.startswith("169.254.100.")):
+            if host not in seen:
+                seen.append(host)
+                hostport = (f"{host}%{ETH_IF}" if host.startswith("fe80")
+                            else host)
+                candidates.append((hostport, DOIP_PORT))
+
+    trace.append({"stage": "hunt", "ok": bool(candidates),
+                  "hosts_seen": seen,
+                  "detail": ("gateway candidates found on the link"
+                             if candidates else
+                             "no other host visible on the cable at all - "
+                             "the car end may be a passive OBD pass-through "
+                             "or the gateway needs a different wake state")})
+    return candidates
+
+
 def run_session(gateway: str | None = None, port: int = DOIP_PORT,
                 bring_eth0: bool = True) -> dict:
     """The whole flow. Returns the result dict (also printed by main)."""
@@ -140,6 +181,28 @@ def run_session(gateway: str | None = None, port: int = DOIP_PORT,
     if gateway is None:
         found = stage_discover(trace, own_ipv4s())
         if not found:
+            # Broadcast hello ignored - hunt the gateway host directly and
+            # try a straight TCP session with each candidate.
+            for host, port_c in stage_hunt(trace):
+                link = connect(host, port=port_c, timeout=3.0)
+                if link:
+                    trace.append({"stage": "connect", "ok": True,
+                                  "detail": f"routing activated with "
+                                  f"{host}:{port_c} (direct, no broadcast)"})
+                    readings = read_all(link)
+                    link.sock.close()
+                    trace.append({"stage": "read", "ok": bool(readings),
+                                  "count": len(readings)})
+                    result["readings"] = readings
+                    result["ok"] = bool(readings)
+                    result["summary"] = (
+                        f"read {len(readings)} live values via direct "
+                        f"connect to {host}" if readings else
+                        f"session up with {host} but no PID data returned")
+                    return result
+                trace.append({"stage": "connect", "ok": False,
+                              "detail": f"{host}:{port_c} refused/ignored "
+                              "TCP session"})
             result["summary"] = ("no car found on the cable - see trace; "
                                  "OBD read did NOT happen")
             return result
