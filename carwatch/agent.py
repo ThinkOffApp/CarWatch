@@ -118,6 +118,12 @@ def _think(question: str, asker: str) -> str:
         "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
         "port is broken but CarWatch never uses it"
     )
+    # petrus told the car this himself (room, Aug 13): a fact about its own
+    # body it could never sense, so it belongs in the standing briefing.
+    facts["your appearance"] = (
+        "a 2020 Mercedes GLE with a big pink rainbow heart that Petrus drew "
+        "on your bonnet - it makes people smile wherever you drive"
+    )
     # OBD is a LIVE fact, never a hardcoded one: on Aug 12 this function
     # said "the OBD software is not built" HOURS after it was built and
     # running, because the claim was baked into two string literals here
