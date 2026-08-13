@@ -24,6 +24,15 @@ class WolfboxConfig:
 
 
 @dataclass
+class WledConfig:
+    # WLED LED controller (ESP32) on the car network. Empty host disables the
+    # lights entirely; carwatch.lights is a no-op until this is set.
+    host: str = ""            # e.g. "192.168.1.50" or "wled-gle.local"
+    led_count: int = 30       # strip length, so effects can scale to it
+    brightness: int = 128     # 0-255 default brightness
+
+
+@dataclass
 class Config:
     api_base: str = "https://groupmind.one"
     api_key: str = ""
@@ -33,6 +42,7 @@ class Config:
     # Seconds without network/motion signals before a trip is considered over.
     trip_idle_seconds: int = 300
     wolfbox: WolfboxConfig = field(default_factory=WolfboxConfig)
+    wled: WledConfig = field(default_factory=WledConfig)
     # Free-form overrides for carwatch.voice (paths, prompt, seconds).
     # Kept as a dict on purpose: voice.py owns the defaults and this was
     # silently dropped by the field filter before (codexmb P2).
@@ -45,8 +55,11 @@ class Config:
         with open(path) as f:
             raw = json.load(f)
         wolf = WolfboxConfig(**raw.pop("wolfbox", {}))
-        cfg = Config(**{k: v for k, v in raw.items() if k in Config.__dataclass_fields__ and k != "wolfbox"})
+        wled = WledConfig(**raw.pop("wled", {}))
+        cfg = Config(**{k: v for k, v in raw.items()
+                        if k in Config.__dataclass_fields__ and k not in ("wolfbox", "wled")})
         cfg.wolfbox = wolf
+        cfg.wled = wled
         if not cfg.api_key:
             raise SystemExit(f"api_key missing in {path}")
         if not cfg.room:

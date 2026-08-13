@@ -55,9 +55,11 @@ def _write_wav(path: str, frames: bytes) -> None:
 
 
 def handle_utterance(frames: bytes, on_text) -> None:
+    from carwatch import lights  # local import: keeps lights fully optional
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         path = f.name
     _write_wav(path, frames)
+    lights.signal("thinking")   # transcribing + answering
     text = transcribe(path)
     os.unlink(path)
     if text:
@@ -65,6 +67,7 @@ def handle_utterance(frames: bytes, on_text) -> None:
         on_text(text)
     else:
         print("(captured sound but no clear speech)", flush=True)
+    lights.signal("idle")       # back to calm when done
 
 
 def _open_mic():
