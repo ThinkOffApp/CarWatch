@@ -109,6 +109,78 @@ class Lights:
         return ok
 
 
+def _is_wled(host: str, timeout: float = 0.8) -> bool:
+    """True if host answers like a WLED device (GET /json/info)."""
+    try:
+        with urllib.request.urlopen(f"http://{host}/json/info",
+                                    timeout=timeout) as r:
+            info = json.load(r)
+        return "leds" in info and ("ver" in info or "brand" in info)
+    except Exception:
+        return False
+
+
+def _local_subnet_hosts() -> list[str]:
+    """Addresses on our /24, our own IP excluded. Empty if undetermined."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))       # no traffic sent; just picks the iface
+        me = s.getsockname()[0]
+        s.close()
+    except Exception:
+        return []
+    base = ".".join(me.split(".")[:3])
+    return [f"{base}.{i}" for i in range(1, 255)
+            if f"{base}.{i}" != me]
+
+
+def discover(timeout_per_host: float = 0.5, cache_path: str | None = None) -> str | None:
+    """Find a WLED on the local network: cached IP -> mDNS names -> /24 sweep.
+
+    Returns a host string or None. The sweep runs ~32 hosts at a time and the
+    result is cached so later startups are instant.
+    """
+    import concurrent.futures
+    import os
+
+    cache_path = cache_path or "/var/lib/carwatch/wled-host"
+    # 0) cache
+    try:
+        with open(cache_path) as f:
+            cached = f.read().strip()
+        if cached and _is_wled(cached):
+            return cached
+    except Exception:
+        pass
+    # 1) mDNS default hostnames (the resolver handles .local via avahi)
+    for name in ("wled.local", "wled-gle.local"):
+        if _is_wled(name, timeout=1.5):
+            host = name
+            break
+    else:
+        # 2) parallel /24 sweep for the WLED signature
+        host = None
+        hosts = _local_subnet_hosts()
+        if hosts:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=32) as ex:
+                futs = {ex.submit(_is_wled, h, timeout_per_host): h for h in hosts}
+                for fut in concurrent.futures.as_completed(futs):
+                    if fut.result():
+                        host = futs[fut]
+                        for f in futs:
+                            f.cancel()
+                        break
+    if host:
+        try:
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w") as f:
+                f.write(host)
+        except Exception:
+            pass
+    return host
+
+
 _shared: "Lights | None" = None
 
 
@@ -124,6 +196,10 @@ def signal(mood: str) -> None:
         if _shared is None:
             from carwatch.config import Config
             _shared = Lights.from_config(Config.load())
+            if not _shared.enabled:
+                found = discover()          # empty host = find it yourself
+                if found:
+                    _shared.host = found
         if _shared.enabled:
             _shared.mood(mood)
     except Exception:

@@ -35,6 +35,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b'{"success":true}')
 
+    def do_GET(self):
+        # WLED identity endpoint, used by carwatch.lights.discover()
+        if self.path == "/json/info":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(
+                {"ver": "0.15.0", "brand": "WLED",
+                 "leds": {"count": 30}}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def log_message(self, *a):
         pass  # quiet
 
@@ -82,6 +95,16 @@ def self_test() -> None:
     noop = L.Lights("")
     assert noop.mood("thinking") is False and noop.enabled is False
     print("disabled (empty host): no-op OK")
+
+    # discovery: the fake answers /json/info like a real WLED
+    assert L._is_wled(host), "_is_wled did not recognize the fake"
+    print("_is_wled recognizes the fake WLED OK")
+    import tempfile
+    cache = os.path.join(tempfile.mkdtemp(), "wled-host")
+    with open(cache, "w") as f:
+        f.write(host)                 # pre-seed cache -> discover returns it
+    assert L.discover(cache_path=cache) == host, "discover cache path failed"
+    print("discover (cached) returns the fake host OK")
 
     print("SELF-TEST", "PASS" if ok else "FAIL")
     raise SystemExit(0 if ok else 1)
