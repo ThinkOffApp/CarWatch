@@ -54,6 +54,28 @@ def _write_wav(path: str, frames: bytes) -> None:
         w.writeframes(frames)
 
 
+# Wake-word gate (claudemm's Helsinki observation, Aug 14 night): the mic
+# transcribes FINNISH bystander speech as garbled English and the car
+# politely answers each fragment, posting overheard speech into the room.
+# The car now only engages when addressed. Overridable per config:
+# voice.wake_words = [] restores always-on; a custom list replaces these.
+WAKE_WORDS = ("gle", "glee", "e-class", "e class", "eclass", "car")
+
+
+def _wake_words():
+    try:
+        import json
+        cfg = json.load(open(os.path.expanduser("~/.carwatch/config.json")))
+        w = (cfg.get("voice") or {}).get("wake_words")
+        if w == []:
+            return None          # explicit opt-out: always-on
+        if w:
+            return tuple(str(x).lower() for x in w)
+    except Exception:
+        pass
+    return WAKE_WORDS
+
+
 def handle_utterance(frames: bytes, on_text) -> None:
     from carwatch import lights  # local import: keeps lights fully optional
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -63,6 +85,12 @@ def handle_utterance(frames: bytes, on_text) -> None:
     text = transcribe(path)
     os.unlink(path)
     if text:
+        wake = _wake_words()
+        if wake and not any(w in text.lower() for w in wake):
+            # Not addressed to the car: log a stub locally, never post.
+            print(f"(ignored, no wake word): {text[:60]}", flush=True)
+            lights.signal("idle")
+            return
         print(f"HEARD: {text}", flush=True)
         on_text(text)
     else:
