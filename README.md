@@ -7,7 +7,7 @@ and messages you like any other agent: departures, arrivals, trip summaries,
 and dashcam clips when something hits the car — with approvals and replies from
 your phone or watch via [CodeWatch](https://codewatch.app).
 
-**Live and measured, on real hardware (Pi 5, 16 GB, ~120 €):**
+**Live and measured, on real hardware (Pi 5, 16 GB, ~300 €):**
 
 - 🧠 **Qwen3.6-35B-A3B** (Unsloth UD-Q3_K_S dynamic quant, 14.3 GB) at
   **3.5 tok/s generation / 25+ tok/s prompt**, 65 °C sustained, no cloud, no
