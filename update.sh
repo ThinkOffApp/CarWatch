@@ -50,7 +50,11 @@ if [ -d "$DIR/systemd" ]; then
 fi
 
 echo "restarting services..."
-sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence
+# carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
+# already running, so without a restart the OBD watcher keeps executing
+# pre-update code forever (Aug 14: exactly why the first USB adapter plug-in
+# stayed silent while everything else updated around it).
+sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief
 # reachability gap + a new cloudflared process each cycle). enable --now above
