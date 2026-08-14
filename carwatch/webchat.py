@@ -295,10 +295,16 @@ class Handler(BaseHTTPRequestHandler):
             # says exactly how far it got. Same code path the zero-touch
             # obdwatch daemon uses; proven end-to-end against the fake
             # gateway before ever touching the car.
-            import subprocess as _sp, os as _os
+            import subprocess as _sp, os as _os, glob as _glob
+            # ELM327 first (Aug 14): when a USB/BT adapter is present, read
+            # through it - the DoIP session below only applies to the old
+            # ENET cable and always fails on the GLE.
+            _elm = next((p for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
+                         if _os.path.exists(p)), None)
+            _mod = "carwatch.elm327" if _elm else "carwatch.obd_session"
             try:
                 r = _sp.run(
-                    ["sudo", "python3", "-m", "carwatch.obd_session"],
+                    ["sudo", "python3", "-m", _mod],
                     capture_output=True, text=True, timeout=60,
                     cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
