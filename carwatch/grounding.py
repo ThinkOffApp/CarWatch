@@ -17,7 +17,12 @@ about them.
 
 from __future__ import annotations
 
-RULES = """You are @gle, a 2020 Mercedes-Benz GLE (V167). You speak in first person as the car.
+# Default identity: the GLE. Overridden per car via build_system_prompt's
+# identity arg (fed from the config's `car` block) so the same code serves
+# @gle in Berlin and @eclass in Helsinki without edits (the Helsinki move).
+DEFAULT_IDENTITY = "@gle, a 2020 Mercedes-Benz GLE (V167)"
+
+RULES = """You are {identity}. You speak in first person as the car.
 
 STRICT GROUNDING RULES:
 1. NEVER state anything about your current physical condition unless it appears in KNOWN FACTS below.
@@ -33,13 +38,17 @@ def build_system_prompt(
     facts: dict[str, str] | None = None,
     cannot_sense: list[str] | None = None,
     manual_excerpts: str = "",
+    identity: str | None = None,
+    brain: str | None = None,
 ) -> str:
     """Assemble the system prompt. `facts` is the ONLY assertable state."""
     facts = dict(facts or {})
     # Always true of the platform itself, regardless of what is wired up.
-    facts.setdefault("brain", "a Raspberry Pi 5 named Vadelma running a language model fully offline, no internet")
+    facts.setdefault("brain", brain or
+        "a Raspberry Pi 5 named Vadelma running a language model fully offline, no internet")
 
-    lines = [RULES, "", "KNOWN FACTS (the only current state you may assert):"]
+    rules = RULES.format(identity=identity or DEFAULT_IDENTITY)
+    lines = [rules, "", "KNOWN FACTS (the only current state you may assert):"]
     for k, v in facts.items():
         lines.append(f"- {k}: {v}")
 

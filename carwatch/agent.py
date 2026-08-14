@@ -28,6 +28,29 @@ from carwatch.selfstate import live_facts
 from carwatch.manual import context_for
 
 CONFIG_PATH = os.path.expanduser("~/.carwatch/config.json")
+
+# Per-car identity block from config (profiles/ in the repo hold the shapes;
+# scripts/switch-car.sh installs one). Defaults = the GLE so an un-migrated
+# config behaves exactly as before the Helsinki @eclass prep.
+_GLE_DEFAULTS = {
+    "identity": "@gle, a 2020 Mercedes-Benz GLE (V167)",
+    "appearance": ("a 2020 Mercedes GLE with a big pink rainbow heart that "
+                   "Petrus drew on your bonnet - it makes people smile "
+                   "wherever you drive"),
+    "known_damage": ("your processor lid came off with the old cooler (a "
+                     "known Pi 5 fault); cooling is now FIXED with extra "
+                     "screws and a thicker pad. The PCIe port is broken but "
+                     "CarWatch never uses it"),
+    "brain": ("a Raspberry Pi 5 named Vadelma running a language model "
+              "fully offline, no internet"),
+}
+
+
+def car_identity() -> dict:
+    cfg = _load_json(CONFIG_PATH)
+    car = dict(_GLE_DEFAULTS)
+    car.update(cfg.get("car") or {})
+    return car
 STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
 MODEL_URL = "http://127.0.0.1:8081/v1/chat/completions"
 POLL_SECONDS = 20
@@ -113,17 +136,11 @@ def _think(question: str, asker: str) -> str:
                              "Vadelma network")
     else:
         facts["location"] = "at home, on home wifi (Petrus's desk)"
-    facts["known damage"] = (
-        "your processor lid came off with the old cooler (a known Pi 5 fault); "
-        "cooling is now FIXED with extra screws and a thicker pad. The PCIe "
-        "port is broken but CarWatch never uses it"
-    )
+    car = car_identity()
+    facts["known damage"] = car["known_damage"]
     # petrus told the car this himself (room, Aug 13): a fact about its own
     # body it could never sense, so it belongs in the standing briefing.
-    facts["your appearance"] = (
-        "a 2020 Mercedes GLE with a big pink rainbow heart that Petrus drew "
-        "on your bonnet - it makes people smile wherever you drive"
-    )
+    facts["your appearance"] = car["appearance"]
     # OBD is a LIVE fact, never a hardcoded one: on Aug 12 this function
     # said "the OBD software is not built" HOURS after it was built and
     # running, because the claim was baked into two string literals here
@@ -134,6 +151,12 @@ def _think(question: str, asker: str) -> str:
             _carrier_up = _f.read().strip() == "1"
     except Exception:
         _carrier_up = False
+    # The ELM327 USB/BT adapter IS the primary OBD path since Aug 14 (the
+    # first real GLE read came through it); eth0 alone made this fact claim
+    # "no live link" while the engine was being read over USB.
+    if not _carrier_up:
+        _carrier_up = any(os.path.exists(p) for p in
+                          ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0"))
     if _carrier_up:
         facts["obd"] = ("your OBD reading software is built and running, and "
                         "the diagnostic cable has a live link right now - a "
@@ -153,7 +176,8 @@ def _think(question: str, asker: str) -> str:
         "anything you would see out of your cameras",
     ]
     system = build_system_prompt(
-        facts, cannot, manual_excerpts=context_for(question))
+        facts, cannot, manual_excerpts=context_for(question),
+        identity=car["identity"], brain=car["brain"])
     req = urllib.request.Request(MODEL_URL, data=json.dumps({
         "messages": [
             {"role": "system", "content": system},
