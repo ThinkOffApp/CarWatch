@@ -21,8 +21,15 @@ if [ ! -d .git ]; then
   git remote add origin "$REPO" 2>/dev/null || git remote set-url origin "$REPO"
 fi
 echo "fetching latest..."
-git fetch -q origin main
-git reset --hard -q origin/main
+# Self-heal a wedged git state (Aug 14: an interrupted fetch left
+# refs/remotes/origin/main inconsistent -> "cannot lock ref" and every
+# update died at this line). Clear stale locks + the remote ref; the
+# following fetch recreates it cleanly. Worktree is reset right after,
+# so deleting the remote-tracking ref loses nothing.
+find .git -name '*.lock' -delete 2>/dev/null || true
+git update-ref -d refs/remotes/origin/main 2>/dev/null || true
+git fetch -q origin main || { git remote prune origin 2>/dev/null || true; git fetch -q origin main; }
+git reset --hard -q FETCH_HEAD
 echo "code updated to $(git rev-parse --short HEAD)"
 
 # Install/refresh systemd unit files from the repo. The old updater only
