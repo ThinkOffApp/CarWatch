@@ -163,7 +163,7 @@ async function wifiAdd(){
       if(res.state === "done"){
         m.textContent = (res.ok ? "JOINED '" : "FAILED joining '") + res.ssid + "'"
           + (res.ok ? "" : " - " + (res.nmcli||"no detail"))
-          + "  |  active now: " + (st.active||"?").replace(/\n/g,", ");
+          + "  |  active now: " + (st.active||"?").replace(/\\n/g,", ");
         return;
       }
     }catch(e){ m.textContent = "page lost the car (network switch in progress?) - reload in a moment"; }
