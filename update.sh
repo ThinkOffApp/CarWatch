@@ -71,6 +71,19 @@ if [ -f "$DIR/profiles/SWITCH-TO-eclass" ] && [ -f "$HOME/.carwatch/staged-api-k
   fi
 fi
 
+# One-shot deep probe, repo-triggered (petrus in the car, Aug 15). Runs
+# BEFORE the restart line (same self-kill reason as the switch block) and
+# in the BACKGROUND so the update completes while the probe posts live.
+if [ -f "$DIR/profiles/PROBE-NOW" ]; then
+  STAMP=$(cat "$DIR/profiles/PROBE-NOW")
+  LAST=$(cat "$HOME/.carwatch/last-probe-stamp" 2>/dev/null || echo "")
+  if [ "$STAMP" != "$LAST" ]; then
+    echo "$STAMP" > "$HOME/.carwatch/last-probe-stamp"
+    echo "launching deep OBD probe (background, posts to the room itself)"
+    (cd "$DIR" && setsid python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1 &)
+  fi
+fi
+
 echo "restarting services..."
 # carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
 # already running, so without a restart the OBD watcher keeps executing
