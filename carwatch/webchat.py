@@ -220,6 +220,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, PAGE)
+        elif self.path == "/api/wifi/status":
+            import subprocess as _sp
+            try:
+                result = {}
+                try:
+                    result = json.load(open("/tmp/wifi-add-result.json"))
+                except Exception:
+                    result = {"state": "none"}
+                act = _sp.run(["nmcli", "-t", "-f", "NAME,DEVICE", "con", "show", "--active"],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+                return self._send(200, json.dumps(
+                    {"result": result, "active": act}), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}), "application/json")
         elif self.path.startswith("/api/status"):
             # Machine-readable twin of /dash. CodeWatch local mode polls
             # this when the phone shares a network with the car (hotspot
@@ -356,20 +370,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps(
                     {"ok": False, "error": str(e)}), "application/json")
-        if self.path == "/api/wifi/status":
-            import subprocess as _sp
-            try:
-                result = {}
-                try:
-                    result = json.load(open("/tmp/wifi-add-result.json"))
-                except Exception:
-                    result = {"state": "none"}
-                act = _sp.run(["nmcli", "-t", "-f", "NAME,DEVICE", "con", "show", "--active"],
-                              capture_output=True, text=True, timeout=10).stdout.strip()
-                return self._send(200, json.dumps(
-                    {"result": result, "active": act}), "application/json")
-            except Exception as e:
-                return self._send(500, json.dumps({"error": str(e)}), "application/json")
         if self.path == "/api/wifi":
             # Network switching from the phone dashboard (petrus: "can you
             # have switch to hotspot / key in wifi details in the dashboard").
