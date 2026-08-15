@@ -79,8 +79,14 @@ if [ -f "$DIR/profiles/PROBE-NOW" ]; then
   LAST=$(cat "$HOME/.carwatch/last-probe-stamp" 2>/dev/null || echo "")
   if [ "$STAMP" != "$LAST" ]; then
     echo "$STAMP" > "$HOME/.carwatch/last-probe-stamp"
-    echo "launching deep OBD probe (background, posts to the room itself)"
-    (cd "$DIR" && setsid python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1 &)
+    echo "launching deep OBD probe (transient unit, survives service restarts)"
+    # setsid was NOT enough: the probe stayed in carwatch-chat's cgroup and
+    # the restart below killed it ~2s after launch (Aug 15, petrus in the
+    # car, burned the one-shot silently). systemd-run escapes the cgroup.
+    sudo systemd-run --collect --unit="carwatch-probe-$(date +%s)" \
+      --working-directory="$DIR" -E PYTHONPATH="$DIR" \
+      bash -c "python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1" || \
+      (cd "$DIR" && nohup python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1 &)
   fi
 fi
 
