@@ -98,7 +98,7 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 </div>
 <details style="margin:4px 0;color:#888"><summary>join another wifi</summary>
 <input id=ssid placeholder=network style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
-<input id=psk placeholder=password type=password style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
+<input id=psk placeholder=password type=text autocomplete=off style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
 <button onclick="wifiAdd()" style="background:#333;color:#fc6;border:1px solid #555;padding:6px 10px;font:13px monospace">join</button>
 </details>
 <div id=netmsg style="color:#fc6"></div>
@@ -147,10 +147,28 @@ async function wifi(target){
   document.getElementById("netmsg").textContent = (await r.json()).note || "switching...";
 }
 async function wifiAdd(){
+  const m = document.getElementById("netmsg");
   const ssid = document.getElementById("ssid").value, password = document.getElementById("psk").value;
-  if(!ssid || password.length < 8){ document.getElementById("netmsg").textContent = "need network name + password (8+)"; return; }
+  if(!ssid || password.length < 8){ m.textContent = "need network name + password (8+)"; return; }
   const r = await fetch("/api/wifi", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({target:"add", ssid, password})});
-  document.getElementById("netmsg").textContent = (await r.json()).note || (await r.json()).error;
+  const d = await r.json();
+  m.textContent = d.note || d.error || "sent";
+  // Poll the REAL result: nmcli's outcome lands in /api/wifi/status.
+  for(let i=0;i<25;i++){
+    await new Promise(res=>setTimeout(res,2000));
+    try{
+      const st = await (await fetch("/api/wifi/status")).json();
+      const res = st.result || {};
+      if(res.state === "working"){ m.textContent = "joining '"+res.ssid+"' ..."; continue; }
+      if(res.state === "done"){
+        m.textContent = (res.ok ? "JOINED '" : "FAILED joining '") + res.ssid + "'"
+          + (res.ok ? "" : " - " + (res.nmcli||"no detail"))
+          + "  |  active now: " + (st.active||"?").replace(/\n/g,", ");
+        return;
+      }
+    }catch(e){ m.textContent = "page lost the car (network switch in progress?) - reload in a moment"; }
+  }
+  m.textContent += "  (no final result after 50s - reload and check NETWORK)";
 }
 </script></body></html>'''
 
@@ -338,6 +356,20 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps(
                     {"ok": False, "error": str(e)}), "application/json")
+        if self.path == "/api/wifi/status":
+            import subprocess as _sp
+            try:
+                result = {}
+                try:
+                    result = json.load(open("/tmp/wifi-add-result.json"))
+                except Exception:
+                    result = {"state": "none"}
+                act = _sp.run(["nmcli", "-t", "-f", "NAME,DEVICE", "con", "show", "--active"],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+                return self._send(200, json.dumps(
+                    {"result": result, "active": act}), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}), "application/json")
         if self.path == "/api/wifi":
             # Network switching from the phone dashboard (petrus: "can you
             # have switch to hotspot / key in wifi details in the dashboard").
@@ -359,11 +391,15 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(400, json.dumps(
                             {"ok": False, "error": "need ssid and password (8+ chars)"}),
                             "application/json")
-                    _sp.Popen(["sudo", "nmcli", "dev", "wifi", "connect",
-                               ssid, "password", psk, "ifname", "wlan0"],
-                              start_new_session=True)
+                    # Capture nmcli's REAL outcome via a helper that writes
+                    # /tmp/wifi-add-result.json - the old fire-and-forget left
+                    # petrus typing blind with no ok/failed (Helsinki, Aug 15).
+                    # On success the helper sets autoconnect-priority 100 so
+                    # home wifi beats the hotspot (the Berlin priority trap).
+                    _sp.Popen(["python3", "-m", "carwatch.wifi_join", ssid, psk],
+                              start_new_session=True, cwd=REPO)
                     return self._send(200, json.dumps(
-                        {"ok": True, "note": f"joining {ssid}; page may drop"}),
+                        {"ok": True, "note": f"joining '{ssid}' - watch the result below"}),
                         "application/json")
                 profile = profiles.get(target)
                 if not profile:
