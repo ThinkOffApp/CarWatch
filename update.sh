@@ -74,6 +74,7 @@ fi
 # One-shot deep probe, repo-triggered (petrus in the car, Aug 15). Runs
 # BEFORE the restart line (same self-kill reason as the switch block) and
 # in the BACKGROUND so the update completes while the probe posts live.
+mkdir -p "$HOME/.carwatch"
 if [ -f "$DIR/profiles/PROBE-NOW" ]; then
   STAMP=$(cat "$DIR/profiles/PROBE-NOW")
   LAST=$(cat "$HOME/.carwatch/last-probe-stamp" 2>/dev/null || echo "")
@@ -87,8 +88,8 @@ if [ -f "$DIR/profiles/PROBE-NOW" ]; then
     # car, burned the one-shot silently). systemd-run escapes the cgroup.
     sudo systemd-run --collect --unit="carwatch-probe-$(date +%s)" \
       --working-directory="$DIR" -E PYTHONPATH="$DIR" \
-      bash -c "python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1" || \
-      (cd "$DIR" && nohup python3 -m carwatch.obd_probe >>/tmp/obd-probe.log 2>&1 &)
+      bash -c "python3 -m carwatch.obd_probe >>$HOME/.carwatch/obd-probe.log 2>&1" || \
+      (cd "$DIR" && nohup python3 -m carwatch.obd_probe >>$HOME/.carwatch/obd-probe.log 2>&1 &)
   fi
 fi
 
@@ -96,9 +97,9 @@ fi
 # room key started 403ing after the identity switch, so the probe's own posts
 # are lost; /api/update returns this script's output, so tailing the log here
 # makes the results readable over the tunnel with no working room key).
-if [ -f /tmp/obd-probe.log ]; then
+if [ -f $HOME/.carwatch/obd-probe.log ]; then
   echo "=== PROBE LOG (tail) ==="
-  tail -c 1200 /tmp/obd-probe.log
+  tail -c 1200 $HOME/.carwatch/obd-probe.log
   echo "=== END PROBE LOG ==="
 fi
 
