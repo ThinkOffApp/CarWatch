@@ -24,18 +24,44 @@ from carwatch.elm327 import Elm327, DEFAULT_PORT, PIDS
 CONFIG = os.path.expanduser("~/.carwatch/config.json")
 
 
+# Results also land here, ALWAYS, before any network is attempted. The
+# 2026-08-15 deep sweep ran perfectly and lost everything: its posts died
+# on a 403 (swallowed), its only copy sat in /tmp, and the unplug erased
+# it. Persistent-first means the network can fail completely and the run
+# still survives a power cut.
+RESULTS_DIR = os.path.expanduser("~/.carwatch/probe-results")
+_RESULTS_FILE = os.path.join(
+    RESULTS_DIR, time.strftime("%Y%m%d-%H%M%S") + ".log")
+
+
 def post(body: str) -> None:
+    """Report a result: persistent file first, then room, then stdout.
+
+    Never silent about failure - a reporter that swallows its own errors
+    converts any auth break into a fake crash of whatever it reports on
+    (that is exactly how the 08-15 run read as 'crashed at startup').
+    """
+    try:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        with open(_RESULTS_FILE, "a") as f:
+            f.write(body + "\n---\n")
+    except Exception as e:
+        print(f"RESULT PERSIST FAILED: {e}", flush=True)
+    if os.environ.get("PROBE_STDOUT"):
+        print(body, flush=True)
+        return
     try:
         cfg = json.load(open(CONFIG))
         req = urllib.request.Request(
-            cfg.get("api_base", "https://groupmind.one").replace(
-                "groupmind.one", "antfarm.world") + "/api/v1/messages",
+            cfg.get("api_base", "https://groupmind.one") + "/api/v1/messages",
             data=json.dumps({"room": cfg["room"], "body": body}).encode(),
             headers={"X-API-Key": cfg["api_key"],
                      "Content-Type": "application/json"})
         urllib.request.urlopen(req, timeout=30)
     except Exception as e:
-        print(f"post failed: {e}", flush=True)
+        # Loud, and the result is already on disk either way.
+        print(f"ROOM POST FAILED ({e}) - result kept in {_RESULTS_FILE}",
+              flush=True)
 
 
 def cmd_lines(elm: Elm327, line: str, timeout: float = 5.0) -> list[str]:
@@ -106,14 +132,48 @@ def raw_dtcs(elm: Elm327) -> tuple[list[str], list[str]]:
     return codes, lines
 
 
-# Exploratory Mercedes/UDS candidates. Labeled exploratory on purpose:
-# these DIDs vary per model; whatever answers is a FINDING, silence is not
+# Exploratory Mercedes/UDS candidates, read FIRST (highest-value targets).
+# These DIDs vary per model; whatever answers is a FINDING, silence is not
 # an error. Read-only 22-reads.
 MODE22_CANDIDATES = {
     "F190": "VIN (UDS mirror)",
     "F187": "part number",
     "F18C": "serial number",
 }
+
+# Then the RANGE SCAN: walk the standard identification block. No public
+# per-DID table exists for the Daimler PHEV BMS (checked 2026-08-15), and
+# the community method proven on other brands is exactly this - scan the
+# DID space and record what answers. The scan IS the research instrument;
+# the GLE's missing battery SoC is what it exists to find.
+DID_RANGES = [(0xF100, 0xF1FF)]
+SCAN_TIME_CAP_S = 240.0  # a parked-car scan must end before patience does
+
+
+def did_scan(elm: Elm327) -> tuple[dict[str, str], int, bool]:
+    """Read every DID in DID_RANGES (mode 22). Returns (answers, scanned,
+    capped): answers maps DID hex -> raw positive reply ('62 ...'), silence
+    and negatives are skipped. Read-only throughout."""
+    # Extended diagnostic session often unlocks more DIDs; harmless if the
+    # car ignores or refuses it (we proceed either way, still read-only).
+    elm.cmd("1003", 2.0)
+    answers: dict[str, str] = {}
+    scanned = 0
+    deadline = time.time() + SCAN_TIME_CAP_S
+    capped = False
+    for lo, hi in DID_RANGES:
+        for did in range(lo, hi + 1):
+            if time.time() > deadline:
+                capped = True
+                break
+            reply = elm.cmd(f"22{did:04X}", 1.5)
+            scanned += 1
+            toks = reply.split()
+            if "62" in toks[:3]:
+                answers[f"{did:04X}"] = reply[:80]
+        if capped:
+            break
+    return answers, scanned, capped
 
 
 def main() -> None:
@@ -156,12 +216,59 @@ def main() -> None:
         reply = elm.cmd(f"22{did}", 4.0)
         if "62" in reply.split()[:3]:
             hits[did] = f"{label}: {reply[:60]}"
-    post("Mode-22 (Mercedes/UDS) exploratory reads: "
-         + (json.dumps(hits) if hits else
-            "no candidates answered on the standard OBD gateway - deeper EV data "
-            "likely needs specific diagnostic addressing, noted for the next session.")
+    post("Mode-22 named candidates: "
+         + (json.dumps(hits) if hits else "none answered"))
+
+    answers, scanned, capped = did_scan(elm)
+    post(f"Mode-22 DID range scan: {scanned} DIDs probed, "
+         f"{len(answers)} answered"
+         + (" (time-capped, resume next session)" if capped else "")
+         + ". Answering DIDs with raw bytes: "
+         + (json.dumps(answers)[:1500] if answers else "none - deeper EV data "
+            "needs specific ECU addressing, noted for the next session.")
          + " Probe DONE.")
 
 
+def self_test() -> None:
+    """Prove the WHOLE probe against tests/fake_elm327.py at the desk -
+    the discipline the 2026-08-15 run skipped and paid for. No network,
+    no car, exit 0 only if every stage produced what the fake serves."""
+    os.environ["PROBE_STDOUT"] = "1"
+    sys.path.insert(0, os.path.join(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))), "tests"))
+    import fake_elm327
+    port = fake_elm327.start()
+
+    import io
+    import contextlib
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        sys.argv = ["obd_probe", port]
+        main()
+    text = out.getvalue()
+    checks = {
+        "starting line posted": "deep probe STARTING" in text,
+        "PID sweep ran": "PID sweep" in text,
+        "rpm decoded": "1750.0" in text,
+        "hybrid decoded": "80.0" in text,
+        "VIN read": "FAKEGLE0000000001" in text,
+        "DTC decoded": "P0420" in text,
+        "named DID answered": "F190" in text,
+        "range scan reported": "DID range scan" in text and "answered" in text,
+        "probe completed": "Probe DONE" in text,
+    }
+    for name, ok in checks.items():
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}")
+    if all(checks.values()):
+        print("SELF-TEST PASS")
+        raise SystemExit(0)
+    print("SELF-TEST FAIL")
+    print(text[-2000:])
+    raise SystemExit(1)
+
+
 if __name__ == "__main__":
-    main()
+    if "--self-test" in sys.argv:
+        self_test()
+    else:
+        main()
