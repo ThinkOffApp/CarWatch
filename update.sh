@@ -77,7 +77,9 @@ fi
 if [ -f "$DIR/profiles/PROBE-NOW" ]; then
   STAMP=$(cat "$DIR/profiles/PROBE-NOW")
   LAST=$(cat "$HOME/.carwatch/last-probe-stamp" 2>/dev/null || echo "")
-  if [ "$STAMP" != "$LAST" ]; then
+  ELM_PRESENT=""
+  for p in /dev/ttyUSB0 /dev/ttyUSB1 /dev/rfcomm0; do [ -e "$p" ] && ELM_PRESENT=1; done
+  if [ "$STAMP" != "$LAST" ] && [ -n "$ELM_PRESENT" ]; then
     echo "$STAMP" > "$HOME/.carwatch/last-probe-stamp"
     echo "launching deep OBD probe (transient unit, survives service restarts)"
     # setsid was NOT enough: the probe stayed in carwatch-chat's cgroup and
