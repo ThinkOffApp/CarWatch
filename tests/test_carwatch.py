@@ -239,3 +239,45 @@ class CarFactsIntegrationTests(unittest.TestCase):
         json.dump({}, open(cfg, "w"))
         with mock.patch.object(os.path, "expanduser", return_value=cfg):
             self.assertEqual(selfstate.car_facts(), {})
+
+
+class TestDtcDecode(unittest.TestCase):
+    """decode_dtc_reply must be CAN-aware: multiple ECUs each answering
+    '43 00' (zero stored codes) must NOT decode as phantom P0043 pairs -
+    the exact bug that showed identical fake codes on both cars."""
+
+    def _dec(self, s):
+        from carwatch.elm327 import decode_dtc_reply
+        return decode_dtc_reply(s)
+
+    def test_multi_ecu_zero_codes_is_empty(self):
+        self.assertEqual(self._dec("43 00 43 00 43 00"), [])
+
+    def test_single_ecu_zero_codes_is_empty(self):
+        self.assertEqual(self._dec("43 00"), [])
+
+    def test_real_single_code_on_can(self):
+        self.assertEqual(self._dec("43 01 00 43"), ["P0043"])
+
+    def test_two_codes_on_can(self):
+        self.assertEqual(self._dec("43 02 01 33 04 20"), ["P0133", "P0420"])
+
+    def test_kline_legacy_format(self):
+        self.assertEqual(self._dec("43 04 20 00 00"), ["P0420"])
+
+    def test_garbage_is_empty(self):
+        self.assertEqual(self._dec("NO DATA"), [])
+        self.assertEqual(self._dec(""), [])
+
+
+class TestServedPages(unittest.TestCase):
+    """The dash outage of Aug 15: a bare \\n inside a JS regex in a non-raw
+    Python string became a real newline and killed the whole script block.
+    Guard the construction: no served script may contain a newline right
+    after a regex opener."""
+
+    def test_no_newline_inside_js_regex(self):
+        from carwatch import webchat
+        for name in ("PAGE", "DASH_PAGE"):
+            page = getattr(webchat, name)
+            self.assertNotIn("(/\n", page, f"{name}: newline inside JS regex")

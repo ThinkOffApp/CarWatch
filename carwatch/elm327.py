@@ -143,15 +143,9 @@ def read_all(elm: Elm327) -> dict:
     return out
 
 
-def read_dtcs(elm: Elm327) -> list[str]:
-    """Stored trouble codes via mode 03. Best-effort decode of the standard
-    2-byte-per-code format into Pxxxx/Cxxxx/Bxxxx/Uxxxx strings."""
-    reply = elm.cmd("03")
-    toks = [t for t in reply.split() if len(t) == 2 and
-            all(ch in "0123456789ABCDEFabcdef" for ch in t)]
-    if not toks or toks[0].upper() != "43":
-        return []
-    body = [int(x, 16) for x in toks[1:]]
+def _decode_dtc_pairs(body: list[int]) -> list[str]:
+    """Decode raw 2-byte DTC pairs into Pxxxx/Cxxxx/Bxxxx/Uxxxx strings,
+    skipping 00 00 padding."""
     codes = []
     for i in range(0, len(body) - 1, 2):
         a, b = body[i], body[i + 1]
@@ -160,6 +154,57 @@ def read_dtcs(elm: Elm327) -> list[str]:
         prefix = "PCBU"[(a >> 6) & 0x3]
         codes.append(f"{prefix}{(a >> 4) & 0x3}{a & 0xF:X}{b:02X}")
     return codes
+
+
+def decode_dtc_reply(reply: str) -> list[str]:
+    """Decode a mode-03 reply, CAN-aware.
+
+    On CAN (every modern Mercedes) EACH module answers '43 <count> <pairs>',
+    and with headers off (ATH0) several modules' answers arrive interleaved:
+    a car with NO stored codes at all replies '43 00 43 00 43 00'. The old
+    decoder assumed the K-line format (pairs directly after 43, no count
+    byte), so it read that healthy stream as data pairs - and 00 43 decodes
+    to exactly P0043. That phantom pair showed up identically on BOTH cars
+    (2026-08-14 GLE, 2026-08-15 E 300e) and nearly sent petrus to a garage.
+
+    Parse: walk the hex tokens; at each '43' header try the CAN form (next
+    byte = count, then exactly count pairs). If the promised pairs do not
+    fit before the end or the next '43' header, fall back to K-line pairs
+    for that segment. '43' appearing INSIDE a counted segment stays data.
+    """
+    toks = [t for t in reply.split() if len(t) == 2 and
+            all(ch in "0123456789ABCDEFabcdef" for ch in t)]
+    vals = [int(t, 16) for t in toks]
+    codes: list[str] = []
+    i = 0
+    while i < len(vals):
+        if vals[i] != 0x43:
+            i += 1
+            continue
+        seg_start = i + 1
+        if seg_start >= len(vals):
+            break
+        count = vals[seg_start]
+        can_end = seg_start + 1 + count * 2
+        # CAN form is plausible when the counted pairs fit exactly before
+        # the end of the stream or the next module's 43 header.
+        can_ok = (count <= 0x7F and can_end <= len(vals) and
+                  (can_end == len(vals) or vals[can_end] == 0x43 or
+                   all(v == 0 for v in vals[can_end:])))
+        if can_ok:
+            codes.extend(_decode_dtc_pairs(vals[seg_start + 1:can_end]))
+            i = can_end
+        else:
+            # K-line: pairs run straight after 43 to the end of the stream.
+            codes.extend(_decode_dtc_pairs(vals[seg_start:]))
+            break
+    return codes
+
+
+def read_dtcs(elm: Elm327) -> list[str]:
+    """Stored trouble codes via mode 03. See decode_dtc_reply for the
+    CAN/K-line handling."""
+    return decode_dtc_reply(elm.cmd("03"))
 
 
 def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:

@@ -84,6 +84,16 @@ if [ -f "$DIR/profiles/PROBE-NOW" ]; then
   fi
 fi
 
+# Surface the deep-probe log THROUGH the update response (Aug 15: the car's
+# room key started 403ing after the identity switch, so the probe's own posts
+# are lost; /api/update returns this script's output, so tailing the log here
+# makes the results readable over the tunnel with no working room key).
+if [ -f /tmp/obd-probe.log ]; then
+  echo "=== PROBE LOG (tail) ==="
+  tail -c 1200 /tmp/obd-probe.log
+  echo "=== END PROBE LOG ==="
+fi
+
 echo "restarting services..."
 # carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
 # already running, so without a restart the OBD watcher keeps executing
