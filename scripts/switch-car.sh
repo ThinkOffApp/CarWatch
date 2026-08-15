@@ -37,6 +37,10 @@ os.replace(tmp, config_file)
 print(f"config now {profile['handle']}: {profile['car']['identity']}")
 EOF
 
-echo "restarting services..."
-sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence 2>/dev/null || true
+if [ "${SWITCH_NO_RESTART:-}" = "1" ]; then
+  echo "skipping service restart (caller handles it)"
+else
+  echo "restarting services..."
+  sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence 2>/dev/null || true
+fi
 echo "DONE - this Pi now speaks as $(python3 -c "import json;print(json.load(open('$CONFIG'))['handle'])")"

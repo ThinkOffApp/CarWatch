@@ -49,6 +49,28 @@ if [ -d "$DIR/systemd" ]; then
   sudo systemctl enable --now carwatch-update.timer 2>/dev/null || true
 fi
 
+# One-shot identity switch, repo-triggered. MUST run BEFORE the service
+# restarts below: update.sh executes inside carwatch-chat via /api/update,
+# so the restart line kills this very script - anything after it never
+# runs (why the first two switch attempts silently did nothing).
+# (Aug 15: the E 300e switch must
+# run over the hotspot where only the HTTP update channel reaches the Pi).
+# Idempotent: fires only while the marker exists AND the car is still @gle
+# AND a staged key is present; switch-car.sh consumes the key.
+if [ -f "$DIR/profiles/SWITCH-TO-eclass" ] && [ -f "$HOME/.carwatch/staged-api-key" ]; then
+  CUR=$(python3 -c "import json;print(json.load(open('$HOME/.carwatch/config.json')).get('handle',''))" 2>/dev/null || echo "")
+  if [ "$CUR" = "@gle" ]; then
+    echo "running one-shot @eclass switch..."
+    SWITCH_NO_RESTART=1 bash "$DIR/scripts/switch-car.sh" eclass || echo "switch failed"
+    if [ -f "$HOME/eclass-w213-2021-owners-manual.pdf" ]; then
+      CARWATCH_STATE="$HOME/.carwatch" python3 -m carwatch.manual --ingest "$HOME/eclass-w213-2021-owners-manual.pdf" || echo "manual ingest failed"
+    fi
+    # Policy (petrus, Aug 15): the car never rides the house wifi.
+    sudo nmcli con delete "wifi router" 2>/dev/null || true
+    echo "switch block done"
+  fi
+fi
+
 echo "restarting services..."
 # carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
 # already running, so without a restart the OBD watcher keeps executing
@@ -59,22 +81,4 @@ sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-b
 # restarting it every hourly update needlessly churns the tunnel URL (brief
 # reachability gap + a new cloudflared process each cycle). enable --now above
 # starts it if it is somehow down; leave a healthy tunnel alone.
-# One-shot identity switch, repo-triggered (Aug 15: the E 300e switch must
-# run over the hotspot where only the HTTP update channel reaches the Pi).
-# Idempotent: fires only while the marker exists AND the car is still @gle
-# AND a staged key is present; switch-car.sh consumes the key.
-if [ -f "$DIR/profiles/SWITCH-TO-eclass" ] && [ -f "$HOME/.carwatch/staged-api-key" ]; then
-  CUR=$(python3 -c "import json;print(json.load(open('$HOME/.carwatch/config.json')).get('handle',''))" 2>/dev/null || echo "")
-  if [ "$CUR" = "@gle" ]; then
-    echo "running one-shot @eclass switch..."
-    bash "$DIR/scripts/switch-car.sh" eclass || echo "switch failed"
-    if [ -f "$HOME/eclass-w213-2021-owners-manual.pdf" ]; then
-      CARWATCH_STATE="$HOME/.carwatch" python3 -m carwatch.manual --ingest "$HOME/eclass-w213-2021-owners-manual.pdf" || echo "manual ingest failed"
-    fi
-    # Policy (petrus, Aug 15): the car never rides the house wifi.
-    sudo nmcli con delete "wifi router" 2>/dev/null || true
-    echo "switch block done"
-  fi
-fi
-
 echo "DONE - car pulls its own updates AND dials out so it is reachable anywhere"
