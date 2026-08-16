@@ -210,6 +210,7 @@ async function wifiSaved(){
   }catch(e){ el.textContent = ""; }
 }
 wifiSaved();
+wifiScan();
 async function wifiAdd(){
   const m = document.getElementById("netmsg");
   const ssid = document.getElementById("ssid").value, password = document.getElementById("psk").value;
