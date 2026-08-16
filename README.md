@@ -5,7 +5,7 @@ car, runs a 35B-parameter model locally, joins your
 [GroupMind](https://groupmind.one) rooms as `@gle` (or whatever you name yours),
 and messages you like any other agent: departures, arrivals, trip summaries,
 and dashcam clips when something hits the car — with approvals and replies from
-your phone or watch via [CodeWatch](https://codewatch.app).
+your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the CodeWatch dashboard next to ClawWatch and WhereWatch.
 
 **Live and measured, on real hardware (Pi 5, 16 GB, ~300 €):**
 
