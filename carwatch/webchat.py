@@ -290,8 +290,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 out = _sp.run(
                     ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
-                     "dev", "wifi", "list"],
-                    capture_output=True, text=True, timeout=25,
+                     "dev", "wifi", "list", "--rescan", "yes"],
+                    capture_output=True, text=True, timeout=40,
                 ).stdout.splitlines()
                 seen = set()
                 networks = []
