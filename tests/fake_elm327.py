@@ -22,7 +22,6 @@ import re
 import threading
 
 RESPONSES = {
-    "0100": "41 00 BE 3F A8 13",
     "0104": "41 04 46",          # load 70/255 = 27.5%
     "0105": "41 05 80",          # coolant 0x80-40 = 88
     "010C": "41 0C 1B 58",       # rpm 0x1B58/4 = 1750.0
@@ -32,7 +31,37 @@ RESPONSES = {
     "0142": "41 42 37 14",       # 0x3714/1000 = 14.1V
     "015B": "41 5B CC",          # hybrid 204/255 = 80.0%
     "03":   "43 04 20 00 00",    # one DTC: P0420
+    # Support bitmaps for the PID sweep (walk 00/20/40/60...). Each mask's
+    # LSB is the "continue to next range" bit; the set bits advertise exactly
+    # the PIDs above so supported_pids() discovers all eight and stops:
+    #   00: 04 05 0C 0D 0F   20: 2F   40: 42 5B   60: (none, stop)
+    "0100": "41 00 18 1A 00 01",
+    "0120": "41 20 00 02 00 01",
+    "0140": "41 40 40 00 00 21",
+    "0160": "41 60 00 00 00 00",  # next-range bit clear -> stop
+    # Extended diagnostic session (probe requests it before the DID scan).
+    "1003": "50 03 00 32 01 F4",
+    # UDS mode-22 named candidates.
+    "22F190": "62 F1 90 46 41 4B 45 47 4C 45 30 30 30 30 30 30 30 30 30 31",
+    "22F187": "62 F1 87 41 32 39 37 30",
+    # A DID inside the range scan that answers - the kind of hit the scan
+    # exists to surface (silence elsewhere is correct, not a failure).
+    "22F1A0": "62 F1 A0 01 2C",
+    # Multi-frame VIN over mode 09 (0902): three lines, each repeating the
+    # 49 02 <seq> header that read_vin() strips. After the headers the bytes
+    # spell "FAKEGLE0000000001" (17 chars). The leading 01 on frame 1 is the
+    # number-of-data-items byte (0x01, non-printable, correctly dropped).
+    #   F A K E | G L E 0 0 | 0 0 0 0 0 0 0 1
+    "0902": ("49 02 01 01 46 41 4B 45\r"
+             "49 02 02 47 4C 45 30 30\r"
+             "49 02 03 30 30 30 30 30 30 30 31"),
 }
+
+# When ALL modules report no faults, a CAN mode-03 stream is several frames
+# of "43 00" - which the old K-line decoder misread as pair 00 43 = P0043.
+# This reproduces that exact phantom so the corrected decoder's regression
+# test has something to bite on. The probe's raw_dtcs() must yield NO codes.
+DTC_EMPTY_MULTIFRAME = "43 00\r43 00\r43 00"
 
 
 def serve(master_fd: int) -> None:
@@ -52,8 +81,19 @@ def serve(master_fd: int) -> None:
                 continue
             if cmd.startswith("AT"):
                 reply = "ELM327 v1.5\r\rOK" if cmd == "ATZ" else "OK"
+            elif cmd == "03":
+                # Serve the multi-module empty stream (P0043 phantom shape)
+                # unless a test overrode 03 in RESPONSES.
+                reply = RESPONSES.get("03", DTC_EMPTY_MULTIFRAME)
+            elif cmd in RESPONSES:
+                reply = RESPONSES[cmd]
+            elif re.fullmatch(r"22F1[0-9A-F]{2}", cmd):
+                # A DID inside the scan range with no canned answer: a real
+                # car replies with a negative-response (7F 22 31 = request
+                # out of range), which the scan correctly treats as silence.
+                reply = "7F 22 31"
             else:
-                reply = RESPONSES.get(cmd, "NO DATA")
+                reply = "NO DATA"
             os.write(master_fd, (cmd + "\r" + reply + "\r\r>").encode())
 
 
