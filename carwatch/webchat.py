@@ -93,11 +93,13 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <div style="color:#6cf;margin-top:6px">NETWORK</div>
 <div style="margin:4px 0">
 <button onclick="wifi('hotspot')" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">phone hotspot</button>
-<button onclick="wifi('home')" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">home wifi</button>
 <button onclick="wifi('ap')" style="background:#333;color:#6cf;border:1px solid #555;padding:8px 10px;font:13px monospace">own network</button>
+<button onclick="wifiScan()" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">scan</button>
 </div>
-<details style="margin:4px 0;color:#888"><summary>join another wifi</summary>
-<input id=ssid placeholder=network style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
+<div id=saved style="margin:4px 0"></div>
+<pre id=scan style="margin:2px 0;white-space:pre-wrap;color:#9e9;max-height:180px;overflow:auto"></pre>
+<details style="margin:4px 0;color:#888"><summary>join a seen network</summary>
+<input id=ssid placeholder="SSID from scan" style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
 <input id=psk placeholder=password type=text autocomplete=off style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
 <button onclick="wifiAdd()" style="background:#333;color:#fc6;border:1px solid #555;padding:6px 10px;font:13px monospace">join</button>
 </details>
@@ -146,6 +148,46 @@ async function wifi(target){
   const r = await fetch("/api/wifi", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({target})});
   document.getElementById("netmsg").textContent = (await r.json()).note || "switching...";
 }
+async function wifiUp(ssid){
+  if(!confirm("Switch the car to " + ssid + "?")) return;
+  const r = await fetch("/api/wifi", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({target:"up", ssid})});
+  const d = await r.json();
+  document.getElementById("netmsg").textContent = d.note || d.error || "switching...";
+}
+async function wifiScan(){
+  const box = document.getElementById("scan");
+  box.textContent = "scanning...";
+  try{
+    const d = await (await fetch("/api/wifi/scan")).json();
+    const rows = d.networks || [];
+    if(!rows.length){ box.textContent = d.error || "no networks seen"; return; }
+    box.innerHTML = "";
+    rows.forEach(n => {
+      const b = document.createElement("button");
+      b.textContent = (n.in_use ? "* " : "") + n.ssid + "  " + n.signal + "%  " + (n.security||"");
+      b.style.cssText = "display:block;margin:2px 0;background:#222;color:#ddd;border:1px solid #555;padding:6px;font:12px monospace;width:100%;text-align:left";
+      b.onclick = () => { document.getElementById("ssid").value = n.ssid; };
+      box.appendChild(b);
+    });
+  }catch(e){ box.textContent = "scan failed: " + e; }
+}
+async function wifiSaved(){
+  const el = document.getElementById("saved");
+  try{
+    const d = await (await fetch("/api/wifi/saved")).json();
+    const rows = d.saved || [];
+    el.innerHTML = "";
+    rows.forEach(n => {
+      const b = document.createElement("button");
+      b.textContent = n;
+      b.style.cssText = "margin:2px 4px 2px 0;background:#333;color:#6f6;border:1px solid #555;padding:6px 10px;font:12px monospace";
+      b.onclick = () => wifiUp(n);
+      el.appendChild(b);
+    });
+    if(!rows.length) el.textContent = "no saved wifi yet";
+  }catch(e){ el.textContent = ""; }
+}
+wifiSaved();
 async function wifiAdd(){
   const m = document.getElementById("netmsg");
   const ssid = document.getElementById("ssid").value, password = document.getElementById("psk").value;
@@ -220,6 +262,54 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, PAGE)
+        elif self.path == "/api/wifi/scan":
+            import subprocess as _sp
+            try:
+                out = _sp.run(
+                    ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
+                     "dev", "wifi", "list"],
+                    capture_output=True, text=True, timeout=25,
+                ).stdout.splitlines()
+                seen = set()
+                networks = []
+                for line in out:
+                    parts = line.split(":")
+                    if len(parts) < 3:
+                        continue
+                    in_use = parts[0] == "*"
+                    ssid = parts[1].strip()
+                    if not ssid or ssid in seen:
+                        continue
+                    seen.add(ssid)
+                    networks.append({
+                        "ssid": ssid,
+                        "signal": parts[2],
+                        "security": parts[3] if len(parts) > 3 else "",
+                        "in_use": in_use,
+                    })
+                return self._send(200, json.dumps({"networks": networks}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}),
+                                  "application/json")
+        elif self.path == "/api/wifi/saved":
+            import subprocess as _sp
+            try:
+                out = _sp.run(
+                    ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"],
+                    capture_output=True, text=True, timeout=10,
+                ).stdout.splitlines()
+                saved = []
+                skip = {"phone-hotspot", "vadelma-ap"}
+                for line in out:
+                    name, _, typ = line.partition(":")
+                    if typ.strip() in ("802-11-wireless", "wifi") and name not in skip:
+                        saved.append(name)
+                return self._send(200, json.dumps({"saved": saved}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}),
+                                  "application/json")
         elif self.path == "/api/wifi/status":
             import subprocess as _sp
             try:
@@ -382,12 +472,29 @@ class Handler(BaseHTTPRequestHandler):
                     int(self.headers.get("Content-Length", 0))) or b"{}")
                 target = str(body.get("target", ""))
                 profiles = {"hotspot": "phone-hotspot",
-                            "home": "PYUR 53A99",
                             "ap": "vadelma-ap"}
+                fake = {"wifi router", "network", "ssid", "yourhomewifi", "home wifi"}
+                if target == "up":
+                    ssid = str(body.get("ssid", "")).strip()
+                    if not ssid or ssid.lower() in fake:
+                        return self._send(400, json.dumps(
+                            {"ok": False, "error": "pick a real saved SSID, not a placeholder"}),
+                            "application/json")
+                    _sp.Popen(["sh", "-c",
+                               f"sleep 1; sudo nmcli con up '{ssid}'"],
+                              start_new_session=True)
+                    return self._send(200, json.dumps(
+                        {"ok": True, "note": f"switching to {ssid}; this page "
+                         "will drop and come back on the new network"}),
+                        "application/json")
                 if target == "add":
                     ssid = str(body.get("ssid", "")).strip()
                     psk = str(body.get("password", "")).strip()
-                    if not ssid or len(psk) < 8:
+                    if not ssid or ssid.lower() in fake:
+                        return self._send(400, json.dumps(
+                            {"ok": False, "error": "that is not a real SSID - scan and tap one"}),
+                            "application/json")
+                    if len(psk) < 8:
                         return self._send(400, json.dumps(
                             {"ok": False, "error": "need ssid and password (8+ chars)"}),
                             "application/json")
