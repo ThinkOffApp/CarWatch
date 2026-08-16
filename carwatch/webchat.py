@@ -24,6 +24,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_URL = os.environ.get("CARWATCH_MODEL_URL", "http://127.0.0.1:8081/v1/chat/completions")
+FAKE_SSIDS = frozenset({
+    "wifi router", "network", "ssid", "yourhomewifi", "home wifi",
+})
+
+
+def _saved_connection_names() -> set[str]:
+    out = subprocess.run(
+        ["nmcli", "-t", "-f", "NAME", "con", "show"],
+        capture_output=True, text=True, timeout=10,
+    )
+    return {line.strip() for line in out.stdout.splitlines() if line.strip()}
+
+
+def _switch_later(name: str) -> None:
+    # argv only, never a shell string. Dashboard is on a public tunnel.
+    subprocess.Popen(
+        [sys.executable, "-c",
+         "import sys,time,subprocess; time.sleep(1); "
+         "subprocess.run(['sudo','nmcli','con','up',sys.argv[1]])",
+         name],
+        start_new_session=True,
+    )
 
 PAGE = """<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -473,16 +495,17 @@ class Handler(BaseHTTPRequestHandler):
                 target = str(body.get("target", ""))
                 profiles = {"hotspot": "phone-hotspot",
                             "ap": "vadelma-ap"}
-                fake = {"wifi router", "network", "ssid", "yourhomewifi", "home wifi"}
                 if target == "up":
                     ssid = str(body.get("ssid", "")).strip()
-                    if not ssid or ssid.lower() in fake:
+                    if not ssid or ssid.lower() in FAKE_SSIDS:
                         return self._send(400, json.dumps(
                             {"ok": False, "error": "pick a real saved SSID, not a placeholder"}),
                             "application/json")
-                    _sp.Popen(["sh", "-c",
-                               f"sleep 1; sudo nmcli con up '{ssid}'"],
-                              start_new_session=True)
+                    if ssid not in _saved_connection_names():
+                        return self._send(400, json.dumps(
+                            {"ok": False, "error": "unknown saved network"}),
+                            "application/json")
+                    _switch_later(ssid)
                     return self._send(200, json.dumps(
                         {"ok": True, "note": f"switching to {ssid}; this page "
                          "will drop and come back on the new network"}),
@@ -490,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
                 if target == "add":
                     ssid = str(body.get("ssid", "")).strip()
                     psk = str(body.get("password", "")).strip()
-                    if not ssid or ssid.lower() in fake:
+                    if not ssid or ssid.lower() in FAKE_SSIDS:
                         return self._send(400, json.dumps(
                             {"ok": False, "error": "that is not a real SSID - scan and tap one"}),
                             "application/json")
@@ -513,9 +536,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, json.dumps(
                         {"ok": False, "error": f"unknown target {target}"}),
                         "application/json")
-                _sp.Popen(["sh", "-c",
-                           f"sleep 1; sudo nmcli con up '{profile}'"],
-                          start_new_session=True)
+                _switch_later(profile)
                 return self._send(200, json.dumps(
                     {"ok": True, "note": f"switching to {profile}; this page "
                      "will drop and come back on the new network"}),
