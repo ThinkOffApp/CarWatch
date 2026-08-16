@@ -108,7 +108,15 @@ echo "restarting services..."
 # already running, so without a restart the OBD watcher keeps executing
 # pre-update code forever (Aug 14: exactly why the first USB adapter plug-in
 # stayed silent while everything else updated around it).
-sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd
+# The restart must NOT run in this script's own cgroup: update.sh executes
+# inside carwatch-chat (/api/update), so stopping carwatch-chat killed the
+# restart command itself and the remaining units sometimes never came back -
+# code on disk updated while the RUNNING page stayed old (Aug 16, the
+# wifi-scan evening: three updates restarted the agent but never the chat).
+# systemd-run escapes the cgroup, same trick the deep-probe block uses.
+sudo systemd-run --collect --unit="carwatch-svc-restart-$(date +%s)" \
+  sh -c 'systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd' \
+  || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief
 # reachability gap + a new cloudflared process each cycle). enable --now above
