@@ -127,6 +127,7 @@ def run() -> None:
                 "kind": "car-pi",
                 "model": model,
                 "temp_c": temp,
+                "load_1m": load1,
                 "load1": load1,
                 "load_pct": load_pct,
                 "cpu_count": os.cpu_count(),
