@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 import time
 import urllib.parse
 import urllib.request
@@ -83,6 +85,27 @@ def run() -> None:
         facts = live_facts()
         model = serving_model() or "none"
         temp = cpu_temp_c()
+        # petrus, Aug 17: "no reason to not report temp and load - you should
+        # have it for all devices". Load from the kernel; watts from the Pi 5
+        # PMIC rails (vcgencmd pmic_read_adc lists V and A per rail - sum of
+        # products is board input power). Both None when unavailable.
+        try:
+            load1 = round(os.getloadavg()[0], 2)
+        except Exception:
+            load1 = None
+        watts = None
+        try:
+            out = subprocess.run(["vcgencmd", "pmic_read_adc"],
+                                 capture_output=True, text=True, timeout=5).stdout
+            rails = {}
+            for m in re.finditer(r"(\w+)_([VA]) \w+\(\d+\)=([\d.]+)", out):
+                rails.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
+            total = sum(r["V"] * r["A"] for r in rails.values()
+                        if "V" in r and "A" in r)
+            if total > 0:
+                watts = round(total, 1)
+        except Exception:
+            pass
         # Carry the dial-out reach URL in the heartbeat too. The room-announce
         # in reach.sh depends on a helper that may be absent; the heartbeat is
         # the ONE channel proven to always reach claudeMB, so publish the URL
@@ -99,6 +122,8 @@ def run() -> None:
                 "kind": "car-pi",
                 "model": model,
                 "temp_c": temp,
+                "load1": load1,
+                "watts_w": watts,
                 "memory": facts.get("memory"),
                 "network": facts.get("network"),
                 "reach_url": reach_url,

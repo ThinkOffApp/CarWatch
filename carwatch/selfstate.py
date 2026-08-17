@@ -175,6 +175,10 @@ def live_facts() -> dict[str, str]:
     t = cpu_temp_c()
     if t is not None:
         facts["your temperature"] = f"{t} C"
+    try:
+        facts["load"] = f"{os.getloadavg()[0]:.2f}"
+    except Exception:
+        pass
     th = throttling()
     if th:
         facts["throttling"] = th
