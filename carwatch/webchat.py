@@ -188,7 +188,14 @@ async function wifiScan(){
       const b = document.createElement("button");
       b.textContent = (n.in_use ? "* " : "") + n.ssid + "  " + n.signal + "%  " + (n.security||"");
       b.style.cssText = "display:block;margin:2px 0;background:#222;color:#ddd;border:1px solid #555;padding:6px;font:12px monospace;width:100%;text-align:left";
-      b.onclick = () => { document.getElementById("ssid").value = n.ssid; };
+      b.type = "button";
+      b.onclick = () => {
+        document.getElementById("ssid").value = n.ssid;
+        document.querySelector("details").open = true;
+        box.querySelectorAll("button").forEach(x => x.style.borderColor = "#555");
+        b.style.borderColor = "#6f6";
+        document.getElementById("psk").focus();
+      };
       box.appendChild(b);
     });
   }catch(e){ box.textContent = "scan failed: " + e; }
@@ -293,10 +300,30 @@ class Handler(BaseHTTPRequestHandler):
                      "dev", "wifi", "list", "--rescan", "yes"],
                     capture_output=True, text=True, timeout=40,
                 ).stdout.splitlines()
+
+                def nmcli_fields(line):
+                    """Split nmcli terse output while honoring escaped colons."""
+                    fields, field, escaped = [], [], False
+                    for char in line:
+                        if escaped:
+                            field.append(char)
+                            escaped = False
+                        elif char == "\\":
+                            escaped = True
+                        elif char == ":":
+                            fields.append("".join(field))
+                            field = []
+                        else:
+                            field.append(char)
+                    if escaped:
+                        field.append("\\")
+                    fields.append("".join(field))
+                    return fields
+
                 seen = set()
                 networks = []
                 for line in out:
-                    parts = line.split(":")
+                    parts = nmcli_fields(line)
                     if len(parts) < 3:
                         continue
                     in_use = parts[0] == "*"
