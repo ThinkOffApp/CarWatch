@@ -115,9 +115,11 @@ echo "restarting services..."
 # code on disk updated while the RUNNING page stayed old (Aug 16, the
 # wifi-scan evening: three updates restarted the agent but never the chat).
 # systemd-run escapes the cgroup, same trick the deep-probe block uses.
-sudo systemd-run --collect --unit="carwatch-svc-restart-$(date +%s)" \
-  sh -c 'fuser -k 8088/tcp 2>/dev/null || true; sleep 1; systemctl enable --now carwatch-chat; systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd' \
-  || { sudo fuser -k 8088/tcp 2>/dev/null || true; sudo systemctl enable --now carwatch-chat; sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd; }
+# Swap AFTER this HTTP request finishes. Killing 8088 here would abort
+# /api/update itself. systemd-run --on-active is a different cgroup.
+sudo systemd-run --on-active=5s --collect --unit="carwatch-swap-$(date +%s)" \
+  /bin/bash -c 'pkill -f carwatch.webchat || true; sleep 1; systemctl daemon-reload; systemctl enable --now carwatch-chat; systemctl restart carwatch-chat carwatch-agent carwatch-presence carwatch-obd' \
+  || echo "swap scheduled failed"
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief
 # reachability gap + a new cloudflared process each cycle). enable --now above
