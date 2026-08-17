@@ -294,10 +294,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, PAGE)
         elif self.path == "/api/wifi/scan":
             import subprocess as _sp
+            import time as _time
             try:
+                # `list --rescan yes` only REQUESTS a scan and lists the stale
+                # cache immediately - and an unprivileged request can be
+                # refused by NM outright, which is why the list stayed at just
+                # the connected hotspot all evening (Aug 16/17: Pi on the
+                # KITCHEN TABLE showed one network). Force the scan as root,
+                # give the radio a moment to finish, then read the results.
+                _sp.run(["sudo", "nmcli", "dev", "wifi", "rescan"],
+                        capture_output=True, text=True, timeout=15)
+                _time.sleep(4)
                 out = _sp.run(
                     ["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
-                     "dev", "wifi", "list", "--rescan", "yes"],
+                     "dev", "wifi", "list"],
                     capture_output=True, text=True, timeout=40,
                 ).stdout.splitlines()
 
