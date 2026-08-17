@@ -25,7 +25,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_URL = os.environ.get("CARWATCH_MODEL_URL", "http://127.0.0.1:8081/v1/chat/completions")
 FAKE_SSIDS = frozenset({
-    "wifi router", "network", "ssid", "yourhomewifi", "home wifi",
+    # "wifi router" was on this list as an assumed placeholder - it is the
+    # ACTUAL SSID of petrus's Helsinki home network (seen at 97% in the
+    # kitchen scan, Aug 17). A word list cannot decide what is a real SSID;
+    # the scan can. Never blacklist a name the scan itself reports.
+    "network", "ssid", "yourhomewifi", "home wifi",
 })
 
 
