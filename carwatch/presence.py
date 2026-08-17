@@ -98,6 +98,22 @@ def run() -> None:
         except Exception:
             load1 = None
             load_pct = None
+        # Numeric memory alongside the human-readable facts string, same
+        # field names as the Mac publishers (claudemm's #65) so the fleet
+        # dash reads one schema.
+        mem_free = mem_total = None
+        try:
+            mi = {}
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    parts = line.split()
+                    if parts and parts[0].rstrip(":") in ("MemTotal", "MemAvailable"):
+                        mi[parts[0].rstrip(":")] = int(parts[1])
+            if mi:
+                mem_total = round(mi.get("MemTotal", 0) / 1e6, 1)
+                mem_free = round(mi.get("MemAvailable", 0) / 1e6, 1)
+        except Exception:
+            pass
         watts = None
         try:
             out = subprocess.run(["vcgencmd", "pmic_read_adc"],
@@ -123,7 +139,7 @@ def run() -> None:
             reach_url = ""
         ok_dev = ok_agent = False
         for doc in doc_ids:
-            ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", {
+            payload = {
                 "kind": "car-pi",
                 "model": model,
                 "temp_c": temp,
@@ -136,7 +152,12 @@ def run() -> None:
                 "network": facts.get("network"),
                 "reach_url": reach_url,
                 "heartbeat": True,
-            }) or ok_dev
+            }
+            if mem_free is not None:
+                payload["mem_free_gb"] = mem_free
+            if mem_total is not None:
+                payload["mem_total_gb"] = mem_total
+            ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", payload) or ok_dev
             ok_agent = _patch(config, f"/intent/{doc}/agents/{AGENT_NAME}", {
                 "status": "active" if model != "none" else "brainless",
                 "last_task": f"serving {model} at {temp} C",
