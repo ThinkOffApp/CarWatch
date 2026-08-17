@@ -42,6 +42,7 @@ if [ -d "$DIR/systemd" ]; then
   sudo systemctl daemon-reload
   # Dial-out reachability: makes the car reachable from anywhere so no future
   # fix needs a physical trip or anyone typing creds into the car.
+  sudo systemctl enable --now carwatch-chat.service 2>/dev/null || true
   sudo systemctl enable --now carwatch-reach.service 2>/dev/null || true
   # Zero-touch OBD: watches the ENET cable, reads the engine, posts to the
   # room - petrus does nothing in the car.
@@ -115,8 +116,8 @@ echo "restarting services..."
 # wifi-scan evening: three updates restarted the agent but never the chat).
 # systemd-run escapes the cgroup, same trick the deep-probe block uses.
 sudo systemd-run --collect --unit="carwatch-svc-restart-$(date +%s)" \
-  sh -c 'systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd' \
-  || sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd
+  sh -c 'fuser -k 8088/tcp 2>/dev/null || true; sleep 1; systemctl enable --now carwatch-chat; systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-brain carwatch-obd 2>/dev/null || systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd' \
+  || { sudo fuser -k 8088/tcp 2>/dev/null || true; sudo systemctl enable --now carwatch-chat; sudo systemctl restart carwatch-agent carwatch-chat carwatch-presence carwatch-obd; }
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief
 # reachability gap + a new cloudflared process each cycle). enable --now above
