@@ -91,8 +91,13 @@ def run() -> None:
         # products is board input power). Both None when unavailable.
         try:
             load1 = round(os.getloadavg()[0], 2)
+            # load_pct = load normalized by core count so the fleet dash can
+            # compare devices (claudemm's convention, IAK PR #64).
+            cores = os.cpu_count() or 1
+            load_pct = round(load1 / cores * 100)
         except Exception:
             load1 = None
+            load_pct = None
         watts = None
         try:
             out = subprocess.run(["vcgencmd", "pmic_read_adc"],
@@ -123,6 +128,8 @@ def run() -> None:
                 "model": model,
                 "temp_c": temp,
                 "load1": load1,
+                "load_pct": load_pct,
+                "cpu_count": os.cpu_count(),
                 "watts_w": watts,
                 "memory": facts.get("memory"),
                 "network": facts.get("network"),
