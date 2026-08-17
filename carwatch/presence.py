@@ -154,7 +154,12 @@ def run() -> None:
                 "heartbeat": True,
             }
             if mem_free is not None:
+                # This figure IS /proc/meminfo MemAvailable - publish it
+                # under the fleet's canonical name too so the dash meters
+                # (available/total) work; mem_free_gb stays one cycle for
+                # any old reader.
                 payload["mem_free_gb"] = mem_free
+                payload["mem_available_gb"] = mem_free
             if mem_total is not None:
                 payload["mem_total_gb"] = mem_total
             ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", payload) or ok_dev
