@@ -118,7 +118,7 @@ echo "restarting services..."
 # Swap AFTER this HTTP request finishes. Killing 8088 here would abort
 # /api/update itself. systemd-run --on-active is a different cgroup.
 sudo systemd-run --on-active=5s --collect --unit="carwatch-swap-$(date +%s)" \
-  /bin/bash -c 'pkill -f carwatch.webchat || true; sleep 1; systemctl daemon-reload; systemctl enable --now carwatch-chat; systemctl restart carwatch-chat carwatch-agent carwatch-presence carwatch-obd' \
+  /bin/bash -c 'pkill -f carwatch.webchat || true; pkill -f carwatch.presence || true; sleep 1; systemctl daemon-reload; systemctl enable --now carwatch-chat carwatch-presence; systemctl restart carwatch-chat carwatch-agent carwatch-presence carwatch-obd' \
   || echo "swap scheduled failed"
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief

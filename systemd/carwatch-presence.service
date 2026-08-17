@@ -1,0 +1,16 @@
+[Unit]
+Description=CarWatch presence heartbeat (device + agent state to UIK)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=petrus
+WorkingDirectory=/home/petrus/CarWatch
+Environment=CARWATCH_STATE=/home/petrus/.carwatch
+Environment=PYTHONPATH=/home/petrus/CarWatch
+ExecStart=/usr/bin/python3 -u -m carwatch.presence
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
