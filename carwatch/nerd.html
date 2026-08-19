@@ -13,17 +13,15 @@
     header p { margin:4px 0 0; color:var(--muted); }
     header a { color:var(--blue); text-decoration:none; font-weight:650; }
     #state { float:right; color:var(--muted); font-size:12px; margin-top:7px; }
-    main { max-width:1100px; margin:auto; padding:16px; }
-    #groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
-    section { background:linear-gradient(145deg,#13232c,#0e171e); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 8px 25px #0003; }
-    section h2 { margin:0 0 10px; font-size:17px; color:var(--blue); }
-    .reading { display:grid; grid-template-columns:1fr auto; gap:2px 8px; padding:8px 0; border-top:1px solid #ffffff0c; }
-    .reading:first-child { border-top:0; }
-    .label { color:#c4d2d8; }
+    main { max-width:1100px; margin:auto; padding:10px; }
+    #groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:9px; }
+    section { background:linear-gradient(145deg,#13232c,#0e171e); border:1px solid var(--line); border-radius:14px; padding:10px 13px; box-shadow:0 8px 25px #0003; }
+    section h2 { margin:0 0 4px; font-size:15px; color:var(--blue); }
+    .reading { display:grid; grid-template-columns:1fr auto; gap:0 8px; padding:2px 0; }
+        .label { color:#c4d2d8; }
     .value { font:700 19px ui-monospace,monospace; color:var(--good); text-align:right; }
     .value.warn { color:var(--warn); } .value.bad { color:var(--bad); }
-    .pid { grid-column:1; color:var(--muted); font:11px ui-monospace,monospace; }
-    .spark { grid-column:1/-1; width:100%; height:30px; margin-top:4px; }
+        .spark { grid-column:1/-1; width:100%; height:18px; margin-top:1px; }
     #empty { color:var(--muted); padding:30px 4px; text-align:center; }
     .footer { margin-top:16px; color:var(--muted); font-size:12px; display:flex; justify-content:space-between; gap:12px; }
     button { background:var(--blue); color:#031019; border:0; border-radius:9px; padding:8px 12px; font-weight:700; cursor:pointer; }
@@ -43,7 +41,7 @@
     function render(d){
       const data=d.groups||{}; groups.innerHTML=''; let count=0;
       for(const group of order){ const readings=Object.values(data[group]||{}); if(!readings.length)continue; count+=readings.length; const sec=document.createElement('section'); sec.innerHTML=`<h2>${titles[group]||esc(group)}</h2>`;
-        for(const r of readings){ const key=r.key||r.label; const n=Number(r.value); if(Number.isFinite(n)){const a=history.get(key)||[]; a.push(n); history.set(key,a.slice(-24));} const cls=severity(r); const unit=r.unit?` ${esc(r.unit)}`:''; sec.insertAdjacentHTML('beforeend',`<div class="reading"><span class="label">${esc(r.label||r.key)}</span><span class="value ${cls}">${esc(r.value)}${unit}</span><span class="pid">${esc(r.pid||'')}</span>${spark(key)}</div>`); }
+        for(const r of readings){ const key=r.key||r.label; const n=Number(r.value); if(Number.isFinite(n)){const a=history.get(key)||[]; a.push(n); history.set(key,a.slice(-24));} const cls=severity(r); const unit=r.unit?` ${esc(r.unit)}`:''; sec.insertAdjacentHTML('beforeend',`<div class="reading"><span class="label">${esc(r.label||r.key)}</span><span class="value ${cls}">${esc(r.value)}${unit}</span>${spark(key)}</div>`); }
         groups.appendChild(sec);
       }
       if(!count) groups.innerHTML='<div id="empty">No decoded values yet. The adapter may be disconnected or the car may be silent.</div>';
