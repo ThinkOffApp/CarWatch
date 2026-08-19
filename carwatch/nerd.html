@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CarWatch Nerd Dashboard</title>
+  <style>
+    :root { color-scheme: dark; --bg:#091016; --panel:#111c24; --line:#20313c; --text:#e8f1f5; --muted:#8ca1ad; --good:#40d98b; --warn:#ffc857; --bad:#ff667d; --blue:#62c7ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at top,#142a35 0,#091016 48%); color:var(--text); font:15px/1.4 system-ui,sans-serif; }
+    header { padding:22px 20px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; background:#091016e8; backdrop-filter:blur(10px); }
+    h1 { margin:0; font-size:25px; letter-spacing:.02em; }
+    header p { margin:4px 0 0; color:var(--muted); }
+    #state { float:right; color:var(--muted); font-size:12px; margin-top:7px; }
+    main { max-width:1100px; margin:auto; padding:16px; }
+    #groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+    section { background:linear-gradient(145deg,#13232c,#0e171e); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 8px 25px #0003; }
+    section h2 { margin:0 0 10px; font-size:17px; color:var(--blue); }
+    .reading { display:grid; grid-template-columns:1fr auto; gap:2px 8px; padding:8px 0; border-top:1px solid #ffffff0c; }
+    .reading:first-child { border-top:0; }
+    .label { color:#c4d2d8; }
+    .value { font:700 19px ui-monospace,monospace; color:var(--good); text-align:right; }
+    .value.warn { color:var(--warn); } .value.bad { color:var(--bad); }
+    .pid { grid-column:1; color:var(--muted); font:11px ui-monospace,monospace; }
+    .spark { grid-column:1/-1; width:100%; height:30px; margin-top:4px; }
+    #empty { color:var(--muted); padding:30px 4px; text-align:center; }
+    .footer { margin-top:16px; color:var(--muted); font-size:12px; display:flex; justify-content:space-between; gap:12px; }
+    button { background:var(--blue); color:#031019; border:0; border-radius:9px; padding:8px 12px; font-weight:700; cursor:pointer; }
+    @media(max-width:500px) { header { padding:17px 14px 13px; } main { padding:12px; } #state { float:none; display:block; margin-top:5px; } }
+  </style>
+</head>
+<body>
+  <header><span id="state">starting…</span><h1>⚙ Nerd dashboard</h1><p>Live standard OBD-II data from CarWatch</p></header>
+  <main><div id="groups"><div id="empty">Waiting for the Pi and ELM327…</div></div><div class="footer"><span id="meta">Read-only. Values are omitted when the car does not answer.</span><button id="refresh">Read now</button></div></main>
+  <script>
+    const order=['temperatures','engine','hybrid','fuel','pressures','electrical','driving','diagnostics'];
+    const titles={temperatures:'Temperatures',engine:'Powertrain',hybrid:'Hybrid & electric',fuel:'Fuel',pressures:'Pressures',electrical:'Electrical',driving:'Driving',diagnostics:'Diagnostics'};
+    const history=new Map(), groups=document.getElementById('groups'), state=document.getElementById('state'), meta=document.getElementById('meta');
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function severity(r){ const n=Number(r.value); if(!Number.isFinite(n)) return ''; if(r.key.includes('coolant')||r.key.includes('_c')) return n>=110?'bad':n>=95?'warn':''; if(r.key.includes('voltage')) return n<11.8||n>15?'bad':n<12.2?'warn':''; if(r.key.includes('fuel_level')||r.key.includes('battery')) return n<10?'bad':n<20?'warn':''; return ''; }
+    function spark(key){ const a=history.get(key)||[]; if(a.length<2)return ''; const min=Math.min(...a),max=Math.max(...a),span=max-min||1; const pts=a.map((v,i)=>`${(i/(a.length-1))*100},${28-((v-min)/span)*26}`).join(' '); return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="#62c7ff" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`; }
+    function render(d){
+      const data=d.groups||{}; groups.innerHTML=''; let count=0;
+      for(const group of order){ const readings=Object.values(data[group]||{}); if(!readings.length)continue; count+=readings.length; const sec=document.createElement('section'); sec.innerHTML=`<h2>${titles[group]||esc(group)}</h2>`;
+        for(const r of readings){ const key=r.key||r.label; const n=Number(r.value); if(Number.isFinite(n)){const a=history.get(key)||[]; a.push(n); history.set(key,a.slice(-24));} const cls=severity(r); const unit=r.unit?` ${esc(r.unit)}`:''; sec.insertAdjacentHTML('beforeend',`<div class="reading"><span class="label">${esc(r.label||r.key)}</span><span class="value ${cls}">${esc(r.value)}${unit}</span><span class="pid">${esc(r.pid||'')}</span>${spark(key)}</div>`); }
+        groups.appendChild(sec);
+      }
+      if(!count) groups.innerHTML='<div id="empty">No decoded values yet. The adapter may be disconnected or the car may be silent.</div>';
+      const when=new Date().toLocaleTimeString(); state.textContent=d.ok?`● live · ${when}`:`○ no data · ${when}`; state.style.color=d.ok?'var(--good)':'var(--warn)'; meta.textContent=d.error||`${d.read_count||0} values read · ${d.attempted||0} standard PIDs attempted · read-only`;
+    }
+    async function refresh(){ state.textContent='reading…'; try{ const r=await fetch('/api/obd/all',{cache:'no-store'}); render(await r.json()); }catch(e){ state.textContent='○ Pi unreachable'; state.style.color='var(--bad)'; meta.textContent='Could not reach /api/obd/all'; } }
+    document.getElementById('refresh').onclick=refresh; refresh(); setInterval(refresh,2000);
+  </script>
+</body>
+</html>

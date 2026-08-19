@@ -42,6 +42,25 @@ POSTER = os.path.expanduser("~/post-as-gle.py")
 # Raw results are written to RESULTS_DIR so the bytes survive the drive.
 DEEP_STAMP = os.path.expanduser("~/.carwatch/deep-probe.stamp")
 RESULTS_DIR = os.path.expanduser("~/.carwatch/probe-results")
+# Full-decode snapshot for the nerd dashboard. ONE process owns the serial
+# port (this one); the dashboard endpoint serves this CACHE instead of
+# opening its own session, so a 2s-polling UI never fights the single-reader
+# ELM327 (claudemm, Aug 19). Refreshed every FULL_SWEEP_EVERY successful
+# cycles (~3 min); the payload carries ts so the UI can show data age.
+OBD_ALL_CACHE = os.path.expanduser("~/.carwatch/obd-all.json")
+FULL_SWEEP_EVERY = 3
+
+
+def write_obd_all_cache(payload: dict) -> None:
+    try:
+        payload["ts"] = time.time()
+        tmp = OBD_ALL_CACHE + ".tmp"
+        os.makedirs(os.path.dirname(OBD_ALL_CACHE), exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp, OBD_ALL_CACHE)
+    except Exception as e:
+        print(f"obd-all cache write failed: {e}", flush=True)
 
 
 def carrier_up() -> bool:
@@ -203,6 +222,7 @@ def run() -> None:
                                # >=BATT_MILESTONE_PCT net DROP (wobble-immune)
     adapter_gone_since = None  # when the adapter last vanished, for flap vs
                                # genuine-reconnect discrimination
+    cycle_n = 0                # successful-read counter for the full-sweep cadence
     next_try = 0.0
     # The deep (per-ECU mode-22 Mercedes) probe runs at most ONCE PER DAY and
     # only while the car is STATIONARY. petrus's Pi is mobile and only in the
@@ -303,6 +323,15 @@ def run() -> None:
                             mark_deep_probe_done()
                     except Exception as e:  # never let the probe kill the loop
                         print(f"deep probe failed: {e}", flush=True)
+                # Refresh the full-decode cache for the nerd dashboard every
+                # few cycles. Same process = the single serial port is never
+                # contended; the dashboard endpoint reads the cache file.
+                cycle_n += 1
+                if port and cycle_n % FULL_SWEEP_EVERY == 1:
+                    try:
+                        write_obd_all_cache(elm327.run_all(port))
+                    except Exception as e:
+                        print(f"obd-all sweep failed: {e}", flush=True)
                 next_try = time.time() + 60
             else:
                 if not last_post_readings:

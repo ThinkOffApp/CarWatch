@@ -143,6 +143,115 @@ def read_all(elm: Elm327) -> dict:
     return out
 
 
+# ── FULL standard decode table for the nerd dashboard (petrus, Aug 19:
+# "purkakaa kaikki saadut tiedot"). Every formula is standard SAE J1979.
+# pid -> (key, label, unit, group, nbytes, decoder). Groups drive the
+# dashboard layout: related values render together (temperatures with
+# temperatures, etc). This is a superset of PIDS; PIDS stays untouched so
+# the proven telemetry path cannot regress.
+def _pct(b):        return round(b[0] * 100 / 255, 1)
+def _trim(b):       return round((b[0] - 128) * 100 / 128, 1)
+def _minus40(b):    return b[0] - 40
+def _u16(b):        return (b[0] << 8) | b[1]
+
+_FUEL_TYPES = {1: "gasoline", 2: "methanol", 3: "ethanol", 4: "diesel",
+               5: "LPG", 6: "CNG", 8: "electric", 17: "plug-in hybrid gasoline",
+               19: "plug-in hybrid diesel", 21: "hybrid gasoline",
+               23: "plug-in hybrid diesel", 24: "hybrid electric"}
+
+EXT_PIDS = {
+    0x04: ("engine_load_pct", "engine load", "%", "engine", 1, _pct),
+    0x05: ("coolant_c", "coolant temp", "°C", "temperatures", 1, _minus40),
+    0x06: ("short_fuel_trim_pct", "short-term fuel trim", "%", "fuel", 1, _trim),
+    0x07: ("long_fuel_trim_pct", "long-term fuel trim", "%", "fuel", 1, _trim),
+    0x0A: ("fuel_pressure_kpa", "fuel pressure", "kPa", "pressures", 1,
+           lambda b: b[0] * 3),
+    0x0B: ("intake_map_kpa", "intake manifold pressure", "kPa", "pressures", 1,
+           lambda b: b[0]),
+    0x0C: ("engine_rpm", "engine speed", "rpm", "engine", 2,
+           lambda b: _u16(b) / 4.0),
+    0x0D: ("speed_kmh", "vehicle speed", "km/h", "driving", 1, lambda b: b[0]),
+    0x0E: ("timing_advance_deg", "timing advance", "°", "engine", 1,
+           lambda b: b[0] / 2.0 - 64),
+    0x0F: ("intake_air_c", "intake air temp", "°C", "temperatures", 1, _minus40),
+    0x10: ("maf_gps", "MAF air flow", "g/s", "engine", 2,
+           lambda b: round(_u16(b) / 100.0, 2)),
+    0x11: ("throttle_pct", "throttle position", "%", "driving", 1, _pct),
+    0x1F: ("runtime_s", "run time since start", "s", "engine", 2, _u16),
+    0x21: ("distance_mil_km", "distance with MIL on", "km", "diagnostics", 2, _u16),
+    0x22: ("fuel_rail_kpa", "fuel rail pressure (rel)", "kPa", "pressures", 2,
+           lambda b: round(_u16(b) * 0.079, 1)),
+    0x23: ("fuel_rail_gauge_kpa", "fuel rail gauge pressure", "kPa", "pressures", 2,
+           lambda b: _u16(b) * 10),
+    0x2C: ("egr_cmd_pct", "commanded EGR", "%", "engine", 1, _pct),
+    0x2D: ("egr_error_pct", "EGR error", "%", "engine", 1, _trim),
+    0x2F: ("fuel_level_pct", "fuel tank level", "%", "fuel", 1, _pct),
+    0x31: ("distance_clear_km", "distance since codes cleared", "km",
+           "diagnostics", 2, _u16),
+    0x33: ("baro_kpa", "barometric pressure", "kPa", "pressures", 1,
+           lambda b: b[0]),
+    0x42: ("module_voltage", "control module voltage", "V", "electrical", 2,
+           lambda b: round(_u16(b) / 1000.0, 2)),
+    0x43: ("abs_load_pct", "absolute load", "%", "engine", 2,
+           lambda b: round(_u16(b) * 100 / 255, 1)),
+    0x46: ("ambient_air_c", "ambient air temp", "°C", "temperatures", 1, _minus40),
+    0x47: ("throttle_b_pct", "abs throttle B", "%", "driving", 1, _pct),
+    0x49: ("pedal_d_pct", "accelerator pedal D", "%", "driving", 1, _pct),
+    0x4C: ("throttle_cmd_pct", "commanded throttle", "%", "driving", 1, _pct),
+    0x51: ("fuel_type", "fuel type", "", "fuel", 1,
+           lambda b: _FUEL_TYPES.get(b[0], f"code {b[0]}")),
+    0x5A: ("pedal_rel_pct", "relative accelerator pedal", "%", "driving", 1, _pct),
+    0x5B: ("hybrid_battery_pct", "hybrid battery", "%", "hybrid", 1, _pct),
+    0x5C: ("oil_c", "engine oil temp", "°C", "temperatures", 1, _minus40),
+    0x5E: ("fuel_rate_lph", "engine fuel rate", "L/h", "fuel", 2,
+           lambda b: round(_u16(b) / 20.0, 1)),
+}
+
+
+def _parse_ext_reply(text: str, pid: int):
+    """Like _parse_pid_reply but against the EXT_PIDS table."""
+    toks = text.replace("\r", " ").split()
+    hexes = [t for t in toks if len(t) == 2 and
+             all(ch in "0123456789ABCDEFabcdef" for ch in t)]
+    for i in range(len(hexes) - 1):
+        if hexes[i].upper() == "41" and int(hexes[i + 1], 16) == pid:
+            key, label, unit, group, nbytes, dec = EXT_PIDS[pid]
+            data = [int(x, 16) for x in hexes[i + 2:i + 2 + nbytes]]
+            if len(data) < nbytes:
+                return None
+            try:
+                return {"key": key, "label": label, "unit": unit,
+                        "group": group, "pid": f"0x{pid:02X}",
+                        "value": dec(data)}
+            except Exception:
+                return None
+    return None
+
+
+def read_all_extended(elm: Elm327, pids=None) -> dict:
+    """Read EVERY decodable PID for the nerd dashboard, grouped. By default
+    reads the intersection of what the car advertises and EXT_PIDS; an
+    explicit `pids` list overrides (used by the bench to exercise all
+    decoders against the fake without bitmask surgery)."""
+    if pids is None:
+        try:
+            supported = set(scan_supported_quiet(elm))
+        except Exception:
+            supported = set()
+        pids = [p for p in EXT_PIDS if p in supported] or list(PIDS)
+    groups: dict = {}
+    read_count = 0
+    for pid in sorted(pids):
+        if pid not in EXT_PIDS:
+            continue
+        parsed = _parse_ext_reply(elm.cmd(f"01{pid:02X}"), pid)
+        if parsed:
+            read_count += 1
+            groups.setdefault(parsed.pop("group"), {})[parsed["key"]] = parsed
+    return {"groups": groups, "read_count": read_count,
+            "attempted": len(list(pids))}
+
+
 def _decode_dtc_pairs(body: list[int]) -> list[str]:
     """Decode raw 2-byte DTC pairs into Pxxxx/Cxxxx/Bxxxx/Uxxxx strings,
     skipping 00 00 padding."""
@@ -559,6 +668,35 @@ def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
     return result
 
 
+def run_all(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
+    """One-shot FULL decode for the nerd dashboard: every supported PID in
+    EXT_PIDS, grouped, plus stored DTCs. Read-only."""
+    import time as _t
+    out = {"ok": False, "groups": {}, "dtcs": [], "read_count": 0,
+           "attempted": 0, "error": ""}
+    if not os.path.exists(port):
+        out["error"] = "no adapter present (car not connected)"
+        return out
+    started = _t.time()
+    try:
+        elm = Elm327(port, baud)
+    except Exception as e:
+        out["error"] = f"could not open {port}: {e}"
+        return out
+    try:
+        elm.init()
+        ext = read_all_extended(elm)
+        out.update(ext)
+        out["dtcs"] = read_dtcs(elm)
+    except Exception as e:
+        out["error"] = f"read error: {e}"
+    finally:
+        elm.close()
+    out["elapsed_s"] = round(_t.time() - started, 1)
+    out["ok"] = out["read_count"] > 0
+    return out
+
+
 if __name__ == "__main__":
     import json
     import sys
@@ -566,6 +704,9 @@ if __name__ == "__main__":
     if args and args[0] == "scan":
         port = args[1] if len(args) > 1 else DEFAULT_PORT
         print(json.dumps(scan_capabilities(port), indent=2))
+    elif args and args[0] == "all":
+        port = args[1] if len(args) > 1 else DEFAULT_PORT
+        print(json.dumps(run_all(port), indent=2))
     else:
         port = args[0] if args else DEFAULT_PORT
         print(json.dumps(run_session(port), indent=2))

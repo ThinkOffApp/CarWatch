@@ -94,10 +94,66 @@ f.onsubmit=async e=>{e.preventDefault();const text=q.value.trim();if(!text)retur
   b.disabled=false;q.focus()}
 </script></body></html>"""
 
+# Realistic sample payload for /api/obd/all?mock=1 so the nerd-dashboard UI
+# can be built and tested at home while the OBD adapter is in the car. Shape
+# is EXACTLY elm327.run_all()'s, plus "mock": true so a UI can badge it.
+_OBD_ALL_MOCK = {
+    "ok": True, "mock": True, "read_count": 24, "attempted": 26,
+    "elapsed_s": 6.8, "dtcs": [], "error": "",
+    "groups": {
+        "temperatures": {
+            "coolant_c": {"key": "coolant_c", "label": "coolant temp", "unit": "°C", "pid": "0x05", "value": 87},
+            "intake_air_c": {"key": "intake_air_c", "label": "intake air temp", "unit": "°C", "pid": "0x0F", "value": 31},
+            "ambient_air_c": {"key": "ambient_air_c", "label": "ambient air temp", "unit": "°C", "pid": "0x46", "value": 21},
+            "oil_c": {"key": "oil_c", "label": "engine oil temp", "unit": "°C", "pid": "0x5C", "value": 92},
+        },
+        "engine": {
+            "engine_rpm": {"key": "engine_rpm", "label": "engine speed", "unit": "rpm", "pid": "0x0C", "value": 1420.0},
+            "engine_load_pct": {"key": "engine_load_pct", "label": "engine load", "unit": "%", "pid": "0x04", "value": 23.5},
+            "timing_advance_deg": {"key": "timing_advance_deg", "label": "timing advance", "unit": "°", "pid": "0x0E", "value": 12.5},
+            "maf_gps": {"key": "maf_gps", "label": "MAF air flow", "unit": "g/s", "pid": "0x10", "value": 8.42},
+            "runtime_s": {"key": "runtime_s", "label": "run time since start", "unit": "s", "pid": "0x1F", "value": 940},
+            "abs_load_pct": {"key": "abs_load_pct", "label": "absolute load", "unit": "%", "pid": "0x43", "value": 19.6},
+        },
+        "driving": {
+            "speed_kmh": {"key": "speed_kmh", "label": "vehicle speed", "unit": "km/h", "pid": "0x0D", "value": 62},
+            "throttle_pct": {"key": "throttle_pct", "label": "throttle position", "unit": "%", "pid": "0x11", "value": 14.9},
+            "pedal_d_pct": {"key": "pedal_d_pct", "label": "accelerator pedal D", "unit": "%", "pid": "0x49", "value": 18.4},
+            "throttle_cmd_pct": {"key": "throttle_cmd_pct", "label": "commanded throttle", "unit": "%", "pid": "0x4C", "value": 12.2},
+        },
+        "hybrid": {
+            "hybrid_battery_pct": {"key": "hybrid_battery_pct", "label": "hybrid battery", "unit": "%", "pid": "0x5B", "value": 76.5},
+        },
+        "fuel": {
+            "fuel_level_pct": {"key": "fuel_level_pct", "label": "fuel tank level", "unit": "%", "pid": "0x2F", "value": 58.4},
+            "short_fuel_trim_pct": {"key": "short_fuel_trim_pct", "label": "short-term fuel trim", "unit": "%", "pid": "0x06", "value": 1.6},
+            "long_fuel_trim_pct": {"key": "long_fuel_trim_pct", "label": "long-term fuel trim", "unit": "%", "pid": "0x07", "value": -2.3},
+            "fuel_rate_lph": {"key": "fuel_rate_lph", "label": "engine fuel rate", "unit": "L/h", "pid": "0x5E", "value": 3.2},
+            "fuel_type": {"key": "fuel_type", "label": "fuel type", "unit": "", "pid": "0x51", "value": "plug-in hybrid gasoline"},
+        },
+        "pressures": {
+            "intake_map_kpa": {"key": "intake_map_kpa", "label": "intake manifold pressure", "unit": "kPa", "pid": "0x0B", "value": 41},
+            "baro_kpa": {"key": "baro_kpa", "label": "barometric pressure", "unit": "kPa", "pid": "0x33", "value": 101},
+            "fuel_rail_gauge_kpa": {"key": "fuel_rail_gauge_kpa", "label": "fuel rail gauge pressure", "unit": "kPa", "pid": "0x23", "value": 7440},
+        },
+        "electrical": {
+            "module_voltage": {"key": "module_voltage", "label": "control module voltage", "unit": "V", "pid": "0x42", "value": 14.34},
+        },
+        "diagnostics": {
+            "distance_mil_km": {"key": "distance_mil_km", "label": "distance with MIL on", "unit": "km", "pid": "0x21", "value": 0},
+            "distance_clear_km": {"key": "distance_clear_km", "label": "distance since codes cleared", "unit": "km", "pid": "0x31", "value": 1287},
+        },
+    },
+}
+
 DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>vadelma dash</title></head>
 <body style="background:#111;color:#ddd;font:14px monospace;margin:0;padding:10px">
+<div style="display:flex;gap:8px;margin-bottom:8px">
+<a href="/" style="flex:1;background:#1f6feb;color:#fff;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-size:16px">&#128172; juttele autolle</a>
+<a href="/nerd" style="flex:1;background:#233;color:#6cf;border:1px solid #456;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-size:16px">&#128300; nerd dash</a>
+</div>
 <div id=temp style="font-size:34px;color:#6f6">...</div>
 <div style="color:#666;font-size:11px">CPU temperature (goes red at 75C) &middot; fan speed in rpm</div>
 <div id=sub style="color:#888"></div>
@@ -438,6 +494,66 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif self.path.startswith("/api/obd/all"):
+            # FULL decoded OBD snapshot for the nerd dashboard, grouped
+            # (petrus, Aug 19: "purkakaa kaikki saadut tiedot"). GET so any
+            # dashboard can poll it. ?mock=1 returns a realistic sample with
+            # the exact live shape, so the UI can be built while the adapter
+            # is in the car.
+            import subprocess as _sp
+            import os as _os
+            import time as _time
+            if "mock=1" in self.path:
+                return self._send(200, json.dumps(_OBD_ALL_MOCK),
+                                  "application/json")
+            # Serve the CACHE obdwatch maintains: one process owns the serial
+            # port, everyone else reads this file - so a 2s-polling dashboard
+            # never contends the single-reader ELM327 (claudemm, Aug 19).
+            # age_s tells the UI how fresh the data is; it must show it.
+            _cache = _os.path.expanduser("~/.carwatch/obd-all.json")
+            if _os.path.exists(_cache):
+                try:
+                    with open(_cache) as f:
+                        d = json.load(f)
+                    d["age_s"] = round(_time.time() - d.get("ts", 0), 1)
+                    d["source"] = "cache"
+                    return self._send(200, json.dumps(d), "application/json")
+                except Exception:
+                    pass  # unreadable cache -> fall through to live/absent
+            _elm = next((p for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
+                         if _os.path.exists(p)), None)
+            if not _elm:
+                return self._send(200, json.dumps(
+                    {"ok": False,
+                     "error": "no ELM327 adapter present (car not connected)",
+                     "hint": "GET /api/obd/all?mock=1 for UI development"}),
+                    "application/json")
+            # First-boot fallback only (no cache yet): a live one-shot. May
+            # briefly contend with obdwatch; the cache takes over in ~1 min.
+            try:
+                r = _sp.run(
+                    ["sudo", "python3", "-m", "carwatch.elm327", "all", _elm],
+                    capture_output=True, text=True, timeout=90,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ,
+                         "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
+                body = r.stdout.strip() or json.dumps(
+                    {"ok": False, "error": (r.stderr or "no output")[-500:]})
+                return self._send(200, body, "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        elif self.path.startswith("/nerd"):
+            # Nerd dashboard (codex-authored carwatch/nerd.html): every decoded
+            # PID in grouped cards with threshold colors + sparklines, fed by
+            # /api/obd/all (petrus: "nörttien oma tabi"). Read from disk per
+            # request so a git pull updates the page without a restart.
+            try:
+                with open(os.path.join(REPO, "carwatch", "nerd.html"),
+                          encoding="utf-8") as f:
+                    return self._send(200, f.read())
+            except Exception as e:
+                return self._send(404, f"nerd.html missing: {e}")
         elif self.path.startswith("/dash"):
             # One-phone-screen dashboard. Updates in place every 2s like
             # `top` (petrus: "make the dashboard updating like top") -
