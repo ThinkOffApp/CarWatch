@@ -11,6 +11,7 @@
     header { padding:22px 20px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; background:#091016e8; backdrop-filter:blur(10px); }
     h1 { margin:0; font-size:25px; letter-spacing:.02em; }
     header p { margin:4px 0 0; color:var(--muted); }
+    header a { color:var(--blue); text-decoration:none; font-weight:650; }
     #state { float:right; color:var(--muted); font-size:12px; margin-top:7px; }
     main { max-width:1100px; margin:auto; padding:16px; }
     #groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
@@ -30,14 +31,14 @@
   </style>
 </head>
 <body>
-  <header><span id="state">starting…</span><h1>⚙ Nerd dashboard</h1><p>Live standard OBD-II data from CarWatch</p></header>
-  <main><div id="groups"><div id="empty">Waiting for the Pi and ELM327…</div></div><div class="footer"><span id="meta">Read-only. Values are omitted when the car does not answer.</span><button id="refresh">Read now</button></div></main>
+  <header><span id="state">starting…</span><h1>⚙ Nerd dashboard</h1><p>Live standard OBD-II data from CarWatch · <a href="/">💬 Chat with the car</a></p></header>
+  <main><div id="groups"><div id="empty">Waiting for the Pi and ELM327…</div></div><div class="footer"><span id="meta">Read-only. Values are omitted when the car does not answer.</span><button id="refresh">Refresh display</button></div></main>
   <script>
     const order=['temperatures','engine','hybrid','fuel','pressures','electrical','driving','diagnostics'];
     const titles={temperatures:'Temperatures',engine:'Powertrain',hybrid:'Hybrid & electric',fuel:'Fuel',pressures:'Pressures',electrical:'Electrical',driving:'Driving',diagnostics:'Diagnostics'};
     const history=new Map(), groups=document.getElementById('groups'), state=document.getElementById('state'), meta=document.getElementById('meta');
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    function severity(r){ const n=Number(r.value); if(!Number.isFinite(n)) return ''; if(r.key.includes('coolant')||r.key.includes('_c')) return n>=110?'bad':n>=95?'warn':''; if(r.key.includes('voltage')) return n<11.8||n>15?'bad':n<12.2?'warn':''; if(r.key.includes('fuel_level')||r.key.includes('battery')) return n<10?'bad':n<20?'warn':''; return ''; }
+    function severity(r){ const n=Number(r.value), key=r.key||''; if(!Number.isFinite(n)) return ''; if(r.unit==='°C') return n>=110?'bad':n>=95?'warn':''; if(key.includes('voltage')) return n<11.8||n>15?'bad':n<12.2?'warn':''; if(key.includes('fuel_level')||key.includes('battery')) return n<10?'bad':n<20?'warn':''; return ''; }
     function spark(key){ const a=history.get(key)||[]; if(a.length<2)return ''; const min=Math.min(...a),max=Math.max(...a),span=max-min||1; const pts=a.map((v,i)=>`${(i/(a.length-1))*100},${28-((v-min)/span)*26}`).join(' '); return `<svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="#62c7ff" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`; }
     function render(d){
       const data=d.groups||{}; groups.innerHTML=''; let count=0;
@@ -46,7 +47,13 @@
         groups.appendChild(sec);
       }
       if(!count) groups.innerHTML='<div id="empty">No decoded values yet. The adapter may be disconnected or the car may be silent.</div>';
-      const when=new Date().toLocaleTimeString(); state.textContent=d.ok?`● live · ${when}`:`○ no data · ${when}`; state.style.color=d.ok?'var(--good)':'var(--warn)'; meta.textContent=d.error||`${d.read_count||0} values read · ${d.attempted||0} standard PIDs attempted · read-only`;
+      const age=Number(d.age_s), ageKnown=Number.isFinite(age), stale=ageKnown&&age>240;
+      const ageText=ageKnown?(age<60?`${Math.round(age)}s old`:`${Math.round(age/60)}m old`):'';
+      const when=new Date().toLocaleTimeString();
+      if(d.mock){ state.textContent=`● demo data · ${when}`; state.style.color='var(--blue)'; }
+      else if(d.ok){ state.textContent=`● ${stale?'stale':'cached'}${ageText?' · '+ageText:''}`; state.style.color=stale?'var(--warn)':'var(--good)'; }
+      else { state.textContent=`○ no data · ${when}`; state.style.color='var(--warn)'; }
+      meta.textContent=d.error||`${d.read_count||0} values read · ${d.attempted||0} standard PIDs attempted${ageText?' · '+ageText:''} · read-only`;
     }
     async function refresh(){ state.textContent='reading…'; try{ const r=await fetch('/api/obd/all'+(location.search.includes('mock=1')?'?mock=1':''),{cache:'no-store'}); render(await r.json()); }catch(e){ state.textContent='○ Pi unreachable'; state.style.color='var(--bad)'; meta.textContent='Could not reach /api/obd/all'; } }
     document.getElementById('refresh').onclick=refresh; refresh(); setInterval(refresh,2000);

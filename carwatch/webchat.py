@@ -500,7 +500,6 @@ class Handler(BaseHTTPRequestHandler):
             # dashboard can poll it. ?mock=1 returns a realistic sample with
             # the exact live shape, so the UI can be built while the adapter
             # is in the car.
-            import subprocess as _sp
             import os as _os
             import time as _time
             if "mock=1" in self.path:
@@ -519,30 +518,15 @@ class Handler(BaseHTTPRequestHandler):
                     d["source"] = "cache"
                     return self._send(200, json.dumps(d), "application/json")
                 except Exception:
-                    pass  # unreadable cache -> fall through to live/absent
-            _elm = next((p for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
-                         if _os.path.exists(p)), None)
-            if not _elm:
-                return self._send(200, json.dumps(
-                    {"ok": False,
-                     "error": "no ELM327 adapter present (car not connected)",
-                     "hint": "GET /api/obd/all?mock=1 for UI development"}),
-                    "application/json")
-            # First-boot fallback only (no cache yet): a live one-shot. May
-            # briefly contend with obdwatch; the cache takes over in ~1 min.
-            try:
-                r = _sp.run(
-                    ["sudo", "python3", "-m", "carwatch.elm327", "all", _elm],
-                    capture_output=True, text=True, timeout=90,
-                    cwd=_os.path.expanduser("~/CarWatch"),
-                    env={**_os.environ,
-                         "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
-                body = r.stdout.strip() or json.dumps(
-                    {"ok": False, "error": (r.stderr or "no output")[-500:]})
-                return self._send(200, body, "application/json")
-            except Exception as e:
-                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
-                                  "application/json")
+                    pass  # unreadable cache -> report that no snapshot exists
+            # Never fall back to a second live reader here. obdwatch owns the
+            # one ELM327 serial connection and will publish the first cache
+            # snapshot after it has a successful car read.
+            return self._send(200, json.dumps(
+                {"ok": False,
+                 "error": "waiting for the first OBD cache snapshot",
+                 "hint": "GET /api/obd/all?mock=1 for UI development"}),
+                "application/json")
         elif self.path.startswith("/nerd"):
             # Nerd dashboard (codex-authored carwatch/nerd.html): every decoded
             # PID in grouped cards with threshold colors + sparklines, fed by
