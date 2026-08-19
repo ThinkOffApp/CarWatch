@@ -44,13 +44,33 @@ speak() {
 # still counts as done.
 do_pairmac() {
     local MAC="${1:?usage: do_pairmac <MAC>}"
-    bluetoothctl --timeout 6 agent NoInputNoOutput >/dev/null 2>&1 || true
-    bluetoothctl --timeout 15 pair "$MAC" 2>&1 | tail -3 || true
-    bluetoothctl trust "$MAC" >/dev/null 2>&1 || true
-    bluetoothctl --timeout 10 connect "$MAC" 2>&1 | tail -3 || true
-    mkdir -p "$(dirname "$CAR_MAC_FILE")"; echo "$MAC" > "$CAR_MAC_FILE"
-    echo "paired car BT = $MAC (saved)"
-    speak "CarWatch connected. You should hear me through your car speakers." || true
+    # A Mercedes A2DP pair uses numeric-comparison SSP: the car shows a 6-digit
+    # code and wants a YES on BOTH sides. NoInputNoOutput ("Just Works") cannot
+    # answer that, so the old code failed "org.bluez.Error.AuthenticationFailed"
+    # (measured on MBUX 57313, Aug 19). Register a KeyboardDisplay agent and
+    # auto-confirm the code from the Pi side inside ONE bluetoothctl session
+    # (separate --timeout invocations each spawned a NEW agent that died before
+    # the confirmation arrived). petrus taps YES on the car screen for the same
+    # code; the Pi says yes automatically here.
+    bluetoothctl power on >/dev/null 2>&1 || true
+    local out
+    out=$({
+        echo "agent KeyboardDisplay"; echo "default-agent"; echo "pairable on"
+        echo "pair $MAC";  sleep 12   # car shows the code; BlueZ raises confirm
+        echo "yes";        sleep 3    # auto-confirm the numeric comparison
+        echo "trust $MAC"
+        echo "connect $MAC"; sleep 4
+        echo "quit"
+    } | bluetoothctl 2>&1 || true)
+    echo "$out" | tail -25
+    if echo "$out" | grep -qiE "Pairing successful|Connection successful|Paired: yes"; then
+        mkdir -p "$(dirname "$CAR_MAC_FILE")"; echo "$MAC" > "$CAR_MAC_FILE"
+        echo "paired car BT = $MAC (saved)"
+        speak "CarWatch connected. You should hear me through your car speakers." || true
+    else
+        echo "pairing did not complete - when the car shows a code, tap YES on the CAR screen, then press pair again"
+        return 1
+    fi
 }
 
 case "$CMD" in
@@ -60,7 +80,7 @@ case "$CMD" in
         bluetoothctl power on >/dev/null 2>&1 || true
         echo "== scanning 20 s for the car's Bluetooth audio =="
         bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
-        echo "Devices bluetoothd sees (pick the car - e.g. 'Mercedes', 'GLE', 'E-Class', 'MB Bluetooth'):"
+        echo "Devices bluetoothd sees (your Mercedes shows as 'MBUX <number>', e.g. MBUX 57313 - NOT the word 'Mercedes'):"
         bluetoothctl devices || true
         # Auto-pick an obvious Mercedes name if present.
         LINE=$(bluetoothctl devices | grep -iE "mercedes|benz|mbux|e-class|eclass|gle|glc|w213" | head -1 || true)
