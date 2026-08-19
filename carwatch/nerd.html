@@ -48,7 +48,7 @@
       if(!count) groups.innerHTML='<div id="empty">No decoded values yet. The adapter may be disconnected or the car may be silent.</div>';
       const when=new Date().toLocaleTimeString(); state.textContent=d.ok?`● live · ${when}`:`○ no data · ${when}`; state.style.color=d.ok?'var(--good)':'var(--warn)'; meta.textContent=d.error||`${d.read_count||0} values read · ${d.attempted||0} standard PIDs attempted · read-only`;
     }
-    async function refresh(){ state.textContent='reading…'; try{ const r=await fetch('/api/obd/all',{cache:'no-store'}); render(await r.json()); }catch(e){ state.textContent='○ Pi unreachable'; state.style.color='var(--bad)'; meta.textContent='Could not reach /api/obd/all'; } }
+    async function refresh(){ state.textContent='reading…'; try{ const r=await fetch('/api/obd/all'+(location.search.includes('mock=1')?'?mock=1':''),{cache:'no-store'}); render(await r.json()); }catch(e){ state.textContent='○ Pi unreachable'; state.style.color='var(--bad)'; meta.textContent='Could not reach /api/obd/all'; } }
     document.getElementById('refresh').onclick=refresh; refresh(); setInterval(refresh,2000);
   </script>
 </body>
