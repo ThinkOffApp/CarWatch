@@ -62,18 +62,23 @@ Also reads:
 > `POST /api/obd/scan` (or the plug-in probe) and pasting the result here.
 > Pending: capture from a drive where the tunnel stays up long enough.
 
-## 4. Mercedes-specific reads (mode 22 DIDs)
+## 4. Mercedes-specific reads (mode 22 DIDs) — NOT YET RUN IN THE CAR
+
+> **Pending, like §3.** The rows below are DIDs the code *tries*, not things
+> this car has answered. `obd_probe.py` has never completed a run in the car
+> (see `docs/obd-findings.md`). Whatever answers becomes a finding; treat this
+> table as the probe's target list, not proven capability.
 
 `obd_probe.py` walks the manufacturer identification block **0xF100–0xF1FF**
 (mode 22, read-only). No public per-DID table exists for the Daimler PHEV
 BMS, so the scan *is* the research instrument: whatever answers is a finding,
 silence is not an error. Named candidates it tries explicitly:
 
-| DID | Meaning |
-|-----|---------|
-| 0xF190 | VIN (UDS mirror) |
-| 0xF187 | part number |
-| 0xF18C | serial number |
+| DID | Meaning (candidate) | Answered? |
+|-----|---------------------|-----------|
+| 0xF190 | VIN (UDS mirror) | not yet run |
+| 0xF187 | part number | not yet run |
+| 0xF18C | serial number | not yet run |
 
 This is the path expected to expose the GLE's traction-battery SoC and other
 Mercedes-only telemetry that standard OBD PIDs do not carry.
