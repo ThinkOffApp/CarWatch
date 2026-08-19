@@ -30,7 +30,11 @@ case "$CMD" in
     bluetoothctl --timeout 25 scan on >/dev/null 2>&1 || true
     # NOTE: '|| true' is load-bearing - under pipefail a no-match grep would
     # kill the whole script BEFORE the diagnosis prints (burned 19.8.).
-    LINE=$(bluetoothctl devices | grep -iE "obd|vgate|icar|v-link" | head -1 || true)
+    # The Vgate iCar Pro 2S advertises TWO devices: "Android-Vlink" (classic
+    # BT/SPP - the one rfcomm needs) and "IOS-Vlink" (BLE). Prefer the
+    # classic side explicitly; the generic pattern is the fallback.
+    LINE=$(bluetoothctl devices | grep -i "android-vlink" | head -1 || true)
+    [ -n "$LINE" ] || LINE=$(bluetoothctl devices | grep -iE "obd|vgate|icar|vlink|v-link" | grep -iv "ios-" | head -1 || true)
     MAC=$(echo "$LINE" | awk '{print $2}' || true)
     echo "picked: ${LINE:-<none>}"
     if [ -z "$MAC" ]; then
