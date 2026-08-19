@@ -141,6 +141,18 @@ def run() -> None:
                 reach_url = _rf.read().strip()
         except Exception:
             reach_url = ""
+        # The phone and the Pi share a LAN in the car (the phone's own
+        # hotspot), so the dash can talk to the Pi directly instead of
+        # round-tripping the tunnel: publish our current address.
+        lan_ip = ""
+        try:
+            import socket as _s
+            _sock = _s.socket(_s.AF_INET, _s.SOCK_DGRAM)
+            _sock.connect(("8.8.8.8", 80))
+            lan_ip = _sock.getsockname()[0]
+            _sock.close()
+        except Exception:
+            lan_ip = ""
         ok_dev = ok_agent = False
         for doc in doc_ids:
             payload = {
@@ -155,6 +167,7 @@ def run() -> None:
                 "memory": facts.get("memory"),
                 "network": facts.get("network"),
                 "reach_url": reach_url,
+                "lan_ip": lan_ip,
                 "heartbeat": True,
             }
             if mem_free is not None:
