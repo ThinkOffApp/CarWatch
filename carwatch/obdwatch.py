@@ -48,6 +48,14 @@ def post(text: str) -> None:
         print(f"post failed: {e}", flush=True)
 
 
+# The PIDs a healthy W213 read always answers. A post carrying fewer than
+# these must SAY so: on 19.8. a mid-drive read decoded only rpm and posted
+# a short line indistinguishable from a full one (claudemm's catch) - a
+# partial read that does not announce itself reads as fact.
+CORE_KEYS = ("engine_rpm", "coolant_c", "speed_kmh",
+             "hybrid_battery_pct", "module_voltage")
+
+
 def fmt_readings(r: dict) -> str:
     parts = []
     if "engine_rpm" in r:
@@ -64,6 +72,10 @@ def fmt_readings(r: dict) -> str:
         parts.append(f"12V system {r['module_voltage']:.1f} V")
     if "intake_air_c" in r:
         parts.append(f"outside-ish air {r['intake_air_c']} C")
+    missing = [k for k in CORE_KEYS if k not in r]
+    if parts and missing:
+        parts.append(f"(partial read: {len(missing)} of {len(CORE_KEYS)} "
+                     "core values missing this cycle)")
     return ", ".join(parts) or "no readings"
 
 
