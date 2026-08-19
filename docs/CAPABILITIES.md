@@ -96,11 +96,17 @@ Captured with `POST /api/obd/scan` during a drive.
 | 0x0B | intake manifold pressure | readable, not decoded |
 | 0x23 | fuel rail gauge pressure | readable, not decoded |
 
-Plus **~19 manufacturer/unknown PIDs** the car advertises but the standard
-J1979 table does not name (0x13, 0x15, 0x1C, 0x20, 0x30, 0x34, 0x40, 0x41,
-0x45, 0x4A, 0x56, 0x60, 0x62, 0x63, 0x65, 0x68, 0x7A, 0x7C, 0x80, 0x8B, 0x8E,
-0x9D, 0x9E, 0xA0, 0xA4). These are Mercedes-specific and worth decoding — the
-same research path as the mode-22 DIDs below.
+Plus a set of **standard-range mode-01 PIDs our lookup table just does not
+name** (0x13, 0x15, 0x1C, 0x20, 0x30, 0x34, 0x40, 0x41, 0x45, 0x4A, 0x56,
+0x60, 0x62, 0x63, 0x65, 0x68, 0x7A, 0x7C, 0x80, 0x8B, 0x8E, 0x9D, 0x9E, 0xA0,
+0xA4). **These are NOT Mercedes-specific data** (claudemm's correction,
+19.8.) — they are ordinary J1979 PIDs we simply have no name for yet, and
+several are structural, not values: **0x20/0x40/0x60/0x80/0xA0 are the
+"is there another block of PIDs" support masks**, not readable data, and
+e.g. 0x13 = O2-sensor locations, 0x1C = OBD compliance standard. So this
+list is "standard PIDs to name in our table", not hidden telemetry. The
+genuinely **Mercedes-only** data lives behind the mode-22 DIDs (§4), which
+have not been run yet.
 
 **Easy wins to add to §1 next:** 0x46 ambient air temp and 0x5C engine oil
 temp are the two most useful undecoded PIDs (a real outside-temperature and
