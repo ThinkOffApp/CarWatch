@@ -35,6 +35,24 @@ speak() {
     rm -f "$wav"
 }
 
+# Pair + connect a MAC as the car's A2DP sink, remember it, greet. This is a
+# FUNCTION so the auto-scan 'pair' path can reuse it: the old code called
+# `pairmac "$MAC"` as if it were a command, and bash answered "pairmac:
+# command not found" - so a scan that DID find the car (e.g. "MBUX 57313")
+# still never paired (petrus, Aug 19). The greeting is non-fatal (|| true):
+# the BT bond is what matters; if piper cannot speak (e.g. RAM tight) the pair
+# still counts as done.
+do_pairmac() {
+    local MAC="${1:?usage: do_pairmac <MAC>}"
+    bluetoothctl --timeout 6 agent NoInputNoOutput >/dev/null 2>&1 || true
+    bluetoothctl --timeout 15 pair "$MAC" 2>&1 | tail -3 || true
+    bluetoothctl trust "$MAC" >/dev/null 2>&1 || true
+    bluetoothctl --timeout 10 connect "$MAC" 2>&1 | tail -3 || true
+    mkdir -p "$(dirname "$CAR_MAC_FILE")"; echo "$MAC" > "$CAR_MAC_FILE"
+    echo "paired car BT = $MAC (saved)"
+    speak "CarWatch connected. You should hear me through your car speakers." || true
+}
+
 case "$CMD" in
     pair)
         systemctl start bluetooth || true
@@ -51,17 +69,10 @@ case "$CMD" in
             echo "No obvious car name. Re-run: sudo bash car-speak.sh pairmac <MAC-from-list>"
             exit 1
         fi
-        pairmac "$MAC"
+        do_pairmac "$MAC"
         ;;
     pairmac)
-        MAC="${2:?usage: car-speak.sh pairmac <MAC>}"
-        bluetoothctl --timeout 6 agent NoInputNoOutput >/dev/null 2>&1 || true
-        bluetoothctl --timeout 15 pair "$MAC" 2>&1 | tail -3 || true
-        bluetoothctl trust "$MAC" >/dev/null 2>&1 || true
-        bluetoothctl --timeout 10 connect "$MAC" 2>&1 | tail -3 || true
-        mkdir -p "$(dirname "$CAR_MAC_FILE")"; echo "$MAC" > "$CAR_MAC_FILE"
-        echo "paired car BT = $MAC (saved)"
-        speak "CarWatch connected. You should hear me through your car speakers."
+        do_pairmac "${2:?usage: car-speak.sh pairmac <MAC>}"
         ;;
     say)
         speak "${2:?usage: car-speak.sh say \"text\"}"

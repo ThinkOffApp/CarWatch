@@ -192,6 +192,8 @@ def run() -> None:
     was_present = ""
     was_up = False
     last_post_readings = ""
+    last_dtc_key = None       # last stored-DTC set, to post only on a CHANGE
+    last_batt_bucket = None   # last hybrid-SoC 10% bucket, for milestone posts
     next_try = 0.0
     # The deep (per-ECU mode-22 Mercedes) probe runs at most ONCE PER DAY and
     # only while the car is STATIONARY. petrus's Pi is mobile and only in the
@@ -228,11 +230,28 @@ def run() -> None:
             if result["ok"]:
                 text = fmt_readings(result["readings"])
                 dtcs = result.get("dtcs") or []
-                if dtcs:
-                    text += f" | stored fault codes: {', '.join(dtcs)}"
-                if text != last_post_readings:
-                    post(f"Engine read (live from my OBD port): {text}")
-                    last_post_readings = text
+                dtc_key = ",".join(sorted(dtcs))
+                line = text + (f" | stored fault codes: {', '.join(dtcs)}"
+                               if dtcs else "")
+                batt = result["readings"].get("hybrid_battery_pct")
+                bucket = (int(batt // 10) if isinstance(batt, (int, float))
+                          else None)
+                # Post only on what petrus actually wants, NOT every cycle:
+                # first read after (re)connect, a CHANGED fault-code set, or a
+                # hybrid-SoC 10% milestone. speed/coolant/rpm churn made every
+                # ~60s read differ and spammed the room (petrus, Aug 19: "we
+                # don't need these frequent speed reports"). The dashboard still
+                # shows every live value continuously; the ROOM stays quiet.
+                first = (last_post_readings == "")
+                dtc_changed = (last_dtc_key is not None and dtc_key != last_dtc_key)
+                batt_step = (last_batt_bucket is not None and bucket is not None
+                             and bucket != last_batt_bucket)
+                if first or dtc_changed or batt_step:
+                    post(f"Engine read (live from my OBD port): {line}")
+                    last_post_readings = line
+                last_dtc_key = dtc_key
+                if bucket is not None:
+                    last_batt_bucket = bucket
                 # Deep probe: only when the car is STOPPED and not already done
                 # today. A mid-drive diagnostic sweep both competes with live
                 # telemetry and returns fewer PIDs while looking just as
