@@ -207,6 +207,120 @@ def read_dtcs(elm: Elm327) -> list[str]:
     return decode_dtc_reply(elm.cmd("03"))
 
 
+# Standard OBD-II mode-01 PID names (SAE J1979), for reporting which PIDs
+# the car ADVERTISES as supported even when we do not yet decode them. Not
+# exhaustive - covers the commonly-present ones so the capability report is
+# readable rather than a wall of hex.
+STD_PID_NAMES = {
+    0x01: "monitor status since DTCs cleared", 0x03: "fuel system status",
+    0x04: "calculated engine load", 0x05: "engine coolant temp",
+    0x06: "short term fuel trim b1", 0x07: "long term fuel trim b1",
+    0x0A: "fuel pressure", 0x0B: "intake manifold pressure",
+    0x0C: "engine RPM", 0x0D: "vehicle speed", 0x0E: "timing advance",
+    0x0F: "intake air temp", 0x10: "MAF air flow", 0x11: "throttle position",
+    0x1F: "run time since engine start", 0x21: "distance with MIL on",
+    0x22: "fuel rail pressure", 0x23: "fuel rail gauge pressure",
+    0x2C: "commanded EGR", 0x2D: "EGR error", 0x2F: "fuel tank level",
+    0x31: "distance since codes cleared", 0x33: "barometric pressure",
+    0x42: "control module voltage", 0x43: "absolute load value",
+    0x46: "ambient air temp", 0x47: "abs throttle position B",
+    0x49: "accelerator pedal position D", 0x4C: "commanded throttle actuator",
+    0x51: "fuel type", 0x5A: "relative accelerator pedal position",
+    0x5B: "hybrid/EV battery remaining life", 0x5C: "engine oil temp",
+    0x5E: "engine fuel rate",
+}
+
+
+def _bitmask_pids(reply: str, base: int) -> list[int]:
+    """A '0100'/'0120'/... reply carries a 4-byte bitmask of which PIDs in
+    the next block of 32 are supported. Return their PID numbers."""
+    toks = [t for t in reply.replace("\r", " ").split()
+            if len(t) == 2 and all(c in "0123456789ABCDEFabcdef" for c in t)]
+    up = [t.upper() for t in toks]
+    # Find '41 <base>' then take the following 4 data bytes.
+    for i in range(len(up) - 1):
+        if up[i] == "41" and int(up[i + 1], 16) == base:
+            data = [int(x, 16) for x in toks[i + 2:i + 6]]
+            if len(data) < 4:
+                return []
+            bits = int.from_bytes(bytes(data), "big")
+            return [base + 1 + n for n in range(32)
+                    if bits & (1 << (31 - n))]
+    return []
+
+
+def read_vin(elm: Elm327) -> str:
+    """Vehicle Identification Number via mode 09 PID 02. Read-only."""
+    reply = elm.cmd("0902", timeout=6.0)
+    toks = [t for t in reply.replace("\r", " ").split()
+            if len(t) == 2 and all(c in "0123456789ABCDEFabcdef" for c in t)]
+    up = [t.upper() for t in toks]
+    chars = []
+    # ISO-TP multiframe: pull ASCII bytes that fall in the printable VIN range
+    # after the '49 02' service echo. Kept lenient - a partial VIN is still
+    # useful and we never write anything.
+    started = False
+    for i in range(len(up) - 1):
+        if up[i] == "49" and up[i + 1] == "02":
+            started = True
+            j = i + 3  # skip service, pid, frame-index byte
+            for b in toks[j:]:
+                v = int(b, 16)
+                if 0x20 <= v <= 0x7E:
+                    chars.append(chr(v))
+            break
+    vin = "".join(chars).strip()
+    return vin if started and len(vin) >= 11 else ""
+
+
+def scan_capabilities(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
+    """READ-ONLY capability probe of the whole OBD surface: which mode-01
+    PIDs the car advertises, the VIN (mode 09), and stored DTCs (mode 03).
+    Never writes - no mode 04 (clear), no UDS write services. This is the
+    authoritative answer to 'what can our module get from this car'."""
+    out = {"ok": False, "supported_pids": [], "decoded_now": [],
+           "vin": "", "dtcs": [], "protocol": "", "trace": []}
+    if not os.path.exists(port):
+        out["trace"].append({"stage": "port", "ok": False,
+                              "detail": f"no adapter at {port}"})
+        return out
+    try:
+        elm = Elm327(port, baud)
+    except Exception as e:
+        out["trace"].append({"stage": "open", "ok": False, "detail": str(e)})
+        return out
+    try:
+        elm.init()
+        out["protocol"] = elm.cmd("ATDPN").strip()  # describe protocol number
+        supported: list[int] = []
+        for base in (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0):
+            reply = elm.cmd(f"01{base:02X}")
+            block = _bitmask_pids(reply, base)
+            supported += [p for p in block if (p & 0x1F) or True]
+            out["trace"].append({"stage": f"supported_{base:02X}",
+                                  "ok": bool(block), "count": len(block)})
+            # PID 0x00 of each block signals whether the NEXT block exists.
+            if (base + 0x20) not in block and base != 0x00:
+                break
+        # Annotate with names where known.
+        out["supported_pids"] = [
+            {"pid": f"0x{p:02X}", "name": STD_PID_NAMES.get(p, "manufacturer/unknown"),
+             "we_decode": p in PIDS}
+            for p in sorted(set(supported))
+        ]
+        out["decoded_now"] = [PIDS[p][0] for p in sorted(PIDS)]
+        out["vin"] = read_vin(elm)
+        out["dtcs"] = read_dtcs(elm)
+    finally:
+        elm.close()
+    out["ok"] = bool(out["supported_pids"])
+    out["summary"] = (f"{len(out['supported_pids'])} PIDs advertised, "
+                      f"{len(out['decoded_now'])} decoded today"
+                      + (f", VIN {out['vin']}" if out["vin"] else "")
+                      + (f", {len(out['dtcs'])} DTC(s)" if out["dtcs"] else ""))
+    return out
+
+
 def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
     """Whole flow, honest trace at every step."""
     trace: list[dict] = []
@@ -247,5 +361,10 @@ def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
 if __name__ == "__main__":
     import json
     import sys
-    port = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PORT
-    print(json.dumps(run_session(port), indent=2))
+    args = sys.argv[1:]
+    if args and args[0] == "scan":
+        port = args[1] if len(args) > 1 else DEFAULT_PORT
+        print(json.dumps(scan_capabilities(port), indent=2))
+    else:
+        port = args[0] if args else DEFAULT_PORT
+        print(json.dumps(run_session(port), indent=2))
