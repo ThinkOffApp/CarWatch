@@ -79,6 +79,34 @@ def fmt_readings(r: dict) -> str:
     return ", ".join(parts) or "no readings"
 
 
+def fmt_deep(dp: dict) -> str:
+    """One room-readable line for the on-connect deep probe. Reports what NEW
+    the car gave beyond the standard PIDs, framed as findings not a dump."""
+    if not dp.get("ok"):
+        why = "; ".join(dp.get("trace") or []) or "car did not answer the deep read"
+        return f"Deep scan: nothing new this time ({why})."
+    parts = [f"Deep scan done in {dp.get('elapsed_s', '?')}s"]
+    n = dp.get("supported_pid_count")
+    if n:
+        parts.append(f"{n} PIDs supported")
+    if dp.get("vin"):
+        parts.append("VIN readable")
+    m22 = dp.get("mode22") or {}
+    if m22:
+        named = [f"{k} {v.get('label')}" for k, v in m22.items()
+                 if v.get("label") and "unknown" not in v.get("label", "")]
+        unknown = [k for k, v in m22.items() if "unknown" in v.get("label", "")]
+        if named:
+            parts.append("Mercedes reads that answered: " + ", ".join(named))
+        if unknown:
+            parts.append(f"{len(unknown)} extra Mercedes DIDs answered "
+                         f"({', '.join(unknown[:6])}{'…' if len(unknown) > 6 else ''}) "
+                         "- candidates for EV range / charge state, to decode next")
+    else:
+        parts.append("no Mercedes-specific DIDs answered (only standard PIDs available)")
+    return ". ".join(parts) + "."
+
+
 def failure_hint(result: dict) -> str:
     stages = {t.get("stage"): t for t in result.get("trace", [])}
     if not stages.get("discover", {}).get("ok", False):
@@ -115,16 +143,24 @@ def run() -> None:
     was_up = False
     last_post_readings = ""
     next_try = 0.0
+    # The deep (mode-22 Mercedes) probe runs ONCE per adapter session, the
+    # first time the car answers - because petrus's Pi is mobile and only in
+    # the car for a short window (Aug 19). No button, no remote trigger, no
+    # waiting: plug in -> it probes itself -> posts. Reset when the adapter
+    # leaves so the next drive re-probes.
+    deep_done = False
     while True:
         port = elm_port_present()
         up = carrier_up()
         if port and port != was_present:
             print(f"ELM327 adapter appeared at {port}", flush=True)
+            deep_done = False
             time.sleep(SETTLE_S)
             next_try = 0.0
         if not port and was_present:
             print("ELM327 adapter gone", flush=True)
             last_post_readings = ""
+            deep_done = False
         if up and not was_up:
             print("eth0 link UP", flush=True)
             time.sleep(SETTLE_S)
@@ -147,6 +183,19 @@ def run() -> None:
                 if text != last_post_readings:
                     post(f"Engine read (live from my OBD port): {text}")
                     last_post_readings = text
+                # First successful read of this session -> run the deep
+                # Mercedes probe once, inline (single serial port = one
+                # reader; it briefly pauses normal reads, which is fine for a
+                # once-per-drive scan), and post whatever new the car gives.
+                if port and not deep_done:
+                    deep_done = True
+                    try:
+                        post("Plugged into the car - running my one-time deep "
+                             "scan (Mercedes-specific reads), ~1 min...")
+                        dp = elm327.deep_probe(port)
+                        post(fmt_deep(dp))
+                    except Exception as e:  # never let the probe kill the loop
+                        print(f"deep probe failed: {e}", flush=True)
                 next_try = time.time() + 60
             else:
                 if not last_post_readings:

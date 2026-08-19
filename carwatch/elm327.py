@@ -321,6 +321,91 @@ def scan_capabilities(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dic
     return out
 
 
+# Mercedes mode-22 DIDs worth trying for CONTEXT (not mechanic diagnostics):
+# the named identity DIDs plus a short, TIME-CAPPED slice of the standard
+# identification block. Whatever answers is a finding; silence is fine. This
+# is the "deep" read - what standard OBD PIDs do NOT carry.
+_MODE22_NAMED = {
+    "F190": "VIN (UDS mirror)",
+    "F187": "part number",
+    "F18C": "serial number",
+    "F1A0": "vehicle config",
+    "F111": "ECU serial",
+}
+
+
+def deep_probe(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD,
+               cap_s: float = 75.0) -> dict:
+    """Focused, BOUNDED Mercedes read that runs on-board the moment the Pi
+    connects to the car (petrus's Pi is mobile - it is only in the car for a
+    short window). Reads VIN, the named mode-22 DIDs, and a small time-capped
+    slice of the F1xx block. Read-only, never writes. Returns a compact dict
+    the daemon posts. Bounded so it never freezes telemetry for long."""
+    import time as _t
+    out = {"ok": False, "vin": "", "mode22": {}, "scanned": 0,
+           "supported_pid_count": 0, "trace": []}
+    if not os.path.exists(port):
+        out["trace"].append("no adapter")
+        return out
+    try:
+        elm = Elm327(port, baud)
+    except Exception as e:
+        out["trace"].append(f"open failed: {e}")
+        return out
+    started = _t.time()
+    try:
+        elm.init()
+        # Prove the car answers + how many PIDs (cheap).
+        try:
+            out["supported_pid_count"] = len(scan_supported_quiet(elm))
+        except Exception:
+            pass
+        out["vin"] = read_vin(elm)
+        # Extended diagnostic session can unlock more DIDs; harmless if absent.
+        try:
+            elm.cmd("1003", 2.0)
+        except Exception:
+            pass
+        for did, label in _MODE22_NAMED.items():
+            if _t.time() - started > cap_s:
+                break
+            reply = elm.cmd(f"22{did}", 2.5)
+            out["scanned"] += 1
+            up = reply.upper()
+            if "62" in up and "NO DATA" not in up and "7F" not in up:
+                out["mode22"][did] = {"label": label, "raw": reply.strip()[:80]}
+        # A short blind slice of the F1xx identification block, time-capped.
+        for n in range(0x00, 0x40):
+            if _t.time() - started > cap_s:
+                break
+            did = 0xF100 + n
+            reply = elm.cmd(f"22{did:04X}", 1.2)
+            out["scanned"] += 1
+            up = reply.upper()
+            key = f"{did:04X}"
+            if "62" in up and "NO DATA" not in up and "7F" not in up and key not in out["mode22"]:
+                out["mode22"][key] = {"label": "unknown DID (answered)",
+                                      "raw": reply.strip()[:80]}
+    except Exception as e:
+        out["trace"].append(f"probe error: {e}")
+    finally:
+        elm.close()
+    out["ok"] = bool(out["vin"] or out["mode22"] or out["supported_pid_count"])
+    out["elapsed_s"] = round(_t.time() - started, 1)
+    return out
+
+
+def scan_supported_quiet(elm: "Elm327") -> list:
+    """Supported mode-01 PIDs without opening a new connection (reuses elm)."""
+    supported = []
+    for base in (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0):
+        block = _bitmask_pids(elm.cmd(f"01{base:02X}"), base)
+        supported += block
+        if (base + 0x20) not in block and base != 0x00:
+            break
+    return sorted(set(supported))
+
+
 def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
     """Whole flow, honest trace at every step."""
     trace: list[dict] = []

@@ -87,10 +87,14 @@ if [ -f "$DIR/profiles/PROBE-NOW" ]; then
     # setsid was NOT enough: the probe stayed in carwatch-chat's cgroup and
     # the restart below killed it ~2s after launch (Aug 15, petrus in the
     # car, burned the one-shot silently). systemd-run escapes the cgroup.
+    # HOME MUST be set: systemd-run starts the unit as root with HOME=/root,
+    # so obd_probe read config from /root/.carwatch/config.json (absent) and
+    # crashed before posting - EVERY time (petrus sat in the car for nothing,
+    # Aug 19). Force HOME to petrus's so ~/.carwatch resolves.
     sudo systemd-run --collect --unit="carwatch-probe-$(date +%s)" \
-      --working-directory="$DIR" -E PYTHONPATH="$DIR" \
+      --working-directory="$DIR" -E PYTHONPATH="$DIR" -E HOME="$HOME" \
       bash -c "python3 -m carwatch.obd_probe >>$HOME/.carwatch/obd-probe.log 2>&1" || \
-      (cd "$DIR" && nohup python3 -m carwatch.obd_probe >>$HOME/.carwatch/obd-probe.log 2>&1 &)
+      (cd "$DIR" && HOME="$HOME" nohup python3 -m carwatch.obd_probe >>$HOME/.carwatch/obd-probe.log 2>&1 &)
   fi
 fi
 
