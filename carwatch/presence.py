@@ -27,7 +27,10 @@ CONFIG_PATH = os.path.expanduser("~/.carwatch/config.json")
 INTERVAL_S = 60
 USER_ID = "@petrus"          # the human whose dashboard this feeds
 DEVICE_ID = "vadelma"
-AGENT_NAME = "gle"
+# Fallback only - the published agent name follows the configured handle
+# (~/.carwatch/config.json "handle"), so a car identity switch carries the
+# dashboard table with it instead of leaving a stale hardcoded name.
+FALLBACK_AGENT_NAME = "gle"
 
 
 def _room_human_user_id(config: dict) -> str | None:
@@ -76,6 +79,7 @@ def _patch(config: dict, path: str, fields: dict) -> bool:
 def run() -> None:
     with open(CONFIG_PATH) as f:
         config = json.load(f)
+    agent_name = (config.get("handle") or "@" + FALLBACK_AGENT_NAME).lstrip("@")
     doc_ids = [USER_ID]
     uuid = _room_human_user_id(config)
     if uuid:
@@ -163,7 +167,7 @@ def run() -> None:
             if mem_total is not None:
                 payload["mem_total_gb"] = mem_total
             ok_dev = _patch(config, f"/intent/{doc}/{DEVICE_ID}", payload) or ok_dev
-            ok_agent = _patch(config, f"/intent/{doc}/agents/{AGENT_NAME}", {
+            ok_agent = _patch(config, f"/intent/{doc}/agents/{agent_name}", {
                 "status": "active" if model != "none" else "brainless",
                 "last_task": f"serving {model} at {temp} C",
             }) or ok_agent
