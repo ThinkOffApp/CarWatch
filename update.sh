@@ -108,6 +108,35 @@ if [ -f $HOME/.carwatch/obd-probe.log ]; then
   echo "=== END PROBE LOG ==="
 fi
 
+# --- audio-pipeline diagnostic (read-only) -----------------------------------
+# Surfaces the Pi's ACTUAL Bluetooth-audio state through the /api/update
+# response, so car-audio fixes are grounded in measurement instead of
+# assumption (claudemm, Aug 19: three fixes shipped in a row, none measured).
+# No identifiers are hardcoded: the car is found by its MBUX name at runtime.
+echo "=== AUDIO DIAG ==="
+echo "-- bluealsa binary:"; command -v bluealsa bluealsad 2>/dev/null || echo "NONE INSTALLED"
+echo "-- bluealsa process + flags:"
+DIAG_PIDS="$(pgrep -x bluealsa 2>/dev/null; pgrep -x bluealsad 2>/dev/null; true)"
+if [ -n "$DIAG_PIDS" ]; then
+  for P in $DIAG_PIDS; do tr '\0' ' ' < "/proc/$P/cmdline" 2>/dev/null || true; echo; done
+else
+  echo "NOT RUNNING"
+fi
+echo "-- bluealsa service:"
+systemctl is-active bluealsa 2>/dev/null || true
+systemctl cat bluealsa.service 2>/dev/null | grep -E "^ExecStart" || echo "no bluealsa.service unit"
+echo "-- car bond state (device found by MBUX name):"
+CARMAC="$(bluetoothctl devices 2>/dev/null | grep -iE 'mbux' | head -1 | awk '{print $2}')"
+if [ -n "$CARMAC" ]; then
+  bluetoothctl info "$CARMAC" 2>/dev/null | grep -E "Name|Paired|Bonded|Trusted|Connected" || true
+else
+  echo "no MBUX device known to bluetoothd"
+fi
+echo "-- piper + voice:"
+ls "$HOME/.local/bin/piper" >/dev/null 2>&1 && echo "piper ok" || echo "piper MISSING"
+ls "$HOME/carwatch-stack/models/en_US-lessac-medium.onnx" >/dev/null 2>&1 && echo "voice ok" || echo "voice model MISSING"
+echo "=== END AUDIO DIAG ==="
+
 echo "restarting services..."
 # carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
 # already running, so without a restart the OBD watcher keeps executing

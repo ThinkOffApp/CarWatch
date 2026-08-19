@@ -19,6 +19,7 @@ CAR_MAC_FILE="$HOME/.carwatch/car-bt-mac"
 speak() {
     local text="$1"
     [ -x "$PIPER" ] && [ -f "$VOICE" ] || { echo "piper/voice missing"; exit 1; }
+    ensure_bluealsa >/dev/null 2>&1 || true
     local wav; wav="$(mktemp --suffix=.wav)"
     echo "$text" | "$PIPER" -m "$VOICE" -f "$wav" 2>/dev/null
     local mac=""; [ -f "$CAR_MAC_FILE" ] && mac="$(cat "$CAR_MAC_FILE")"
@@ -35,6 +36,37 @@ speak() {
     rm -f "$wav"
 }
 
+ensure_bluealsa() {
+    # The Pi must OFFER the A2DP-source profile or the car's connect fails
+    # ("connecting... failed" on the MBUX screen; measured Aug 19 right after
+    # the bond finally succeeded). bluealsa registers that profile with BlueZ,
+    # but only when started with -p a2dp-source - the packaged default is not
+    # guaranteed to include it. Converge: drop-in override when the packaged
+    # unit exists (survives reboots), transient unit otherwise. Idempotent and
+    # cheap when the daemon is already right.
+    local BIN PID
+    BIN="$(command -v bluealsa || command -v bluealsad || true)"
+    [ -n "$BIN" ] || { echo "bluealsa not installed - car audio cannot work"; return 1; }
+    PID="$(pgrep -x "$(basename "$BIN")" | head -1 || true)"
+    if [ -n "$PID" ] && tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | grep -q "a2dp-source"; then
+        return 0
+    fi
+    echo "(re)starting bluealsa with the A2DP source profile..."
+    if systemctl cat bluealsa.service >/dev/null 2>&1; then
+        sudo mkdir -p /etc/systemd/system/bluealsa.service.d
+        printf '[Service]\nExecStart=\nExecStart=%s -p a2dp-source -p a2dp-sink\n' "$BIN" \
+            | sudo tee /etc/systemd/system/bluealsa.service.d/carwatch-a2dp.conf >/dev/null
+        sudo systemctl daemon-reload
+        sudo systemctl restart bluealsa || true
+    else
+        sudo pkill -x "$(basename "$BIN")" 2>/dev/null || true
+        sleep 1
+        sudo systemd-run --collect --unit="carwatch-bluealsa" \
+            "$BIN" -p a2dp-source -p a2dp-sink 2>/dev/null || true
+    fi
+    sleep 1
+}
+
 # Pair + connect a MAC as the car's A2DP sink, remember it, greet. This is a
 # FUNCTION so the auto-scan 'pair' path can reuse it: the old code called
 # `pairmac "$MAC"` as if it were a command, and bash answered "pairmac:
@@ -44,6 +76,14 @@ speak() {
 # still counts as done.
 do_pairmac() {
     local MAC="${1:?usage: do_pairmac <MAC>}"
+    # The A2DP-source profile must be registered BEFORE bonding: the car
+    # auto-connects right after the bond and fails ("connecting... failed" on
+    # MBUX) when the Pi offers no audio profile.
+    ensure_bluealsa || true
+    # Clear any half-bond left by earlier failed attempts - a stale bond makes
+    # every retry fail identically (claudemm, Aug 19). The car side needs the
+    # same hygiene: forget "vadelma" on the CAR's Bluetooth list if shown.
+    bluetoothctl remove "$MAC" >/dev/null 2>&1 || true
     # A Mercedes A2DP pair uses numeric-comparison SSP: the car shows a 6-digit
     # code and wants a YES on BOTH sides. NoInputNoOutput ("Just Works") cannot
     # answer that, so the old code failed "org.bluez.Error.AuthenticationFailed"
@@ -76,7 +116,7 @@ do_pairmac() {
 case "$CMD" in
     pair)
         systemctl start bluetooth || true
-        sudo systemctl restart bluealsa 2>/dev/null || true
+        ensure_bluealsa || true
         bluetoothctl power on >/dev/null 2>&1 || true
         echo "== scanning 20 s for the car's Bluetooth audio =="
         bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
