@@ -25,12 +25,22 @@ case "$CMD" in
     # fails.
     systemctl start bluetooth || true
     rfkill unblock bluetooth || true
-    echo "== scan =="
-    bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
-    LINE=$(bluetoothctl devices | grep -iE "obd|vgate|icar|v-link" | head -1)
-    MAC=$(echo "$LINE" | awk '{print $2}')
+    bluetoothctl power on >/dev/null 2>&1 || true
+    echo "== scan (25 s) =="
+    bluetoothctl --timeout 25 scan on >/dev/null 2>&1 || true
+    # NOTE: '|| true' is load-bearing - under pipefail a no-match grep would
+    # kill the whole script BEFORE the diagnosis prints (burned 19.8.).
+    LINE=$(bluetoothctl devices | grep -iE "obd|vgate|icar|v-link" | head -1 || true)
+    MAC=$(echo "$LINE" | awk '{print $2}' || true)
     echo "picked: ${LINE:-<none>}"
-    [ -n "$MAC" ] || { echo "NO_DONGLE_FOUND - is the iCar Pro 2S in the OBD port and powered (ignition on)?"; exit 1; }
+    if [ -z "$MAC" ]; then
+        echo "NO_DONGLE_FOUND - all devices bluetoothd can see right now:"
+        bluetoothctl devices || true
+        echo "(if the list is empty: the dongle is asleep - OBD port has no"
+        echo " power without ignition - or it is out of range/already paired"
+        echo " to a phone. Wake it with ignition ON and close any phone OBD app.)"
+        exit 1
+    fi
     echo "== pair =="
     bluetoothctl --timeout 6 agent NoInputNoOutput >/dev/null 2>&1 || true
     bluetoothctl --timeout 15 pair "$MAC" 2>&1 | tail -3 || true
