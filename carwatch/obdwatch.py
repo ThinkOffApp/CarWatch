@@ -30,6 +30,14 @@ RETRY_COOLDOWN_S = 120  # after a failed session, retry this often while up
 GLE_TXT = "/tmp/gle_text.txt"
 POSTER = os.path.expanduser("~/post-as-gle.py")
 
+# Deep-probe bookkeeping. The stamp is a PERSISTED once-per-day marker on
+# disk, not an in-memory flag: the old in-memory `deep_done` reset on every
+# wireless rfcomm0 flap, so the "one-time" scan re-ran mid-drive (claudemm,
+# Aug 19). Identity DIDs do not change intra-day, so once a day is plenty.
+# Raw results are written to RESULTS_DIR so the bytes survive the drive.
+DEEP_STAMP = os.path.expanduser("~/.carwatch/deep-probe.stamp")
+RESULTS_DIR = os.path.expanduser("~/.carwatch/probe-results")
+
 
 def carrier_up() -> bool:
     try:
@@ -37,6 +45,40 @@ def carrier_up() -> bool:
             return f.read().strip() == "1"
     except Exception:
         return False
+
+
+def deep_probe_done_today() -> bool:
+    """True if a COMPLETE (non-degraded) deep probe already ran today. Survives
+    adapter/link flaps because it is read from disk, not memory."""
+    try:
+        with open(DEEP_STAMP) as f:
+            return f.read().strip() == time.strftime("%Y-%m-%d")
+    except Exception:
+        return False
+
+
+def mark_deep_probe_done() -> None:
+    try:
+        os.makedirs(os.path.dirname(DEEP_STAMP), exist_ok=True)
+        with open(DEEP_STAMP, "w") as f:
+            f.write(time.strftime("%Y-%m-%d"))
+    except Exception as e:
+        print(f"deep stamp write failed: {e}", flush=True)
+
+
+def save_deep_result(dp: dict) -> str:
+    """Persist the full raw probe result (every DID's raw bytes) so the
+    wrong-address-vs-locked question can be answered off-car later."""
+    try:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        path = os.path.join(RESULTS_DIR,
+                            "deep-" + time.strftime("%Y%m%d-%H%M%S") + ".json")
+        with open(path, "w") as f:
+            json.dump(dp, f, indent=2)
+        return path
+    except Exception as e:
+        print(f"deep result save failed: {e}", flush=True)
+        return ""
 
 
 def post(text: str) -> None:
@@ -80,30 +122,38 @@ def fmt_readings(r: dict) -> str:
 
 
 def fmt_deep(dp: dict) -> str:
-    """One room-readable line for the on-connect deep probe. Reports what NEW
-    the car gave beyond the standard PIDs, framed as findings not a dump."""
+    """One room-readable summary for the per-ECU deep probe. Reports, per ECU
+    that answered, what identity it gave or which NRC it returned - so 'no
+    data' is never ambiguous - and flags a degraded/partial pass explicitly."""
     if not dp.get("ok"):
         why = "; ".join(dp.get("trace") or []) or "car did not answer the deep read"
-        return f"Deep scan: nothing new this time ({why})."
-    parts = [f"Deep scan done in {dp.get('elapsed_s', '?')}s"]
+        return f"Deep scan: nothing usable this time ({why})."
+    parts = [f"Deep scan {dp.get('elapsed_s', '?')}s"]
     n = dp.get("supported_pid_count")
     if n:
-        parts.append(f"{n} PIDs supported")
+        parts.append(f"{n} standard PIDs")
     if dp.get("vin"):
         parts.append("VIN readable")
-    m22 = dp.get("mode22") or {}
-    if m22:
-        named = [f"{k} {v.get('label')}" for k, v in m22.items()
-                 if v.get("label") and "unknown" not in v.get("label", "")]
-        unknown = [k for k, v in m22.items() if "unknown" in v.get("label", "")]
-        if named:
-            parts.append("Mercedes reads that answered: " + ", ".join(named))
-        if unknown:
-            parts.append(f"{len(unknown)} extra Mercedes DIDs answered "
-                         f"({', '.join(unknown[:6])}{'…' if len(unknown) > 6 else ''}) "
-                         "- candidates for EV range / charge state, to decode next")
+    answered = [e for e in (dp.get("ecus") or []) if e.get("answered")]
+    if answered:
+        seg = []
+        for e in answered:
+            got = []
+            for did, d in (e.get("dids") or {}).items():
+                if d.get("status") == "ok" and d.get("text"):
+                    got.append(f"{did}={d['text'][:24]}")
+                elif d.get("status") == "nrc":
+                    got.append(f"{did}:{d['nrc']} {d.get('nrc_name', '')}")
+            if got:
+                seg.append(f"{e['req']} ({e['label']}): " + "; ".join(got[:6]))
+        if seg:
+            parts.append(" || ".join(seg))
     else:
-        parts.append("no Mercedes-specific DIDs answered (only standard PIDs available)")
+        parts.append("no ECU answered a mode-22 identity read on any addressed "
+                     "unit (7E0-7E5) - that points to gateway-guarded or 29-bit "
+                     "addressing, NOT proof the data is absent; raw bytes saved")
+    if dp.get("degraded"):
+        parts.append("(DEGRADED/partial pass - will retry, not a full scan)")
     return ". ".join(parts) + "."
 
 
@@ -143,24 +193,24 @@ def run() -> None:
     was_up = False
     last_post_readings = ""
     next_try = 0.0
-    # The deep (mode-22 Mercedes) probe runs ONCE per adapter session, the
-    # first time the car answers - because petrus's Pi is mobile and only in
-    # the car for a short window (Aug 19). No button, no remote trigger, no
-    # waiting: plug in -> it probes itself -> posts. Reset when the adapter
-    # leaves so the next drive re-probes.
-    deep_done = False
+    # The deep (per-ECU mode-22 Mercedes) probe runs at most ONCE PER DAY and
+    # only while the car is STATIONARY. petrus's Pi is mobile and only in the
+    # car for a short window, so it self-triggers - no button, no remote. Two
+    # guards, both flap-proof: a persisted on-disk day stamp (survives process
+    # restarts) and this in-memory flag (survives wireless rfcomm0 flaps within
+    # a run). The old code reset an in-memory flag on every flap, so the
+    # "one-time" scan re-ran mid-drive at 28 km/h (claudemm, Aug 19).
+    deep_ran_this_process = False
     while True:
         port = elm_port_present()
         up = carrier_up()
         if port and port != was_present:
             print(f"ELM327 adapter appeared at {port}", flush=True)
-            deep_done = False
             time.sleep(SETTLE_S)
             next_try = 0.0
         if not port and was_present:
             print("ELM327 adapter gone", flush=True)
             last_post_readings = ""
-            deep_done = False
         if up and not was_up:
             print("eth0 link UP", flush=True)
             time.sleep(SETTLE_S)
@@ -183,17 +233,30 @@ def run() -> None:
                 if text != last_post_readings:
                     post(f"Engine read (live from my OBD port): {text}")
                     last_post_readings = text
-                # First successful read of this session -> run the deep
-                # Mercedes probe once, inline (single serial port = one
-                # reader; it briefly pauses normal reads, which is fine for a
-                # once-per-drive scan), and post whatever new the car gives.
-                if port and not deep_done:
-                    deep_done = True
+                # Deep probe: only when the car is STOPPED and not already done
+                # today. A mid-drive diagnostic sweep both competes with live
+                # telemetry and returns fewer PIDs while looking just as
+                # confident (claudemm's 44-vs-12 catch) - so we wait for a
+                # genuine stationary read. speed unknown -> treat as moving and
+                # defer (conservative). Inline: one serial port = one reader, so
+                # it briefly pauses normal reads, fine for a once-a-day scan.
+                speed = result["readings"].get("speed_kmh")
+                stationary = (speed == 0)
+                if (port and stationary and not deep_ran_this_process
+                        and not deep_probe_done_today()):
                     try:
-                        post("Plugged into the car - running my one-time deep "
-                             "scan (Mercedes-specific reads), ~1 min...")
+                        post("Stopped - running my once-a-day deep scan now "
+                             "(per-ECU Mercedes identity reads), up to ~1 min...")
                         dp = elm327.deep_probe(port)
+                        path = save_deep_result(dp)
+                        if path:
+                            print(f"deep result saved: {path}", flush=True)
                         post(fmt_deep(dp))
+                        # Only lock the day on a COMPLETE pass; a degraded/empty
+                        # scan stays retryable at the next stop.
+                        if dp.get("ok") and not dp.get("degraded"):
+                            deep_ran_this_process = True
+                            mark_deep_probe_done()
                     except Exception as e:  # never let the probe kill the loop
                         print(f"deep probe failed: {e}", flush=True)
                 next_try = time.time() + 60

@@ -321,29 +321,108 @@ def scan_capabilities(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dic
     return out
 
 
-# Mercedes mode-22 DIDs worth trying for CONTEXT (not mechanic diagnostics):
-# the named identity DIDs plus a short, TIME-CAPPED slice of the standard
-# identification block. Whatever answers is a finding; silence is fine. This
-# is the "deep" read - what standard OBD PIDs do NOT carry.
-_MODE22_NAMED = {
-    "F190": "VIN (UDS mirror)",
-    "F187": "part number",
-    "F18C": "serial number",
-    "F1A0": "vehicle config",
-    "F111": "ECU serial",
+# UDS negative-response codes (ISO 14229). We classify these so a DID that is
+# SILENT (wrong address / not present) never looks the same as one that is
+# LOCKED (0x33 - the data exists, it just needs a security unlock we do not
+# do) or genuinely NOT SUPPORTED (0x11/0x31). That distinction is the whole
+# reason for the per-ECU probe: "no Mercedes data" was a premature conclusion
+# when we only ever asked the broadcast address 0x7DF (claudemm, Aug 19).
+_NRC = {
+    0x10: "general reject",
+    0x11: "service not supported",
+    0x12: "sub-function not supported",
+    0x13: "incorrect message length",
+    0x14: "response too long",
+    0x22: "conditions not correct",
+    0x31: "request out of range (DID not on this ECU)",
+    0x33: "security access denied (data exists, locked)",
+    0x35: "invalid key",
+    0x36: "exceeded attempts",
+    0x37: "required time delay not expired",
+    0x78: "response pending",
+    0x7E: "service not supported in active session",
+    0x7F: "service not supported in active session",
 }
+
+# Powertrain ECUs physically addressable on the OBD-II 11-bit CAN bus. In
+# ISO 15765-4 the response ID is always request+8. Broadcast 0x7DF reaches
+# whoever answers first (usually just the engine); addressing each ECU
+# directly with ATSH is how a module's OWN identity/manufacturer DIDs are
+# actually reached. Labels are best-effort roles - the probe reports the raw
+# address too, so a wrong guess never hides a real answer.
+_ECUS = [
+    (0x7E0, 0x7E8, "engine / powertrain"),
+    (0x7E1, 0x7E9, "ECU @7E1"),
+    (0x7E2, 0x7EA, "transmission / @7E2"),
+    (0x7E3, 0x7EB, "ECU @7E3"),
+    (0x7E4, 0x7EC, "ECU @7E4"),
+    (0x7E5, 0x7ED, "ECU @7E5"),
+]
+
+# Standard ISO 14229 identification DIDs (mode 22). Each control unit answers
+# with ITS OWN values, so probing them per-ECU yields real per-module identity
+# (part number, software version, serial). Mercedes proprietary EV/hybrid DIDs
+# are not publicly mapped, so we probe the DEFINED identity block and record
+# every NRC - which teaches us, per ECU, whether deeper reads are unsupported
+# (0x11/0x31) or merely locked behind security access (0x33).
+_ID_DIDS = {
+    "F190": "VIN",
+    "F187": "spare part number",
+    "F18C": "ECU serial number",
+    "F191": "hardware version",
+    "F195": "software version",
+    "F197": "system name",
+    "F18A": "supplier identifier",
+    "F1A0": "vehicle config (MB-specific)",
+}
+
+
+def _parse_did_reply(reply: str, did: str) -> dict:
+    """Classify a mode-22 reply. Returns {status, nrc, nrc_name, raw, text}:
+      'ok'   - positive '62 <did> <data>', ASCII captured in text
+      'nrc'  - negative '7F 22 <code>', code + name recorded
+      'none' - no / garbled response (wrong address, quiet bus, adapter error)
+    With headers off and a receive-address filter the ELM327 reassembles the
+    ISO-TP payload, so a clean 62/7F is what we parse."""
+    raw = reply.strip()
+    up = raw.upper()
+    toks = [t for t in up.replace("\r", " ").split()
+            if len(t) == 2 and all(c in "0123456789ABCDEF" for c in t)]
+    vals = [int(t, 16) for t in toks]
+    did_hi, did_lo = int(did[:2], 16), int(did[2:], 16)
+    # Negative response: 7F 22 <nrc>.
+    for i in range(len(vals) - 2):
+        if vals[i] == 0x7F and vals[i + 1] == 0x22:
+            code = vals[i + 2]
+            return {"status": "nrc", "nrc": f"0x{code:02X}",
+                    "nrc_name": _NRC.get(code, "unknown NRC"),
+                    "raw": raw[:120], "text": ""}
+    # Positive response: 62 <did_hi> <did_lo> <data...>.
+    for i in range(len(vals) - 2):
+        if vals[i] == 0x62 and vals[i + 1] == did_hi and vals[i + 2] == did_lo:
+            data = vals[i + 3:]
+            text = "".join(chr(b) for b in data if 0x20 <= b <= 0x7E).strip()
+            return {"status": "ok", "nrc": "", "nrc_name": "",
+                    "raw": raw[:120], "text": text}
+    return {"status": "none", "nrc": "", "nrc_name": "",
+            "raw": raw[:120], "text": ""}
 
 
 def deep_probe(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD,
                cap_s: float = 75.0) -> dict:
-    """Focused, BOUNDED Mercedes read that runs on-board the moment the Pi
-    connects to the car (petrus's Pi is mobile - it is only in the car for a
-    short window). Reads VIN, the named mode-22 DIDs, and a small time-capped
-    slice of the F1xx block. Read-only, never writes. Returns a compact dict
-    the daemon posts. Bounded so it never freezes telemetry for long."""
+    """Per-ECU addressed Mercedes identity read, BOUNDED, read-only. Runs
+    on-board when the Pi is connected AND the car is stationary (the daemon
+    gates that). For each powertrain ECU it sets the request/response headers
+    (ATSH/ATCRA), opens an extended diagnostic session (10 03, non-intrusive),
+    and reads the ISO 14229 identity DIDs - CAPTURING the raw reply and, on a
+    negative response, the exact NRC. Never writes (only services 10/22). The
+    result distinguishes answered / negative-with-NRC / silent per ECU, and
+    flags itself DEGRADED if it could not confirm the bus or hit the time cap,
+    so a partial pass never reads as a confident 'no data'."""
     import time as _t
-    out = {"ok": False, "vin": "", "mode22": {}, "scanned": 0,
-           "supported_pid_count": 0, "trace": []}
+    out = {"ok": False, "vin": "", "supported_pid_count": 0,
+           "bus_responsive": False, "ecus": [], "mode22": {},
+           "ecus_answered": 0, "degraded": False, "trace": []}
     if not os.path.exists(port):
         out["trace"].append("no adapter")
         return out
@@ -355,42 +434,79 @@ def deep_probe(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD,
     started = _t.time()
     try:
         elm.init()
-        # Prove the car answers + how many PIDs (cheap).
+        # Baseline on broadcast: a supported-PID count proves the bus answers
+        # at all, so a later empty per-ECU pass is clearly addressing and not
+        # a dead bus.
         try:
-            out["supported_pid_count"] = len(scan_supported_quiet(elm))
+            pids = scan_supported_quiet(elm)
+            out["supported_pid_count"] = len(pids)
+            out["bus_responsive"] = bool(pids)
         except Exception:
             pass
         out["vin"] = read_vin(elm)
-        # Extended diagnostic session can unlock more DIDs; harmless if absent.
+        for req, resp, label in _ECUS:
+            if _t.time() - started > cap_s:
+                out["degraded"] = True
+                out["trace"].append("time cap hit before all ECUs scanned")
+                break
+            elm.cmd(f"ATSH{req:03X}", 1.0)      # request header -> this ECU
+            elm.cmd(f"ATCRA{resp:03X}", 1.0)    # accept only its response
+            sess = elm.cmd("1003", 2.0)         # extended diag session
+            rec = {"req": f"0x{req:03X}", "resp": f"0x{resp:03X}",
+                   "label": label, "answered": False,
+                   "session_ok": "50" in sess.upper() and "7F" not in sess.upper(),
+                   "dids": {}}
+            for did, dlabel in _ID_DIDS.items():
+                if _t.time() - started > cap_s:
+                    out["degraded"] = True
+                    break
+                raw_reply = elm.cmd(f"22{did}", 2.0)
+                r = _parse_did_reply(raw_reply, did)
+                # Store the RAW response for EVERY DID, including "no response"
+                # (claudemm, Aug 19): a summary that only says "no DIDs
+                # answered" throws away the bytes that separate wrong-address
+                # (silent) from not-supported (0x11/0x31) from locked (0x33).
+                # Once discarded the question can never be re-answered from the
+                # drive, so the raw string is kept verbatim here and on disk.
+                entry = {"label": dlabel, "status": r["status"],
+                         "raw": raw_reply.strip()[:160]}
+                if r["status"] == "ok":
+                    rec["answered"] = True
+                    entry["text"] = r["text"]
+                    out["mode22"][f"{req:03X}:{did}"] = {
+                        "label": f"{label} {dlabel}", "text": r["text"],
+                        "raw": r["raw"]}
+                elif r["status"] == "nrc":
+                    rec["answered"] = True  # it DID respond, just negatively
+                    entry["nrc"] = r["nrc"]
+                    entry["nrc_name"] = r["nrc_name"]
+                rec["dids"][did] = entry
+            out["ecus"].append(rec)
+        # Restore broadcast addressing so normal telemetry reads are unaffected.
         try:
-            elm.cmd("1003", 2.0)
+            elm.cmd("ATAR", 1.0)     # auto receive address
+            elm.cmd("ATSH7DF", 1.0)  # back to functional broadcast
         except Exception:
             pass
-        for did, label in _MODE22_NAMED.items():
-            if _t.time() - started > cap_s:
-                break
-            reply = elm.cmd(f"22{did}", 2.5)
-            out["scanned"] += 1
-            up = reply.upper()
-            if "62" in up and "NO DATA" not in up and "7F" not in up:
-                out["mode22"][did] = {"label": label, "raw": reply.strip()[:80]}
-        # A short blind slice of the F1xx identification block, time-capped.
-        for n in range(0x00, 0x40):
-            if _t.time() - started > cap_s:
-                break
-            did = 0xF100 + n
-            reply = elm.cmd(f"22{did:04X}", 1.2)
-            out["scanned"] += 1
-            up = reply.upper()
-            key = f"{did:04X}"
-            if "62" in up and "NO DATA" not in up and "7F" not in up and key not in out["mode22"]:
-                out["mode22"][key] = {"label": "unknown DID (answered)",
-                                      "raw": reply.strip()[:80]}
     except Exception as e:
         out["trace"].append(f"probe error: {e}")
+        out["degraded"] = True
     finally:
         elm.close()
-    out["ok"] = bool(out["vin"] or out["mode22"] or out["supported_pid_count"])
+    # An ECU's own F190 (VIN via mode 22, ISO-TP reassembled to a clean
+    # 62 F1 90 <17 bytes>) is a more reliable VIN than the lenient mode-09
+    # read, so prefer it when a module answered it.
+    for key, v in out["mode22"].items():
+        if key.endswith(":F190") and v.get("text"):
+            out["vin"] = v["text"]
+            break
+    answered = [e for e in out["ecus"] if e["answered"]]
+    out["ecus_answered"] = len(answered)
+    out["ok"] = bool(out["vin"] or out["mode22"] or out["bus_responsive"])
+    # Could not even confirm the bus and nobody answered -> degraded, so the
+    # daemon retries next stationary cycle instead of marking the day done.
+    if not out["bus_responsive"] and not answered:
+        out["degraded"] = True
     out["elapsed_s"] = round(_t.time() - started, 1)
     return out
 

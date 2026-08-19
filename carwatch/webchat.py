@@ -116,6 +116,12 @@ DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <pre id=obdout style="margin:2px 0;white-space:pre-wrap;color:#9cf;max-height:160px;overflow:auto"></pre>
 <div style="color:#6cf;margin-top:6px">VOICE</div>
 <div style="margin:4px 0"><span id=voicestate style="color:#888">...</span> <button onclick="setListen(true)" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">listen on</button> <button onclick="setListen(false)" style="background:#333;color:#f66;border:1px solid #555;padding:8px 10px;font:13px monospace">listen off</button></div>
+<div style="color:#6cf;margin-top:6px">CAR AUDIO (Pi speaks through your car speakers)</div>
+<div style="margin:4px 0;color:#888;font:12px monospace">Put MBUX in Bluetooth pairing mode (Settings &gt; Bluetooth &gt; add device) WHILE PARKED, then tap pair.</div>
+<div style="margin:4px 0"><button onclick="carPair()" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">pair car audio</button>
+<input id=saytext placeholder="text to speak" style="background:#222;color:#ddd;border:1px solid #555;padding:6px;font:13px monospace;width:40%">
+<button onclick="carSpeak()" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 10px;font:13px monospace">speak</button></div>
+<pre id=carout style="margin:2px 0;white-space:pre-wrap;color:#9cf;max-height:140px;overflow:auto"></pre>
 <div style="color:#6cf;margin-top:6px">NETWORK</div>
 <div style="margin:4px 0">
 <button onclick="wifi('hotspot')" style="background:#333;color:#fc6;border:1px solid #555;padding:8px 10px;font:13px monospace">phone hotspot</button>
@@ -167,6 +173,20 @@ async function setListen(on){
   const r = await fetch("/api/listen", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({on})});
   const d = await r.json();
   var vs=document.getElementById("voicestate"); if(vs) vs.textContent = d.ok ? (d.listening?"listening: ON":"listening: off") : ("error: "+d.error);
+}
+async function carPair(){
+  var o=document.getElementById("carout"); o.textContent="pairing... scanning 20s for your car's Bluetooth (keep MBUX in pairing mode)";
+  try{ const r=await fetch("/api/car-pair",{method:"POST"}); const d=await r.json();
+    o.textContent = (d.ok?"paired - you should hear a test line now\\n":"") + (d.output||d.error||"");
+  }catch(e){ o.textContent="request failed: "+e; }
+}
+async function carSpeak(){
+  var o=document.getElementById("carout"); var t=(document.getElementById("saytext").value||"").trim();
+  if(!t){ o.textContent="type something to speak first"; return; }
+  o.textContent="speaking...";
+  try{ const r=await fetch("/api/car-speak",{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({text:t})}); const d=await r.json();
+    o.textContent = d.ok ? "spoken" : ("error: "+(d.output||d.error));
+  }catch(e){ o.textContent="request failed: "+e; }
 }
 tick(); setInterval(tick, 2000);
 async function wifi(target){
@@ -512,6 +532,52 @@ class Handler(BaseHTTPRequestHandler):
                     cwd=_os.path.expanduser("~/CarWatch"))
                 out = (r.stdout + r.stderr).strip()[-4000:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if self.path == "/api/car-pair":
+            # One-time: pair the Pi to the CAR's Bluetooth audio (A2DP sink) so
+            # the Pi can speak through the car speakers. petrus puts MBUX in
+            # pairing mode, then taps this. sudo because the script restarts
+            # bluealsa; the pair itself is read-only w.r.t. the car (BT bond
+            # only, no CAN/diagnostic traffic). Ends by speaking a test line.
+            import subprocess as _sp, os as _os
+            try:
+                r = _sp.run(
+                    ["sudo", "bash",
+                     _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"), "pair"],
+                    capture_output=True, text=True, timeout=60,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "HOME": _os.path.expanduser("~")})
+                out = (r.stdout + r.stderr).strip()[-4000:]
+                return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if self.path == "/api/car-speak":
+            # Speak arbitrary text through the car's paired A2DP sink. No sudo:
+            # keep bluealsa-aplay in the user session. Text is passed as an argv
+            # element (list form), never a shell string, so no injection.
+            import subprocess as _sp, os as _os
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                text = str(body.get("text", "")).strip()[:300]
+                if not text:
+                    return self._send(400, json.dumps(
+                        {"ok": False, "error": "no text"}), "application/json")
+                r = _sp.run(
+                    ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
+                     "say", text],
+                    capture_output=True, text=True, timeout=30,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "HOME": _os.path.expanduser("~")})
+                out = (r.stdout + r.stderr).strip()[-2000:]
+                ok = r.returncode == 0 and "failed" not in out.lower() \
+                    and "missing" not in out.lower()
+                return self._send(200, json.dumps({"ok": ok, "output": out}),
                                   "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
