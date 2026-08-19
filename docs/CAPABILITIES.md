@@ -58,9 +58,53 @@ Also reads:
   0xF190.
 - **Protocol** — `ATDPN` (which OBD protocol the adapter negotiated).
 
-> The live supported-PID list for this specific car is filled in by running
-> `POST /api/obd/scan` (or the plug-in probe) and pasting the result here.
-> Pending: capture from a drive where the tunnel stays up long enough.
+### Live scan result — E 300e, 2026-08-19
+
+Captured with `POST /api/obd/scan` during a drive.
+
+- **Protocol:** A0 (ISO 15765-4 CAN, auto).
+- **VIN:** readable (mode 09 answered a full 17-char VIN). *Not printed here —
+  this repo is public and a VIN is a vehicle identifier; it lives only in the
+  live JSON, masked as `W1K…666` which confirms a Mercedes W213 E-Class.*
+- **Stored DTCs:** none — car is clean.
+- **PIDs advertised:** 47. We decode 8 today (marked ✅). The rest are
+  readable and one line each to add.
+
+| PID | Meaning | Decoded? |
+|-----|---------|----------|
+| 0x04 | calculated engine load | ✅ |
+| 0x05 | engine coolant temp | ✅ |
+| 0x0C | engine RPM | ✅ |
+| 0x0D | vehicle speed | ✅ |
+| 0x0F | intake air temp | ✅ |
+| 0x2F | fuel tank level | ✅ |
+| 0x42 | control module voltage | ✅ |
+| 0x5B | hybrid battery remaining | ✅ |
+| 0x0E | timing advance | readable, not decoded |
+| 0x11 | throttle position | readable, not decoded |
+| 0x1F | run time since engine start | readable, not decoded |
+| 0x21 | distance with MIL on | readable, not decoded |
+| 0x31 | distance since codes cleared | readable, not decoded |
+| 0x33 | barometric pressure | readable, not decoded |
+| 0x46 | **ambient air temp** | readable, not decoded — true outside temp, better than 0x0F |
+| 0x47 | absolute throttle position B | readable, not decoded |
+| 0x49 | accelerator pedal position D | readable, not decoded |
+| 0x51 | fuel type | readable, not decoded |
+| 0x5C | **engine oil temp** | readable, not decoded |
+| 0x5E | engine fuel rate | readable, not decoded |
+| 0x06/0x07 | fuel trim b1 (short/long) | readable, not decoded |
+| 0x0B | intake manifold pressure | readable, not decoded |
+| 0x23 | fuel rail gauge pressure | readable, not decoded |
+
+Plus **~19 manufacturer/unknown PIDs** the car advertises but the standard
+J1979 table does not name (0x13, 0x15, 0x1C, 0x20, 0x30, 0x34, 0x40, 0x41,
+0x45, 0x4A, 0x56, 0x60, 0x62, 0x63, 0x65, 0x68, 0x7A, 0x7C, 0x80, 0x8B, 0x8E,
+0x9D, 0x9E, 0xA0, 0xA4). These are Mercedes-specific and worth decoding — the
+same research path as the mode-22 DIDs below.
+
+**Easy wins to add to §1 next:** 0x46 ambient air temp and 0x5C engine oil
+temp are the two most useful undecoded PIDs (a real outside-temperature and
+oil temp), each a one-line addition to the `PIDS` table.
 
 ## 4. Mercedes-specific reads (mode 22 DIDs) — NOT YET RUN IN THE CAR
 
