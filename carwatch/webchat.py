@@ -94,6 +94,40 @@ f.onsubmit=async e=>{e.preventDefault();const text=q.value.trim();if(!text)retur
   b.disabled=false;q.focus()}
 </script></body></html>"""
 
+# Cloud-provider ("mokkula") setup + status page. Two-step login: email ->
+# vendor emails a code -> code -> tokens on the Pi. NO password field exists.
+CLOUDCAR_PAGE = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>cloud car</title></head>
+<body style="background:#111;color:#ddd;font:14px monospace;margin:0;padding:14px">
+<h2 style="margin:0 0 4px;color:#6cf">Cloud car data</h2>
+<div style="color:#888;margin-bottom:10px">Vendor-cloud readings (doors, tires, charge) for the dashboards.
+Login asks ONLY your account email + the one-time code the vendor mails you. Never a password.</div>
+<div id=authbox style="margin:10px 0"></div>
+<pre id=status style="white-space:pre-wrap;color:#9e9"></pre>
+<div style="color:#555;margin-top:10px"><a href="/dash" style="color:#6cf">dash</a> &middot; <a href="/nerd" style="color:#6cf">nerd</a> &middot; <a href="/" style="color:#6cf">chat</a></div>
+<script>
+const ab=document.getElementById('authbox'),st=document.getElementById('status');
+async function post(b){const r=await fetch('/api/cloudcar/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json()}
+function form(ph,key,btn){ab.innerHTML=`<input id=v placeholder="${ph}" style="background:#222;color:#ddd;border:1px solid #555;padding:8px;font:14px monospace;width:55%">
+<button onclick="send('${key}')" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 12px;font:14px monospace">${btn}</button> <span id=msg style="color:#fc6"></span>`}
+async function send(key){const v=document.getElementById('v').value.trim();if(!v)return;
+document.getElementById('msg').textContent='...';const d=await post({[key]:v});
+document.getElementById('msg').textContent=d.ok?'ok':(d.error||'failed');if(d.ok)setTimeout(tick,800)}
+async function tick(){
+ try{
+  const a=await (await fetch('/api/cloudcar/auth')).json();
+  if(a.step==='need_email')form('your vendor-account email','email','send code');
+  else if(a.step==='need_code')form('code from your email','code','confirm');
+  else if(a.step==='no_provider')ab.innerHTML='<span style="color:#fc6">provider plugin not installed yet</span>';
+  else ab.innerHTML='<span style="color:#6f6">authenticated</span>';
+  const s=await (await fetch('/api/cloudcar')).json();
+  st.textContent=JSON.stringify(s,null,1);
+ }catch(e){st.textContent='unreachable: '+e}
+}
+tick();setInterval(tick,5000);
+</script></body></html>"""
+
 # Realistic sample payload for /api/obd/all?mock=1 so the nerd-dashboard UI
 # can be built and tested at home while the OBD adapter is in the car. Shape
 # is EXACTLY elm327.run_all()'s, plus "mock": true so a UI can badge it.
@@ -527,6 +561,28 @@ class Handler(BaseHTTPRequestHandler):
                  "error": "waiting for the first OBD cache snapshot",
                  "hint": "GET /api/obd/all?mock=1 for UI development"}),
                 "application/json")
+        elif self.path.startswith("/api/cloudcar"):
+            # The "mokkula": normalized cloud vehicle data behind a pluggable
+            # provider interface (carwatch.cloudcar). Read-only by design -
+            # remote commands live in petrus's own phone apps, never here.
+            from carwatch import cloudcar as _cc
+            prov = _cc.get()
+            if self.path.startswith("/api/cloudcar/auth"):
+                body = (prov.auth_state() if prov else
+                        {"authenticated": False, "step": "no_provider",
+                         "hint": "no cloud provider plugin registered yet"})
+                return self._send(200, json.dumps(body), "application/json")
+            if prov is None:
+                return self._send(200, json.dumps(_cc.empty_state(
+                    "none", "no cloud provider plugin registered yet")),
+                    "application/json")
+            return self._send(200, json.dumps(prov.status()),
+                              "application/json")
+        elif self.path.startswith("/cloudcar"):
+            # Minimal setup + status page for the cloud provider: email ->
+            # vendor emails a one-time code -> code -> tokens on the Pi.
+            # The owner's PASSWORD is never asked anywhere on this page.
+            return self._send(200, CLOUDCAR_PAGE)
         elif self.path.startswith("/nerd"):
             # Nerd dashboard (codex-authored carwatch/nerd.html): every decoded
             # PID in grouped cards with threshold colors + sparklines, fed by
@@ -633,6 +689,34 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-4000:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if self.path == "/api/cloudcar/login":
+            # Two-step credential-safe login: {"email": ...} makes the vendor
+            # send a one-time code to the OWNER's email; {"code": ...}
+            # exchanges it for tokens the provider stores itself (0600).
+            # No password field exists in this flow by design.
+            from carwatch import cloudcar as _cc
+            prov = _cc.get()
+            if prov is None:
+                return self._send(200, json.dumps(
+                    {"ok": False, "error": "no cloud provider plugin registered yet"}),
+                    "application/json")
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                email = str(body.get("email", "")).strip()
+                code = str(body.get("code", "")).strip()
+                if email:
+                    return self._send(200, json.dumps(prov.begin_login(email)),
+                                      "application/json")
+                if code:
+                    return self._send(200, json.dumps(prov.complete_login(code)),
+                                      "application/json")
+                return self._send(400, json.dumps(
+                    {"ok": False, "error": "send email or code"}),
+                    "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
