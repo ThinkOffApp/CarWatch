@@ -112,12 +112,21 @@ have not been run yet.
 temp are the two most useful undecoded PIDs (a real outside-temperature and
 oil temp), each a one-line addition to the `PIDS` table.
 
-## 4. Mercedes-specific reads (mode 22 DIDs) — NOT YET RUN IN THE CAR
+## 4. Mercedes-specific reads (mode 22 DIDs) — RAN 2026-08-19, NOTHING ANSWERED
 
-> **Pending, like §3.** The rows below are DIDs the code *tries*, not things
-> this car has answered. `obd_probe.py` has never completed a run in the car
-> (see `docs/obd-findings.md`). Whatever answers becomes a finding; treat this
-> table as the probe's target list, not proven capability.
+> **It has now run in the car, twice** — 13:06 stationary and 13:09 moving.
+> Both reported *no Mercedes-specific DIDs answered*. **That is not proof the
+> car lacks them.** Both asked from the ELM327's default **broadcast** address
+> (0x7DF); Mercedes DIDs normally answer only when a **specific ECU** is
+> addressed (0x7E0 etc.), often only after security access. Silence from a
+> broadcast is an addressing result, not a capability result.
+>
+> A corrected probe — **per-ECU addressing plus raw NRC capture** (d5d86c1) —
+> is deployed but **has not yet run in the car**, so this section stays open.
+> The raw negative response is what settles it: nothing at all = wrong address;
+> **NRC 0x11** = service not supported; **NRC 0x33** = data exists but locked;
+> **NRC 0x31** = mode 22 works but those DID numbers were wrong. The first runs
+> stored no raw responses, which is why capture was added.
 
 `obd_probe.py` walks the manufacturer identification block **0xF100–0xF1FF**
 (mode 22, read-only). No public per-DID table exists for the Daimler PHEV
@@ -126,9 +135,9 @@ silence is not an error. Named candidates it tries explicitly:
 
 | DID | Meaning (candidate) | Answered? |
 |-----|---------------------|-----------|
-| 0xF190 | VIN (UDS mirror) | not yet run |
-| 0xF187 | part number | not yet run |
-| 0xF18C | serial number | not yet run |
+| 0xF190 | VIN (UDS mirror) | no answer (broadcast) |
+| 0xF187 | part number | no answer (broadcast) |
+| 0xF18C | serial number | no answer (broadcast) |
 
 This is the path expected to expose the GLE's traction-battery SoC and other
 Mercedes-only telemetry that standard OBD PIDs do not carry.
@@ -140,9 +149,44 @@ Mercedes-only telemetry that standard OBD PIDs do not carry.
   fact that blind UDS writes to a modern Mercedes gateway can leave fault
   codes or worse.
 - **Two-way control** (pre-entry climate / "camp mode", remote lock, charge
-  scheduling) lives behind **Mercedes me**, not OBD — tracked separately.
+  scheduling) lives behind **Mercedes me**, not OBD.
+  **As of 2026-08-19 that path is LIVE** — see §6.
 - **Live cabin/road context** (camera, GPS) — comes from the WOLFBOX dashcam
   and the Pi, not the OBD port.
+
+## 6. The Mercedes me cloud path — LIVE since 2026-08-19
+
+Everything §5 lists as unreachable over OBD now arrives from the cloud instead,
+so the two sources are complementary rather than competing: **OBD knows the car
+only while the Pi is plugged in; the cloud knows the parked car.**
+
+- **Route:** the community app protocol `mbapi2020` running in Home Assistant
+  on the Mac mini (the always-on host — the Pi travels and cannot hold a
+  24/7 poller). The official free developer products were **discontinued
+  2023-08-31**; only the paid Fleet API remains, so the portal's still-live
+  doc pages are not evidence of a usable product.
+- **Access:** a dedicated Mercedes me account invited as **co-user** on each
+  car (the app calls it "co-user"/"Manage users", never "drivers").
+- **Delivered, measured:** 101 entities across both cars — door + lock state,
+  all four windows, sunroof, all four tyre pressures, state of charge,
+  charging power/status/end-of-charge, electric and liquid range separately,
+  odometer, fuel level, trip and average-speed data, location. The GLE adds
+  AdBlue level, pre-climate state, engine/ignition state and parking state.
+- **The Berlin GLE is covered with no hardware there at all.**
+
+**Deliberate limit — locking yes, unlocking no.** `lock.py` sends
+`doors_lock(vin)` with no PIN, while unlock calls `doors_unlock_with_pin` and,
+with no PIN configured and no code supplied, logs `"Code required but none
+provided"` and aborts. **The PIN field is left empty on purpose**, so a leak of
+this host yields no way to open the car. Unlocking is reserved for a separate
+direct path with the PIN entered per use.
+
+**Wider than doors.** The integration also exposes `ENGINE_START`/`ENGINE_STOP`,
+preheat and preconditioning (incl. departure time and seats), battery max-SoC,
+charging breaks and sunroof control — so "read-only" is a decision that has to
+be made per service, not a property that comes for free. The preconditioning
+services may cover camp mode's climate half **without writing anything to the
+car**; check that before returning to the DoIP path.
 
 ---
 
