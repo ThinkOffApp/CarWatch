@@ -500,6 +500,22 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
+        if self.path == "/api/bt-pair":
+            # One-shot wireless-OBD swap: scan for the BT dongle (Vgate iCar
+            # Pro 2S), pair, bind /dev/rfcomm0, persist, test. Read-only w.r.t.
+            # the car (BT pairing only). Runs the committed script.
+            import subprocess as _sp, os as _os
+            try:
+                r = _sp.run(
+                    ["sudo", "bash", _os.path.expanduser("~/CarWatch/scripts/pair-bt-obd.sh"), "auto"],
+                    capture_output=True, text=True, timeout=90,
+                    cwd=_os.path.expanduser("~/CarWatch"))
+                out = (r.stdout + r.stderr).strip()[-4000:]
+                return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         if self.path == "/api/obd/scan":
             # READ-ONLY capability probe: which PIDs the car advertises, VIN,
             # stored DTCs. Never writes. Produces the "what our module can get

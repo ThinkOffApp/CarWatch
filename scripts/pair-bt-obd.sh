@@ -18,6 +18,48 @@ CMD="${1:-scan}"
 MAC="${2:-}"
 
 case "$CMD" in
+  auto)
+    # One-shot: scan, pick the first OBD-looking dongle, pair, bind, persist,
+    # and test - so the whole wireless swap is a single remote call. Prints a
+    # labelled log; exits non-zero only if no dongle is found or the test read
+    # fails.
+    systemctl start bluetooth || true
+    rfkill unblock bluetooth || true
+    echo "== scan =="
+    bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
+    LINE=$(bluetoothctl devices | grep -iE "obd|vgate|icar|v-link" | head -1)
+    MAC=$(echo "$LINE" | awk '{print $2}')
+    echo "picked: ${LINE:-<none>}"
+    [ -n "$MAC" ] || { echo "NO_DONGLE_FOUND - is the iCar Pro 2S in the OBD port and powered (ignition on)?"; exit 1; }
+    echo "== pair =="
+    bluetoothctl --timeout 6 agent NoInputNoOutput >/dev/null 2>&1 || true
+    bluetoothctl --timeout 15 pair "$MAC" 2>&1 | tail -3 || true
+    bluetoothctl trust "$MAC" >/dev/null 2>&1 || true
+    echo "== bind rfcomm0 =="
+    rfcomm release 0 2>/dev/null || true
+    rfcomm bind 0 "$MAC" 1 && echo "bound /dev/rfcomm0 -> $MAC"
+    echo "== persist =="
+    cat > /etc/systemd/system/carwatch-rfcomm.service <<UNIT
+[Unit]
+Description=CarWatch: bind BT OBD dongle to /dev/rfcomm0
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sh -c 'rfcomm release 0 2>/dev/null || true'
+ExecStart=/usr/bin/rfcomm bind 0 $MAC 1
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload && systemctl enable carwatch-rfcomm.service >/dev/null 2>&1
+    echo "persist unit installed"
+    echo "== test read via rfcomm0 =="
+    cd "$(dirname "$0")/.." 2>/dev/null || cd /home/petrus/CarWatch
+    python3 -m carwatch.elm327 /dev/rfcomm0 2>&1 | tail -20
+    ;;
   scan)
     systemctl start bluetooth || true
     rfkill unblock bluetooth || true
