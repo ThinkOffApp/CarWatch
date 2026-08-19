@@ -27,6 +27,11 @@ CARRIER = "/sys/class/net/eth0/carrier"
 POLL_S = 5
 SETTLE_S = 6          # give the gateway a moment after link-up
 RETRY_COOLDOWN_S = 120  # after a failed session, retry this often while up
+RECONNECT_GAP_S = 30   # adapter absent longer than this = a real reconnect
+                       # (post a fresh line); shorter = a wireless flap (stay
+                       # quiet). Without this a flapping rfcomm0 re-posted the
+                       # "connected" line every flap (claudemm, Aug 19).
+BATT_MILESTONE_PCT = 10  # post a hybrid-SoC line only after this much NET DROP
 GLE_TXT = "/tmp/gle_text.txt"
 POSTER = os.path.expanduser("~/post-as-gle.py")
 
@@ -192,8 +197,12 @@ def run() -> None:
     was_present = ""
     was_up = False
     last_post_readings = ""
-    last_dtc_key = None       # last stored-DTC set, to post only on a CHANGE
-    last_batt_bucket = None   # last hybrid-SoC 10% bucket, for milestone posts
+    last_dtc_key = None        # last stored-DTC set, to post only on a CHANGE
+    last_posted_batt = None    # hybrid-SoC at the last post; a high-water mark
+                               # that follows charge UP silently and posts on a
+                               # >=BATT_MILESTONE_PCT net DROP (wobble-immune)
+    adapter_gone_since = None  # when the adapter last vanished, for flap vs
+                               # genuine-reconnect discrimination
     next_try = 0.0
     # The deep (per-ECU mode-22 Mercedes) probe runs at most ONCE PER DAY and
     # only while the car is STATIONARY. petrus's Pi is mobile and only in the
@@ -208,11 +217,21 @@ def run() -> None:
         up = carrier_up()
         if port and port != was_present:
             print(f"ELM327 adapter appeared at {port}", flush=True)
+            # Only a REAL reconnect (adapter absent > RECONNECT_GAP_S) clears the
+            # post-state to announce a fresh connection; a brief rfcomm0 flap
+            # keeps it, so telemetry does not re-post on every wireless blip.
+            if (adapter_gone_since is not None
+                    and time.time() - adapter_gone_since > RECONNECT_GAP_S):
+                last_post_readings = ""
+                last_dtc_key = None
+                last_posted_batt = None
+            adapter_gone_since = None
             time.sleep(SETTLE_S)
             next_try = 0.0
         if not port and was_present:
             print("ELM327 adapter gone", flush=True)
-            last_post_readings = ""
+            if adapter_gone_since is None:
+                adapter_gone_since = time.time()
         if up and not was_up:
             print("eth0 link UP", flush=True)
             time.sleep(SETTLE_S)
@@ -234,24 +253,30 @@ def run() -> None:
                 line = text + (f" | stored fault codes: {', '.join(dtcs)}"
                                if dtcs else "")
                 batt = result["readings"].get("hybrid_battery_pct")
-                bucket = (int(batt // 10) if isinstance(batt, (int, float))
-                          else None)
                 # Post only on what petrus actually wants, NOT every cycle:
-                # first read after (re)connect, a CHANGED fault-code set, or a
-                # hybrid-SoC 10% milestone. speed/coolant/rpm churn made every
-                # ~60s read differ and spammed the room (petrus, Aug 19: "we
-                # don't need these frequent speed reports"). The dashboard still
-                # shows every live value continuously; the ROOM stays quiet.
+                # first read after a real (re)connect, a CHANGED fault-code set,
+                # or a hybrid-SoC drop milestone. speed/coolant/rpm churn made
+                # every ~60s read differ and spammed the room (petrus, Aug 19:
+                # "we don't need these frequent speed reports"). The dashboard
+                # still shows every live value continuously; the ROOM stays quiet.
                 first = (last_post_readings == "")
                 dtc_changed = (last_dtc_key is not None and dtc_key != last_dtc_key)
-                batt_step = (last_batt_bucket is not None and bucket is not None
-                             and bucket != last_batt_bucket)
+                # SoC-DROP milestone, NOT a bucket crossing: int(batt//10) fires
+                # in BOTH directions, so regen/charge wobble across a boundary
+                # (49.8<->50.1) respams a narrow band (claudemm, Aug 19). Keep
+                # last_posted_batt as a high-water mark that follows charging UP
+                # silently, and post only after a net drop of BATT_MILESTONE_PCT.
+                if (batt is not None and last_posted_batt is not None
+                        and batt > last_posted_batt):
+                    last_posted_batt = batt            # follow charge up, no post
+                batt_step = (last_posted_batt is not None and batt is not None
+                             and last_posted_batt - batt >= BATT_MILESTONE_PCT)
                 if first or dtc_changed or batt_step:
                     post(f"Engine read (live from my OBD port): {line}")
                     last_post_readings = line
+                    if batt is not None:
+                        last_posted_batt = batt        # reset baseline on post
                 last_dtc_key = dtc_key
-                if bucket is not None:
-                    last_batt_bucket = bucket
                 # Deep probe: only when the car is STOPPED and not already done
                 # today. A mid-drive diagnostic sweep both competes with live
                 # telemetry and returns fewer PIDs while looking just as
