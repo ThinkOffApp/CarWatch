@@ -23,6 +23,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from carwatch import voiceroom
 from carwatch.grounding import build_system_prompt
 from carwatch.selfstate import live_facts
 from carwatch.manual import context_for
@@ -246,6 +247,31 @@ def run() -> None:
                 prev_seen = state["last_seen"]
                 state["last_seen"] = msg["created_at"]
                 _save_state(state)
+                sender = msg.get("from") or ""
+                if voiceroom.is_voice_note(msg) and not sender.startswith("@"):
+                    # A spoken note is always addressed to the car - nobody
+                    # says "@eclass" into audio. Agent senders (the car's own
+                    # audio replies included) carry @handles and are skipped,
+                    # which also breaks the answer-your-own-voice loop.
+                    if not _model_ready():
+                        print("model still loading, will retry this voice note",
+                              flush=True)
+                        state["last_seen"] = prev_seen
+                        _save_state(state)
+                        time.sleep(POLL_SECONDS)
+                        break
+                    heard = voiceroom.transcribe(msg["audio_url"])
+                    if not heard:
+                        print("voice note: no usable transcript", flush=True)
+                        continue
+                    print(f"voice note from {sender or 'someone'}: {heard[:80]}",
+                          flush=True)
+                    answer = _think(heard, sender or "someone")
+                    if answer:
+                        voiceroom.post_voice_reply(
+                            config, f'(kuulin: "{heard}")\n\n{answer}',
+                            spoken=answer)
+                    continue
                 if not _mentions_me(msg, handle):
                     continue
                 asker = msg.get("from") or "someone"

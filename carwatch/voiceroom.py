@@ -81,16 +81,14 @@ def transcribe(audio_url: str) -> str:
                 pass
 
 
-def synthesize(text: str) -> str:
-    """Text -> spoken audio file (m4a) path, empty string on failure.
+def tts_wav(text: str) -> str:
+    """Text -> spoken WAV path, empty string on failure.
 
     Voice follows the reply's language so Finnish answers do not come out
-    as an English voice mangling Finnish words.
+    as an English voice mangling Finnish words. Callers own the file.
     """
     os.makedirs(WORK_DIR, exist_ok=True)
-    stem = os.path.join(WORK_DIR, uuid.uuid4().hex[:12])
-    wav = stem + ".wav"
-    m4a = stem + ".m4a"
+    wav = os.path.join(WORK_DIR, uuid.uuid4().hex[:12] + ".wav")
     voice = VOICE_FI if (_FI_HINT.search(text) and os.path.exists(VOICE_FI)) \
         else VOICE_EN
     if not (os.path.exists(PIPER_BIN) and os.path.exists(voice)):
@@ -101,6 +99,18 @@ def synthesize(text: str) -> str:
                            timeout=120)
         if p.returncode != 0 or not os.path.exists(wav):
             return ""
+        return wav
+    except Exception:
+        return ""
+
+
+def synthesize(text: str) -> str:
+    """Text -> spoken audio file (m4a) path, empty string on failure."""
+    wav = tts_wav(text)
+    if not wav:
+        return ""
+    m4a = wav[:-4] + ".m4a"
+    try:
         # m4a/AAC because that is what phones themselves record and play.
         c = _run(["ffmpeg", "-y", "-i", wav, "-c:a", "aac", "-b:a", "64k",
                   m4a], 60)
@@ -139,10 +149,13 @@ def _upload(config: dict, path: str) -> str:
         return ""
 
 
-def post_voice_reply(config: dict, text: str) -> bool:
-    """Speak the reply into the room: audio when possible, text always."""
+def post_voice_reply(config: dict, text: str, spoken: str | None = None) -> bool:
+    """Speak the reply into the room: audio when possible, text always.
+
+    spoken overrides what gets voiced (e.g. the answer alone, without the
+    (kuulin: ...) transcript prefix that belongs only in the text body)."""
     audio_url = ""
-    m4a = synthesize(text)
+    m4a = synthesize(spoken if spoken is not None else text)
     if m4a:
         audio_url = _upload(config, m4a)
         try:

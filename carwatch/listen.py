@@ -139,25 +139,21 @@ def _open_mic():
                             stderr=subprocess.DEVNULL)
 
 
-PIPER = os.path.expanduser("~/.local/bin/piper")
-PIPER_VOICE = os.path.expanduser(
-    "~/carwatch-stack/models/en_US-lessac-medium.onnx")
-
-
 def _speak(text: str) -> bool:
     """Voice a reply through the connected BT sink over A2DP. Call ONLY with
     the mic closed: while SCO capture is live the headset sits in HFP mode
     and the A2DP sink it would play through does not exist (the 20.8.
     aplay-exit-0-but-silence bug)."""
+    from carwatch import voiceroom  # language-aware voice pick (fi/en)
     mac = _bt_pcm_mac("a2dpsrc/sink")
     if not mac:
         print("speak: no BT A2DP sink connected", flush=True)
         return False
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        wav = f.name
+    wav = voiceroom.tts_wav(text)
+    if not wav:
+        print("speak: TTS failed (piper/voice missing?)", flush=True)
+        return False
     try:
-        subprocess.run([PIPER, "-m", PIPER_VOICE, "-f", wav],
-                       input=text.encode(), capture_output=True, timeout=120)
         time.sleep(1.5)   # let the headset fall back from HFP to A2DP
         rc = subprocess.run(
             ["aplay", "-D", f"bluealsa:DEV={mac},PROFILE=a2dp", wav],
