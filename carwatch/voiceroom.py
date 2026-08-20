@@ -124,6 +124,17 @@ def synthesize(text: str) -> str:
             pass
 
 
+def _base(config: dict) -> str:
+    """Same api_base normalization as agent._api: the config stores the bare
+    host (https://groupmind.one) and the /api/v1 prefix is implied - without
+    this the posts land on the web frontend, which happily returns 200 for
+    a page that is not the API (20.8.: post_voice_reply True, no message)."""
+    base = config["api_base"].rstrip("/")
+    if not base.endswith("/api/v1"):
+        base += "/api/v1"
+    return base
+
+
 def _upload(config: dict, path: str) -> str:
     """Multipart upload to the room media store -> public URL ('' on fail)."""
     boundary = uuid.uuid4().hex
@@ -136,7 +147,7 @@ def _upload(config: dict, path: str) -> str:
         f"Content-Type: audio/mp4\r\n\r\n"
     ).encode() + data + f"\r\n--{boundary}--\r\n".encode()
     req = urllib.request.Request(
-        config["api_base"].rstrip("/") + "/upload",
+        _base(config) + "/upload",
         data=body, method="POST",
         headers={
             "X-API-Key": config["api_key"],
@@ -166,7 +177,7 @@ def post_voice_reply(config: dict, text: str, spoken: str | None = None) -> bool
     if audio_url:
         payload["audio_url"] = audio_url
     req = urllib.request.Request(
-        config["api_base"].rstrip("/") + "/messages",
+        _base(config) + "/messages",
         data=json.dumps(payload).encode(), method="POST",
         headers={"X-API-Key": config["api_key"],
                  "Content-Type": "application/json"})
