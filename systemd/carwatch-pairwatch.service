@@ -1,0 +1,14 @@
+[Unit]
+Description=CarWatch continuous Bluetooth audio pairing watch
+After=bluetooth.service network.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+User=petrus
+ExecStart=/usr/bin/bash /home/petrus/CarWatch/scripts/pair-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
