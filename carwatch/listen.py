@@ -99,7 +99,12 @@ def handle_utterance(frames: bytes, on_text):
         print(f"HEARD: {text}", flush=True)
         result = on_text(text)
     else:
-        print("(captured sound but no clear speech)", flush=True)
+        # Duration + level make the journal diagnosable: a 0.8s spike at rms
+        # 4000 is a slammed door, 6s at 1300 is someone talking too far from
+        # the mic - without these the two are the same mute line.
+        secs = len(frames) / (RATE * 2)
+        print(f"(captured sound but no clear speech: {secs:.1f}s, rms {rms(frames):.0f})",
+              flush=True)
     lights.signal("idle")       # back to calm when done
     return result
 
