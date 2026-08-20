@@ -22,7 +22,13 @@ import tempfile
 
 WHISPER_DIR = os.path.expanduser("~/carwatch-stack/whisper.cpp")
 WHISPER_CLI = os.path.join(WHISPER_DIR, "build/bin/whisper-cli")
-WHISPER_MODEL = os.path.join(WHISPER_DIR, "models/ggml-base.en.bin")
+# Prefer the MULTILINGUAL base model when present: petrus speaks Finnish, and
+# the .en model transliterates Finnish into garbled English (20.8. first mic
+# take). base.en stays as the fallback so a Pi without the extra model still
+# works in English.
+_MODEL_MULTI = os.path.join(WHISPER_DIR, "models/ggml-base.bin")
+_MODEL_EN = os.path.join(WHISPER_DIR, "models/ggml-base.en.bin")
+WHISPER_MODEL = _MODEL_MULTI if os.path.exists(_MODEL_MULTI) else _MODEL_EN
 
 
 def record(seconds: int, out_path: str) -> bool:
@@ -44,9 +50,11 @@ def transcribe(wav_path: str) -> str:
         print("whisper cli/model missing", file=sys.stderr)
         return ""
     try:
+        cmd = [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt"]
+        if WHISPER_MODEL == _MODEL_MULTI:
+            cmd += ["-l", "auto"]   # whisper-cli defaults to English otherwise
         out = subprocess.run(
-            [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt"],
-            capture_output=True, text=True, timeout=120).stdout
+            cmd, capture_output=True, text=True, timeout=120).stdout
         # -nt strips timestamps; join the spoken lines, drop blanks.
         text = " ".join(line.strip() for line in out.splitlines() if line.strip())
         # whisper emits bracketed markers for non-speech: [BLANK_AUDIO],

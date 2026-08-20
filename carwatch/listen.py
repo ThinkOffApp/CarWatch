@@ -19,6 +19,7 @@ from __future__ import annotations
 import array
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -59,7 +60,7 @@ def _write_wav(path: str, frames: bytes) -> None:
 # politely answers each fragment, posting overheard speech into the room.
 # The car now only engages when addressed. Overridable per config:
 # voice.wake_words = [] restores always-on; a custom list replaces these.
-WAKE_WORDS = ("gle", "glee", "e-class", "e class", "eclass", "car")
+WAKE_WORDS = ("gle", "glee", "e-class", "e class", "eclass", "car", "vadelma")
 
 
 def _wake_words():
@@ -76,7 +77,10 @@ def _wake_words():
     return WAKE_WORDS
 
 
-def handle_utterance(frames: bytes, on_text) -> None:
+def handle_utterance(frames: bytes, on_text):
+    """Transcribe one utterance and hand it to on_text. Returns whatever
+    on_text returns (the voice handler returns the answer TEXT so listen()
+    can speak it after releasing the mic)."""
     from carwatch import lights  # local import: keeps lights fully optional
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         path = f.name
@@ -84,25 +88,82 @@ def handle_utterance(frames: bytes, on_text) -> None:
     lights.signal("thinking")   # transcribing + answering
     text = transcribe(path)
     os.unlink(path)
+    result = None
     if text:
         wake = _wake_words()
         if wake and not any(w in text.lower() for w in wake):
             # Not addressed to the car: log a stub locally, never post.
             print(f"(ignored, no wake word): {text[:60]}", flush=True)
             lights.signal("idle")
-            return
+            return None
         print(f"HEARD: {text}", flush=True)
-        on_text(text)
+        result = on_text(text)
     else:
         print("(captured sound but no clear speech)", flush=True)
     lights.signal("idle")       # back to calm when done
+    return result
+
+
+def _bt_pcm_mac(suffix: str):
+    """MAC of the connected BT device offering the given bluealsa PCM
+    (e.g. 'hfpag/source' = headset mic, 'a2dpsrc/sink' = playback)."""
+    try:
+        out = subprocess.run(["bluealsa-cli", "list-pcms"],
+                             capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        if line.strip().endswith(suffix):
+            m = re.search(r"dev_([0-9A-F_]+)/", line)
+            if m:
+                return m.group(1).replace("_", ":")
+    return None
 
 
 def _open_mic():
-    return subprocess.Popen(
-        ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", str(CHANNELS),
-         "-t", "raw"],
-        stdout=subprocess.PIPE)
+    cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", str(CHANNELS),
+           "-t", "raw"]
+    # A connected BT headset/car beats the default ALSA device: since 20.8.
+    # the headset is BOTH directions (petrus removed the USB mic). SCO gives
+    # the HFP mic at exactly our 16 kHz.
+    mac = _bt_pcm_mac("hfpag/source")
+    if mac:
+        cmd[1:1] = ["-D", f"bluealsa:DEV={mac},PROFILE=sco"]
+        print(f"mic: bluetooth HFP {mac}", flush=True)
+    else:
+        print("mic: default ALSA device", flush=True)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE)
+
+
+PIPER = os.path.expanduser("~/.local/bin/piper")
+PIPER_VOICE = os.path.expanduser(
+    "~/carwatch-stack/models/en_US-lessac-medium.onnx")
+
+
+def _speak(text: str) -> bool:
+    """Voice a reply through the connected BT sink over A2DP. Call ONLY with
+    the mic closed: while SCO capture is live the headset sits in HFP mode
+    and the A2DP sink it would play through does not exist (the 20.8.
+    aplay-exit-0-but-silence bug)."""
+    mac = _bt_pcm_mac("a2dpsrc/sink")
+    if not mac:
+        print("speak: no BT A2DP sink connected", flush=True)
+        return False
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        wav = f.name
+    try:
+        subprocess.run([PIPER, "-m", PIPER_VOICE, "-f", wav],
+                       input=text.encode(), capture_output=True, timeout=120)
+        time.sleep(1.5)   # let the headset fall back from HFP to A2DP
+        rc = subprocess.run(
+            ["aplay", "-D", f"bluealsa:DEV={mac},PROFILE=a2dp", wav],
+            capture_output=True, timeout=180).returncode
+        return rc == 0
+    except Exception as e:
+        print(f"speak failed: {e}", flush=True)
+        return False
+    finally:
+        os.unlink(wav)
 
 
 def listen(threshold: float, on_text) -> None:
@@ -149,7 +210,19 @@ def listen(threshold: float, on_text) -> None:
                 if quiet >= SILENCE_HANGOVER_CHUNKS:
                     in_speech = False
                     if len(speech) - quiet >= MIN_SPEECH_CHUNKS:
-                        handle_utterance(b"".join(speech), on_text)
+                        reply = handle_utterance(b"".join(speech), on_text)
+                        if reply:
+                            # Voice the answer with the mic CLOSED: SCO and
+                            # A2DP cannot be live at once on one headset,
+                            # then reopen (also discards echo of our own
+                            # voice buffered during playback).
+                            try:
+                                proc.terminate()
+                                proc.wait(timeout=5)
+                            except Exception:
+                                pass
+                            _speak(reply)
+                            proc = _open_mic()
                     speech = []
     finally:
         proc.terminate()
@@ -177,6 +250,25 @@ def _post_on_text(text: str) -> None:
         print(f"post failed: {e}", flush=True)
 
 
+def _voice_on_text(text: str):
+    """Spoken conversation: heard speech -> grounded answer -> VOICED back
+    through the headset/car speakers, plus a room transcript so the exchange
+    stays visible on the phone/watch. Returns the answer text; listen() does
+    the actual speaking after it has released the mic."""
+    answer = ask_gle(text)
+    if not answer:
+        return None
+    try:
+        with open("/tmp/gle_text.txt", "w") as f:
+            f.write(f"(heard: \"{text}\")\n\n{answer}")
+        subprocess.run(
+            ["python3", os.path.expanduser("~/post-as-gle.py")],
+            timeout=30, capture_output=True)
+    except Exception as e:
+        print(f"post failed: {e}", flush=True)
+    return answer
+
+
 def main() -> None:
     threshold = DEFAULT_THRESHOLD
     if "--threshold" in sys.argv:
@@ -196,7 +288,12 @@ def main() -> None:
         print(f"peak {peak:.0f} — set threshold a bit above the quiet floor",
               flush=True)
         return
-    on_text = _post_on_text if "--post" in sys.argv else _default_on_text
+    if "--voice" in sys.argv:
+        on_text = _voice_on_text
+    elif "--post" in sys.argv:
+        on_text = _post_on_text
+    else:
+        on_text = _default_on_text
     listen(threshold, on_text)
 
 

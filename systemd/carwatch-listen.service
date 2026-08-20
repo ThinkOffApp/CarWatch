@@ -8,7 +8,10 @@ WorkingDirectory=/home/petrus/CarWatch
 Environment=CARWATCH_STATE=/home/petrus/.carwatch
 Environment=PYTHONPATH=/home/petrus/CarWatch
 # Sole owner of the mic - never run another arecord alongside it.
-ExecStart=/usr/bin/python3 -u -m carwatch.listen --threshold 1100 --post
+# --voice: answers are SPOKEN through the connected BT sink (and posted to
+# the room as a transcript). Threshold tuned for the SF-558 USB mic; the BT
+# headset SCO path may need retuning via --calibrate.
+ExecStart=/usr/bin/python3 -u -m carwatch.listen --threshold 1100 --voice
 Restart=always
 RestartSec=5
 
