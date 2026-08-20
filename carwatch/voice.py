@@ -52,7 +52,13 @@ def transcribe(wav_path: str) -> str:
     try:
         cmd = [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt"]
         if WHISPER_MODEL == _MODEL_MULTI:
-            cmd += ["-l", "auto"]   # whisper-cli defaults to English otherwise
+            # -l fi, NOT auto: auto GUESSES per clip, and one mushy capture
+            # flipped a whole exchange to Italian (20.8., claudemm's catch -
+            # Finnish confuses with Italian/Estonian rhythm). The live mic
+            # lives in a Finnish home/car; English through this path degrades
+            # to an ignored garble, and room voice notes keep auto detection
+            # (whisper-small there is a far better language detector).
+            cmd += ["-l", "fi"]
         out = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120).stdout
         # -nt strips timestamps; join the spoken lines, drop blanks.

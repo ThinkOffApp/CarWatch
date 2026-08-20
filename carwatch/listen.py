@@ -77,6 +77,14 @@ def _wake_words():
     return WAKE_WORDS
 
 
+def _addressed(text: str, wake) -> bool:
+    """Word-boundary wake match. Substring matching let 'car' hide inside
+    'caramelli' in an Italian mistranscription and the car answered ambient
+    chatter into the room (20.8.) - a wake word must be a whole WORD."""
+    pat = re.compile(r"\b(" + "|".join(re.escape(w) for w in wake) + r")\b")
+    return bool(pat.search(text.lower()))
+
+
 def handle_utterance(frames: bytes, on_text):
     """Transcribe one utterance and hand it to on_text. Returns whatever
     on_text returns (the voice handler returns the answer TEXT so listen()
@@ -91,7 +99,7 @@ def handle_utterance(frames: bytes, on_text):
     result = None
     if text:
         wake = _wake_words()
-        if wake and not any(w in text.lower() for w in wake):
+        if wake and not _addressed(text, wake):
             # Not addressed to the car: log a stub locally, never post.
             print(f"(ignored, no wake word): {text[:60]}", flush=True)
             lights.signal("idle")
@@ -211,6 +219,7 @@ def listen(threshold: float, on_text) -> None:
     another arecord (mic contention was the Aug 12 failure).
     """
     proc = _open_mic()
+    opened_at = time.time()
     print(f"listening (threshold {threshold:.0f}) ...", flush=True)
     speech: list[bytes] = []
     quiet = 0
@@ -226,6 +235,15 @@ def listen(threshold: float, on_text) -> None:
                 # No mic around at all (no USB device, headset off) means
                 # every reopen fails instantly - back off so the loop idles
                 # gently until something appears instead of hammering arecord.
+                if time.time() - opened_at < 2:
+                    # Died instantly although a device exists = the device is
+                    # WEDGED, usually a leaked arecord still holding it (the
+                    # 20.8. reopen storm after the first USB speak cycle).
+                    # This service is the mic's sole legitimate owner, so
+                    # clearing every arecord is safe - then breathe.
+                    subprocess.run(["pkill", "-9", "-x", "arecord"],
+                                   capture_output=True)
+                    time.sleep(2)
                 has_mic = _usb_audio_device("capture") or _bt_pcm_mac("hfpag/source")
                 time.sleep(0.3 if has_mic else 5)
                 try:
@@ -233,6 +251,7 @@ def listen(threshold: float, on_text) -> None:
                 except Exception:
                     pass
                 proc = _open_mic()
+                opened_at = time.time()
                 speech, quiet, in_speech = [], 0, False
                 continue
             level = rms(chunk)
@@ -259,9 +278,17 @@ def listen(threshold: float, on_text) -> None:
                                 proc.terminate()
                                 proc.wait(timeout=5)
                             except Exception:
-                                pass
+                                # A terminate that did not stick leaves the
+                                # capture device held forever and every
+                                # reopen fails busy - make sure it is dead.
+                                try:
+                                    proc.kill()
+                                    proc.wait(timeout=5)
+                                except Exception:
+                                    pass
                             _speak(reply)
                             proc = _open_mic()
+                            opened_at = time.time()
                     speech = []
     finally:
         proc.terminate()
