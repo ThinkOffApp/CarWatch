@@ -24,10 +24,12 @@ import uuid
 
 STACK = os.path.expanduser("~/carwatch-stack")
 WHISPER_BIN = os.path.join(STACK, "whisper.cpp/build/bin/whisper-cli")
-# Multilingual first (petrus speaks Finnish); the English-only model stays
-# as the fallback so the feature degrades instead of dying if the
-# multilingual download is missing.
+# Best Finnish ears first: small (466MB, loads per-note so it does not
+# fight Qwen for resident memory - voice notes are async, latency matters
+# less than accuracy), then multilingual base, then the English-only
+# fallback so the feature degrades instead of dying.
 WHISPER_MODELS = [
+    os.path.join(STACK, "whisper.cpp/models/ggml-small.bin"),
     os.path.join(STACK, "whisper.cpp/models/ggml-base.bin"),
     os.path.join(STACK, "whisper.cpp/models/ggml-base.en.bin"),
 ]
