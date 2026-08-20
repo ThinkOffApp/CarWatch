@@ -132,7 +132,11 @@ def _open_mic():
         print(f"mic: bluetooth HFP {mac}", flush=True)
     else:
         print("mic: default ALSA device", flush=True)
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    # stderr silenced: with no capture device present arecord prints a
+    # multi-line ALSA error block, and the reopen loop would flood the
+    # journal with it (20.8., headset off).
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
 
 
 PIPER = os.path.expanduser("~/.local/bin/piper")
@@ -188,7 +192,10 @@ def listen(threshold: float, on_text) -> None:
                 chunk = b""
             if not chunk:
                 # arecord ended or was interrupted; reopen and continue.
-                time.sleep(0.3)
+                # No BT mic around (headset off) means every reopen fails
+                # instantly - back off so the loop idles gently until the
+                # headset reconnects instead of hammering arecord.
+                time.sleep(0.3 if _bt_pcm_mac("hfpag/source") else 5)
                 try:
                     proc.terminate()
                 except Exception:
