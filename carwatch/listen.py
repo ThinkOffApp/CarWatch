@@ -120,14 +120,39 @@ def _bt_pcm_mac(suffix: str):
     return None
 
 
+def _usb_audio_device(kind: str):
+    """ALSA device string for an attached USB audio device, else None.
+
+    kind: 'capture' (arecord -l) or 'playback' (aplay -l). Returns
+    'plughw:N,M' - plughw so ALSA resamples to our 16 kHz. A wired USB
+    speakerphone (the Jabra Speak2 40, ordered 20.8.) beats Bluetooth:
+    hardware echo cancel, full duplex, and none of the A2DP/HFP mode
+    switching that mutes one direction while the other is live.
+    """
+    cmd = ["arecord", "-l"] if kind == "capture" else ["aplay", "-l"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True,
+                             timeout=5).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        m = re.match(r"card (\d+): [^\[]*\[([^\]]*)\], device (\d+):", line)
+        if m and re.search(r"jabra|speak|usb", m.group(2), re.IGNORECASE):
+            return f"plughw:{m.group(1)},{m.group(3)}"
+    return None
+
+
 def _open_mic():
     cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", str(CHANNELS),
            "-t", "raw"]
-    # A connected BT headset/car beats the default ALSA device: since 20.8.
-    # the headset is BOTH directions (petrus removed the USB mic). SCO gives
-    # the HFP mic at exactly our 16 kHz.
-    mac = _bt_pcm_mac("hfpag/source")
-    if mac:
+    # Priority: USB speakerphone, then BT headset SCO (the headset is both
+    # directions since 20.8., petrus removed the old USB mic), then default.
+    usb = _usb_audio_device("capture")
+    mac = None if usb else _bt_pcm_mac("hfpag/source")
+    if usb:
+        cmd[1:1] = ["-D", usb]
+        print(f"mic: USB audio {usb}", flush=True)
+    elif mac:
         cmd[1:1] = ["-D", f"bluealsa:DEV={mac},PROFILE=sco"]
         print(f"mic: bluetooth HFP {mac}", flush=True)
     else:
@@ -145,18 +170,23 @@ def _speak(text: str) -> bool:
     and the A2DP sink it would play through does not exist (the 20.8.
     aplay-exit-0-but-silence bug)."""
     from carwatch import voiceroom  # language-aware voice pick (fi/en)
-    mac = _bt_pcm_mac("a2dpsrc/sink")
-    if not mac:
-        print("speak: no BT A2DP sink connected", flush=True)
-        return False
+    target = _usb_audio_device("playback")
+    bt = target is None
+    if bt:
+        mac = _bt_pcm_mac("a2dpsrc/sink")
+        if not mac:
+            print("speak: no USB or BT audio output connected", flush=True)
+            return False
+        target = f"bluealsa:DEV={mac},PROFILE=a2dp"
     wav = voiceroom.tts_wav(text)
     if not wav:
         print("speak: TTS failed (piper/voice missing?)", flush=True)
         return False
     try:
-        time.sleep(1.5)   # let the headset fall back from HFP to A2DP
+        if bt:
+            time.sleep(1.5)   # let the headset fall back from HFP to A2DP
         rc = subprocess.run(
-            ["aplay", "-D", f"bluealsa:DEV={mac},PROFILE=a2dp", wav],
+            ["aplay", "-D", target, wav],
             capture_output=True, timeout=180).returncode
         return rc == 0
     except Exception as e:
@@ -188,10 +218,11 @@ def listen(threshold: float, on_text) -> None:
                 chunk = b""
             if not chunk:
                 # arecord ended or was interrupted; reopen and continue.
-                # No BT mic around (headset off) means every reopen fails
-                # instantly - back off so the loop idles gently until the
-                # headset reconnects instead of hammering arecord.
-                time.sleep(0.3 if _bt_pcm_mac("hfpag/source") else 5)
+                # No mic around at all (no USB device, headset off) means
+                # every reopen fails instantly - back off so the loop idles
+                # gently until something appears instead of hammering arecord.
+                has_mic = _usb_audio_device("capture") or _bt_pcm_mac("hfpag/source")
+                time.sleep(0.3 if has_mic else 5)
                 try:
                     proc.terminate()
                 except Exception:
