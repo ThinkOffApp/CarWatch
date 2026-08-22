@@ -701,7 +701,22 @@ if __name__ == "__main__":
     import json
     import sys
     args = sys.argv[1:]
-    if args and args[0] == "scan":
+    if args and args[0] == "deep":
+        # petrus, Aug 22, having asked four times: the PER-ECU read, not the
+        # capability list. Reached over the car's own dial-out tunnel through
+        # the existing /api/obd/scan style path, so it needs no inbound access.
+        # Strictly read-only: passive monitoring plus mode-22 READ requests.
+        from . import deepscan as _ds
+        port = args[1] if len(args) > 1 else DEFAULT_PORT
+        _elm = Elm327(port)
+        try:
+            mon = _ds.monitor_bus(_elm, seconds=float(args[2]) if len(args) > 2 else 12.0)
+            ident = _ds.probe_identity(_elm)
+            print(json.dumps({"ok": True, "monitor": mon, "identity": ident,
+                              "summary": _ds.summarise(mon, ident)}, indent=2))
+        finally:
+            _elm.close()
+    elif args and args[0] == "scan":
         port = args[1] if len(args) > 1 else DEFAULT_PORT
         print(json.dumps(scan_capabilities(port), indent=2))
     elif args and args[0] == "all":

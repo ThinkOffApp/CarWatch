@@ -766,6 +766,38 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
+        if self.path == "/api/obd/deep":
+            # The PER-ECU read, distinct from /api/obd/scan which only lists
+            # advertised PIDs. petrus asked four times for this and kept being
+            # handed the capability list instead; that conflation is the bug
+            # this endpoint closes. Read-only: passive ATMA monitoring plus
+            # mode-22 READ requests on Mercedes-range addresses.
+            import subprocess as _sp, os as _os
+            _elm = next((p for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
+                         if _os.path.exists(p)), None)
+            if not _elm:
+                return self._send(200, json.dumps(
+                    {"ok": False, "error": "no ELM327 adapter present"}),
+                    "application/json")
+            try:
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)) or 0)
+                secs = "12"
+                if body:
+                    try:
+                        secs = str(float(json.loads(body).get("seconds", 12)))
+                    except Exception:
+                        pass
+                r = _sp.run(
+                    ["sudo", "python3", "-m", "carwatch.elm327", "deep", _elm, secs],
+                    capture_output=True, text=True, timeout=180,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
+                out = (r.stdout + r.stderr).strip()[-8000:]
+                return self._send(200, json.dumps({"ok": True, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         if self.path == "/api/obd/scan":
             # READ-ONLY capability probe: which PIDs the car advertises, VIN,
             # stored DTCs. Never writes. Produces the "what our module can get
