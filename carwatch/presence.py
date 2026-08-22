@@ -141,6 +141,20 @@ def run() -> None:
                 reach_url = _rf.read().strip()
         except Exception:
             reach_url = ""
+        # The dashboard now requires a token for requests arriving through the
+        # tunnel. Publish it WITH the URL, otherwise everything that opens the
+        # published link - the CodeWatch car-dash button most of all - starts
+        # getting 401 the moment the car leaves home. The heartbeat already
+        # carries per-user credentials, so this adds no new exposure: whoever
+        # can read the presence payload is already inside.
+        if reach_url:
+            try:
+                with open(os.path.expanduser("~/.carwatch/dash-token")) as _tf:
+                    _tok = _tf.read().strip()
+                if _tok and "t=" not in reach_url:
+                    reach_url += ("&" if "?" in reach_url else "?") + "t=" + _tok
+            except Exception:
+                pass          # no token yet: publish the bare URL as before
         # The phone and the Pi share a LAN in the car (the phone's own
         # hotspot), so the dash can talk to the Pi directly instead of
         # round-tripping the tunnel: publish our current address.
