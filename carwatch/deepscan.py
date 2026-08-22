@@ -34,11 +34,15 @@ def monitor_bus(elm, seconds: float = 12.0) -> dict:
     """Passively watch the bus and report which CAN IDs actually appear."""
     # Headers ON so each frame carries its arbitration ID, otherwise every
     # line looks alike and the capture tells us nothing about who is talking.
-    elm.cmd("ATZ", 2.0)
+    elm.cmd("ATZ", 3.0)
+    time.sleep(1.0)          # the reset drops the adapter briefly
     elm.cmd("ATE0", 1.0)
     elm.cmd("ATL0", 1.0)
     elm.cmd("ATH1", 1.0)
     elm.cmd("ATSP0", 1.0)
+    # Wake the protocol before monitoring: on a cold link ATMA can return
+    # nothing simply because no protocol has been negotiated yet.
+    elm.cmd("0100", 4.0)
     # ATMA never returns a prompt on its own: it streams until interrupted,
     # so read for a fixed window and then send a bare CR to stop it.
     import os

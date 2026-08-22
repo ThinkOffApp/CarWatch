@@ -707,15 +707,39 @@ if __name__ == "__main__":
         # the existing /api/obd/scan style path, so it needs no inbound access.
         # Strictly read-only: passive monitoring plus mode-22 READ requests.
         from . import deepscan as _ds
+        import subprocess as _sp
         port = args[1] if len(args) > 1 else DEFAULT_PORT
-        _elm = Elm327(port)
+        # The live poller owns this serial port and polls it continuously.
+        # Two readers on one ELM327 gives EIO half way through, which is
+        # exactly how the first attempt died. Pause it, probe, restore.
+        _paused = False
         try:
+            _sp.run(["systemctl", "stop", "carwatch-obd.service"],
+                    capture_output=True, timeout=20)
+            _paused = True
+            time.sleep(1.5)
+        except Exception:
+            pass
+        _elm = None
+        try:
+            _elm = Elm327(port)
             mon = _ds.monitor_bus(_elm, seconds=float(args[2]) if len(args) > 2 else 12.0)
             ident = _ds.probe_identity(_elm)
             print(json.dumps({"ok": True, "monitor": mon, "identity": ident,
                               "summary": _ds.summarise(mon, ident)}, indent=2))
         finally:
-            _elm.close()
+            if _elm is not None:
+                try:
+                    _elm.close()
+                except Exception:
+                    pass
+            # The car must never be left without its live read.
+            if _paused:
+                try:
+                    _sp.run(["systemctl", "start", "carwatch-obd.service"],
+                            capture_output=True, timeout=20)
+                except Exception:
+                    pass
     elif args and args[0] == "scan":
         port = args[1] if len(args) > 1 else DEFAULT_PORT
         print(json.dumps(scan_capabilities(port), indent=2))
