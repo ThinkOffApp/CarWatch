@@ -83,11 +83,44 @@ class Commands:
             return self._battery()
         if re.search(r"\b(status|where)\b|\bhow are\b", body):
             return self._status()
+        # petrus, Aug 22, unable to reach the Pi from a hospital room: the
+        # deep probe has to be triggerable from the room, because the car is
+        # behind the hotspot's NAT and nobody has a shell on it.
+        if re.search(r"\b(deepscan|deep scan|syvaskannaus|syväskannaus)\b", body):
+            return self._deepscan()
         if re.search(r"\b(help|commands)\b", body):
-            return ("I answer: battery, status/where, help. "
+            return ("I answer: battery, status/where, deepscan, help. "
                     "More arrives with the OBD dongle.")
         # Unknown ask: one short pointer, not a status dump (kimi3: chatty).
         return "Not sure what you mean - try battery, status, or help."
+
+    def _deepscan(self) -> str:
+        """Passive bus capture + Mercedes-address identity probe, read only.
+
+        Runs on the Pi itself, so it works while the car is out on the
+        hotspot and nothing can reach in. Honest on failure: says what broke
+        rather than reporting a clean-looking empty result.
+        """
+        try:
+            from . import deepscan as ds
+            from .elm327 import Elm327
+        except Exception as e:
+            return f"Deep scan unavailable: {type(e).__name__}."
+        elm = None
+        try:
+            elm = Elm327()
+            mon = ds.monitor_bus(elm, seconds=12.0)
+            ident = ds.probe_identity(elm)
+            return "Deep scan: " + ds.summarise(mon, ident)
+        except Exception as e:
+            return (f"Deep scan failed: {type(e).__name__}: {str(e)[:90]}. "
+                    "The adapter may be busy with the live read.")
+        finally:
+            if elm is not None:
+                try:
+                    elm.close()
+                except Exception:
+                    pass
 
     def _status(self) -> str:
         state = getattr(self.trips, "state", None)
