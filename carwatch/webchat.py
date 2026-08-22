@@ -403,7 +403,67 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    # ── Access control ──────────────────────────────────────────────────
+    # claudemm found the dashboard had NO authentication while it was exposed
+    # through a public tunnel: anyone holding the URL could read the car and
+    # call /api/update, /api/obd/deep, /api/car-speak. petrus, Aug 22: "ok tee
+    # tunnistautuminen mutta joku helppo ja nopea."
+    #
+    # Easy and fast means he types nothing at home. Requests arriving on the
+    # local network stay open; requests that came through the tunnel must
+    # carry the token. The tunnel is identifiable because cloudflared adds
+    # forwarding headers - the socket address is useless here, since
+    # cloudflared connects from localhost and would otherwise look local.
+    TOKEN_PATH = os.path.expanduser("~/.carwatch/dash-token")
+
+    @classmethod
+    def _token(cls) -> str:
+        try:
+            with open(cls.TOKEN_PATH) as fh:
+                t = fh.read().strip()
+                if t:
+                    return t
+        except Exception:
+            pass
+        # First run: mint one and keep it. 32 hex chars is unguessable and
+        # still fits in a URL a person can paste.
+        import secrets
+        t = secrets.token_hex(16)
+        try:
+            os.makedirs(os.path.dirname(cls.TOKEN_PATH), exist_ok=True)
+            with open(cls.TOKEN_PATH, "w") as fh:
+                fh.write(t)
+            os.chmod(cls.TOKEN_PATH, 0o600)
+        except Exception:
+            pass
+        return t
+
+    def _came_through_tunnel(self) -> bool:
+        for h in ("cf-connecting-ip", "x-forwarded-for", "cf-ray"):
+            if self.headers.get(h):
+                return True
+        return False
+
+    def _authorised(self) -> bool:
+        if not self._came_through_tunnel():
+            return True                      # same network as the car
+        want = self._token()
+        auth = (self.headers.get("Authorization") or "").strip()
+        if auth.lower().startswith("bearer ") and auth[7:].strip() == want:
+            return True
+        # ?t=... so a plain link works in a browser without any typing.
+        from urllib.parse import urlparse, parse_qs
+        got = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+        import hmac
+        return hmac.compare_digest(got, want)
+
+    def _deny(self):
+        self._send(401, json.dumps({"ok": False, "error": "token required"}),
+                   "application/json")
+
     def do_GET(self):
+        if not self._authorised():
+            return self._deny()
         if self.path in ("/", "/index.html"):
             self._send(200, PAGE)
         elif self.path == "/api/wifi/scan":
@@ -632,6 +692,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "not found")
 
     def do_POST(self):
+        # Writes and probes are the dangerous half: gate them the same way.
+        if not self._authorised():
+            return self._deny()
         if self.path == "/api/update":
             # One-tap self-update from the dashboard, from ANYWHERE (petrus
             # was blocked getting a fix onto the car while it was on his
