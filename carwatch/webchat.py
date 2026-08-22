@@ -464,7 +464,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._authorised():
             return self._deny()
-        if self.path in ("/", "/index.html"):
+        # Compare WITHOUT the query string: the published tunnel link now
+        # carries ?t=<token>, so a literal match on "/" stopped matching and
+        # the front page 404'd. Only the exact-match routes need this; the
+        # startswith routes below already tolerate a query.
+        if self.path.split("?", 1)[0] in ("/", "/index.html"):
             self._send(200, PAGE)
         elif self.path == "/api/wifi/scan":
             import subprocess as _sp
