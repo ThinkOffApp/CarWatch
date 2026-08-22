@@ -34,8 +34,10 @@ def monitor_bus(elm, seconds: float = 12.0) -> dict:
     """Passively watch the bus and report which CAN IDs actually appear."""
     # Headers ON so each frame carries its arbitration ID, otherwise every
     # line looks alike and the capture tells us nothing about who is talking.
-    elm.cmd("ATZ", 3.0)
-    time.sleep(1.0)          # the reset drops the adapter briefly
+    # No ATZ here. On the wireless adapter a reset tears down the Bluetooth
+    # RFCOMM link, the file descriptor dies with it, and the very next command
+    # fails with EIO - which is exactly how this failed twice. The live poller
+    # has already initialised the adapter, so configure it in place instead.
     elm.cmd("ATE0", 1.0)
     elm.cmd("ATL0", 1.0)
     elm.cmd("ATH1", 1.0)
