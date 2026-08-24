@@ -24,7 +24,22 @@ from __future__ import annotations
 import os
 import time
 
-DEFAULT_PORT = "/dev/ttyUSB0"
+
+def _first_present_port() -> str:
+    """USB adapters first, then the Bluetooth rfcomm binding.
+
+    A bare "/dev/ttyUSB0" default sent every no-argument invocation to a
+    device that does not exist when the adapter is the Bluetooth ELM327
+    (grok, Aug 24: probe looked only at ttyUSB0 while the car was live on
+    rfcomm0). Falls back to ttyUSB0 so error messages still name a path.
+    """
+    for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0"):
+        if os.path.exists(p):
+            return p
+    return "/dev/ttyUSB0"
+
+
+DEFAULT_PORT = _first_present_port()
 DEFAULT_BAUD = 38400
 
 
