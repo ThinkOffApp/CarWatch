@@ -774,8 +774,30 @@ if __name__ == "__main__":
             pass
         _elm = None
         try:
-            _elm = Elm327(port)
-            print(json.dumps({"ok": True, **_ds.record_bus(_elm, secs)}))
+            # The Bluetooth ELM drops its RFCOMM link when its reader goes
+            # away and needs one failed touch to re-establish: the in-car
+            # deep on Aug 24 succeeded only on the second attempt (errno 5
+            # first). Bake that observed pattern in instead of failing.
+            _last = None
+            for _attempt in range(3):
+                try:
+                    _elm = Elm327(port)
+                    print(json.dumps({"ok": True, "attempt": _attempt + 1,
+                                      **_ds.record_bus(_elm, secs)}))
+                    _last = None
+                    break
+                except OSError as _e:
+                    _last = _e
+                    try:
+                        if _elm is not None:
+                            _elm.close()
+                    except Exception:
+                        pass
+                    _elm = None
+                    time.sleep(3.0)
+            if _last is not None:
+                print(json.dumps({"ok": False,
+                                  "error": f"record failed after retries: {_last}"}))
         finally:
             if _elm is not None:
                 try:
