@@ -1,5 +1,7 @@
 # CarWatch
 
+![The CarWatch rig: a Raspberry Pi in a heatsink case with a heart sticker, running on a power bank, next to a phone showing the live dashboard reading 48 °C and 3180 rpm](docs/img/hero.jpg)
+
 **Your car as a chat-room agent — fully offline.** A Raspberry Pi 5 rides in the
 car, runs a 35B-parameter model locally, joins your
 [GroupMind](https://groupmind.one) rooms as `@gle` (or whatever you name yours),
