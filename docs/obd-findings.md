@@ -34,16 +34,28 @@ fake adapter's genuine P0420 correctly with zero phantoms, and the
 CAN-aware rewrite of the daily reader reaches the same verdict.
 **Both cars are clean. No garage visit.**
 
-## Deep probe (carwatch/obd_probe.py) — armed, verified, not yet run on a car
-Sweeps every advertised PID, reads the VIN (mode 09), dumps raw DTC frames,
-tries UDS mode-22 candidates. Proven complete against the fake adapter
-(all five result posts, correct decodes). Its first in-car attempt on
-Aug 15 was killed 2s in by the service restart's cgroup sweep — launcher
-now a systemd transient unit that survives restarts. Fires automatically
-at the next plug-in and posts everything to the room.
+## Deep probe — first in-car run, E 300e, Aug 24 2026
+BT ELM327 on `/dev/rfcomm0` (not USB). Room-triggered; Petrus did not type
+`deepscan`. First attempt died with errno 5; second run 12.8 s.
+
+- **Standard OBD:** 12 PIDs, VIN readable (mode 09). Live parked: 0 rpm,
+  coolant 31–34 C, 0 km/h, hybrid SoC 84.7→84.3 % on 0x5B, 12 V rail 14.4 V
+  (ready / DC-DC).
+- **Move (Petrus shifting the car):** 3 km/h, rpm still 0 (EV), SoC 83.9 %,
+  12 V dropped to 12.7 V.
+- **Mode-22 on generic 7E0–7E5:** silent. Not proof the data is absent.
+- **29-bit UDS 18DAxx:** silent on this adapter.
+- **Mercedes 11-bit 0x300–0x330:** broadcast traffic, not UDS replies.
+  Repeat transmitters: 0x307 (continuous 8-byte frame), 0x328, 0x33D.
+- **Dashboard "probe car connection"** only looked at `/dev/ttyUSB0` while
+  the live path was rfcomm0. Fixed in `69064eb` (first present of ttyUSB0/1,
+  then rfcomm0). Pi pulled that over `/api/update` the same session.
+
+The Aug 15 in-car attempt was killed 2 s in by a cgroup sweep. This session
+is the first that finished.
 
 ## Open items
 - GLE hybrid SoC via Mercedes-specific PIDs (Berlin, needs the GLE)
-- First real deep-probe run (next plug-in, any car)
+- ATMA 60–120 s on 0x307/0x328/0x33D during a real drive, then decode
 - Meaningful-change post threshold + daily digest + plain-language fault
   explanations (phase-4 product layer)
