@@ -468,6 +468,19 @@ class Handler(BaseHTTPRequestHandler):
         # carries ?t=<token>, so a literal match on "/" stopped matching and
         # the front page 404'd. Only the exact-match routes need this; the
         # startswith routes below already tolerate a query.
+        if self.path.split("?", 1)[0] == "/api/obd/record/latest":
+            # Fetch the newest capture for offline decoding on a bigger
+            # machine. Text, capped, newest file wins.
+            import glob as _glob, os as _os
+            logs = sorted(_glob.glob(_os.path.expanduser("~/.carwatch/can-logs/rec-*.log")))
+            alt = sorted(_glob.glob("/root/.carwatch/can-logs/rec-*.log"))
+            logs = logs or alt
+            if not logs:
+                return self._send(200, json.dumps({"ok": False, "error": "no captures yet"}),
+                                  "application/json")
+            with open(logs[-1], "rb") as f:
+                data = f.read()[-2_000_000:]
+            return self._send(200, data, "text/plain")
         if self.path.split("?", 1)[0] in ("/", "/index.html"):
             self._send(200, PAGE)
         elif self.path == "/api/wifi/scan":
@@ -860,6 +873,36 @@ class Handler(BaseHTTPRequestHandler):
                     cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
                 out = (r.stdout + r.stderr).strip()[-8000:]
+                return self._send(200, json.dumps({"ok": True, "output": out}),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if self.path == "/api/obd/record":
+            # Raw ATMA capture for the broadcast-stream decode (petrus,
+            # Aug 24: "selvittaa broadcast-virta"). Same read-only pause/
+            # restore path as deep, just longer and saved to disk.
+            import subprocess as _sp, os as _os
+            _elm = next((p for p in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")
+                         if _os.path.exists(p)), None)
+            if not _elm:
+                return self._send(200, json.dumps(
+                    {"ok": False, "error": "no ELM327 adapter present"}),
+                    "application/json")
+            try:
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)) or 0)
+                secs = "90"
+                if body:
+                    try:
+                        secs = str(min(300.0, float(json.loads(body).get("seconds", 90))))
+                    except Exception:
+                        pass
+                r = _sp.run(
+                    ["sudo", "python3", "-m", "carwatch.elm327", "record", _elm, secs],
+                    capture_output=True, text=True, timeout=int(float(secs)) + 120,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
+                out = (r.stdout + r.stderr).strip()[-4000:]
                 return self._send(200, json.dumps({"ok": True, "output": out}),
                                   "application/json")
             except Exception as e:

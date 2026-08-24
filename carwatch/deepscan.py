@@ -143,3 +143,60 @@ def summarise(mon: dict, ident: dict) -> str:
             "Mercedes-style addresses tried."
         )
     return " ".join(parts)
+
+
+def record_bus(elm, seconds: float = 90.0, out_dir: str = None) -> dict:
+    """Record raw ATMA traffic to disk for offline decoding.
+
+    The passive counterpart of monitor_bus with a file instead of a
+    summary: petrus, Aug 24, after the 0x300-range discovery: "selvittaa
+    broadcast-virta". Chunks are stamped with monotonic-ish wall time so
+    the decode can correlate bytes with what the car was doing.
+    """
+    import os, json, time as _t
+    out_dir = out_dir or os.path.expanduser(
+        os.environ.get("CARWATCH_STATE", "~/.carwatch")) + "/can-logs"
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, time.strftime("rec-%Y%m%d-%H%M%S.log"))
+    elm.cmd("ATE0", 1.0)
+    elm.cmd("ATL0", 1.0)
+    elm.cmd("ATH1", 1.0)
+    elm.cmd("ATSP0", 1.0)
+    elm.cmd("0100", 4.0)
+    os.write(elm.fd, b"ATMA\r")
+    frames = 0
+    ids = set()
+    end = time.time() + seconds
+    with open(path, "w") as f:
+        f.write(json.dumps({"started": time.time(), "seconds": seconds}) + "\n")
+        buf = bytearray()
+        while time.time() < end:
+            try:
+                chunk = os.read(elm.fd, 1024)
+            except BlockingIOError:
+                chunk = b""
+            except OSError:
+                break
+            if chunk:
+                buf.extend(chunk)
+                while b"\r" in buf:
+                    line, _, rest = bytes(buf).partition(b"\r")
+                    buf = bytearray(rest)
+                    text = line.decode("ascii", "replace").strip()
+                    if not text or text == ">":
+                        continue
+                    frames += 1
+                    tok = text.split()
+                    if tok and all(c in "0123456789ABCDEF" for c in tok[0]):
+                        ids.add(tok[0])
+                    f.write(f"{time.time():.3f} {text}\n")
+            else:
+                time.sleep(0.02)
+    os.write(elm.fd, b"\r")
+    time.sleep(0.5)
+    try:
+        os.read(elm.fd, 4096)
+    except Exception:
+        pass
+    return {"path": path, "frames": frames, "unique_ids": sorted(ids),
+            "seconds": seconds}

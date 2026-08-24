@@ -755,6 +755,39 @@ if __name__ == "__main__":
                             capture_output=True, timeout=20)
                 except Exception:
                     pass
+    elif args and args[0] == "record":
+        # Raw ATMA capture to disk for the broadcast-stream decode (petrus,
+        # Aug 24). Same pause/restore discipline as "deep": one reader on
+        # the serial port at a time, and the car never stays without its
+        # live poll.
+        from . import deepscan as _ds
+        import subprocess as _sp
+        port = args[1] if len(args) > 1 else DEFAULT_PORT
+        secs = float(args[2]) if len(args) > 2 else 90.0
+        _paused = False
+        try:
+            _sp.run(["systemctl", "stop", "carwatch-obd.service"],
+                    capture_output=True, timeout=20)
+            _paused = True
+            time.sleep(1.5)
+        except Exception:
+            pass
+        _elm = None
+        try:
+            _elm = Elm327(port)
+            print(json.dumps({"ok": True, **_ds.record_bus(_elm, secs)}))
+        finally:
+            if _elm is not None:
+                try:
+                    _elm.close()
+                except Exception:
+                    pass
+            if _paused:
+                try:
+                    _sp.run(["systemctl", "start", "carwatch-obd.service"],
+                            capture_output=True, timeout=20)
+                except Exception:
+                    pass
     elif args and args[0] == "scan":
         port = args[1] if len(args) > 1 else DEFAULT_PORT
         print(json.dumps(scan_capabilities(port), indent=2))
