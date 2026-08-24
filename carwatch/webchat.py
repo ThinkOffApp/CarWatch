@@ -878,6 +878,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
+        if self.path == "/api/obd/record-arm":
+            # Arm the one-shot in-drive capture: obdwatch runs it on the next
+            # read where the car is moving (dongle sleeps with the ignition,
+            # so recording from outside while parked just gets errno 5).
+            import os as _os
+            try:
+                body = self.rfile.read(int(self.headers.get("Content-Length", 0)) or 0)
+                secs = 120
+                if body:
+                    try:
+                        secs = min(300, int(json.loads(body).get("seconds", 120)))
+                    except Exception:
+                        pass
+                p = _os.path.expanduser("~/.carwatch/record-armed")
+                _os.makedirs(_os.path.dirname(p), exist_ok=True)
+                with open(p, "w") as f:
+                    f.write(str(secs))
+                return self._send(200, json.dumps(
+                    {"ok": True, "armed_seconds": secs,
+                     "fires": "on the next moving read"}), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         if self.path == "/api/obd/record":
             # Raw ATMA capture for the broadcast-stream decode (petrus,
             # Aug 24: "selvittaa broadcast-virta"). Same read-only pause/

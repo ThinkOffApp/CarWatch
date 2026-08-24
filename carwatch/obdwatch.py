@@ -323,6 +323,39 @@ def run() -> None:
                             mark_deep_probe_done()
                     except Exception as e:  # never let the probe kill the loop
                         print(f"deep probe failed: {e}", flush=True)
+                # Armed broadcast capture (petrus, Aug 24: "selvittaa
+                # broadcast-virta"): a flag file arms a one-shot raw ATMA
+                # recording that runs on the NEXT read where the car is
+                # actually moving - the dongle sleeps with the ignition, so
+                # an agent poking from outside gets errno 5 while parked.
+                # Inline in this process: one serial port, one reader.
+                _arm = os.path.expanduser(
+                    os.environ.get("CARWATCH_STATE", "~/.carwatch")
+                ) + "/record-armed"
+                moving = (result["readings"].get("speed_kmh") or 0) > 5
+                if port and moving and os.path.exists(_arm):
+                    try:
+                        with open(_arm) as _f:
+                            _secs = min(300.0, float(_f.read().strip() or 120))
+                    except Exception:
+                        _secs = 120.0
+                    try:
+                        os.remove(_arm)
+                        post(f"Recording my internal chatter for {int(_secs)}s "
+                             "while driving (raw CAN broadcast, for decoding)...")
+                        from carwatch import deepscan as _ds
+                        _relm = elm327.Elm327(port)
+                        try:
+                            _rec = _ds.record_bus(_relm, _secs)
+                        finally:
+                            _relm.close()
+                        post(f"Recorded {_rec['frames']} frames from "
+                             f"{len(_rec['unique_ids'])} senders - log saved, "
+                             "decode happens at home.")
+                        print(f"record saved: {_rec['path']}", flush=True)
+                    except Exception as e:
+                        print(f"armed record failed: {e}", flush=True)
+                        post(f"Recording attempt failed ({e}) - will need re-arming.")
                 # Refresh the full-decode cache for the nerd dashboard every
                 # few cycles. Same process = the single serial port is never
                 # contended; the dashboard endpoint reads the cache file.
