@@ -167,6 +167,32 @@ def _think(question: str, asker: str) -> str:
                         "running on board, watching the diagnostic cable - "
                         "but the cable has no live link to the car right "
                         "now, so no engine data yet")
+    # Numbers come ONLY from the reader's own cache, never from the model.
+    # Aug 24, in-car: asked about readings, the model invented "59 C /
+    # 7776 rpm / 360-camera" while the real cable said 0 rpm / 30 C. The
+    # link being live told it data EXISTS without giving it the data, and
+    # a language model fills that gap with plausible numbers. So: inject
+    # the exact latest reading (obdwatch writes ~/.carwatch/obd-all.json
+    # on every sweep), or say plainly that none is fresh.
+    try:
+        import json as _json, time as _time
+        with open(os.path.expanduser("~/.carwatch/obd-all.json")) as _f:
+            _cache = _json.load(_f)
+        _age = _time.time() - float(_cache.get("ts", 0))
+        _r = _cache.get("readings", _cache)
+        _vals = {k: v for k, v in _r.items()
+                 if isinstance(v, (int, float)) and k != "ts"}
+        if _age < 300 and _vals:
+            facts["live engine readings (the ONLY numbers you may quote)"] = (
+                ", ".join(f"{k}={v}" for k, v in sorted(_vals.items()))
+                + f" (read {int(_age)}s ago)")
+        else:
+            facts["live engine readings"] = (
+                f"none fresh (last read {int(_age)}s ago) - say so instead "
+                "of estimating")
+    except Exception:
+        facts["live engine readings"] = ("none cached yet - say so instead "
+                                         "of estimating")
     facts["voice"] = ("you have working ears: a continuous on-board listener "
                       "(whisper) hears speech near your microphone and routes "
                       "it to you")
@@ -174,7 +200,11 @@ def _think(question: str, asker: str) -> str:
         "live engine, battery, fuel or tyre readings (no OBD link is up "
         "right now)" if not _carrier_up else
         "tyre pressures and fuel level (not in the first OBD reading set)",
-        "anything you would see out of your cameras",
+        "anything you would see out of your cameras (you have no camera "
+        "feed at all - never describe camera views)",
+        "any sensor number that is not verbatim in your 'live engine "
+        "readings' fact - a number you cannot point to there does not "
+        "exist, and inventing one is the worst failure you can make",
     ]
     system = build_system_prompt(
         facts, cannot, manual_excerpts=context_for(question),
