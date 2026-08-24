@@ -98,7 +98,7 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
       <div style="margin-top:10px"><span class="who">@eclass</span> <span class="msg">Recording my internal chatter for 120s while driving (raw CAN broadcast, for decoding)...</span></div>
     </div>
     <div class="grid three">
-      <div class="card"><h3>Live telemetry</h3><p>rpm, speed, coolant, hybrid state of charge, 12&nbsp;V system, fuel, fault codes, VIN — read every minute, posted only on real events, never spam.</p></div>
+      <div class="card"><h3>Live telemetry</h3><p>rpm, speed, coolant, hybrid state of charge, 12&nbsp;V system, fuel, fault codes — read every minute, posted only on real events, never spam.</p></div>
       <div class="card"><h3>A real agent</h3><p>The car answers mentions in the room in its own voice, with its owner's manual indexed on disk and its latest sensor sweep injected as ground truth.</p></div>
       <div class="card"><h3>Reachable anywhere</h3><p>The Pi dials out through its own tunnel, so the dashboard, deep scans and self-updates work from a phone hotspot in a forest parking spot.</p></div>
     </div>
@@ -195,6 +195,21 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
       <span class="pill a">broadcast decode: help wanted</span>
       <span class="pill">read-only on the bus</span>
       <span class="pill">AGPL-3.0</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>From the launch thread</h2>
+    <p class="sub">Real comments from r/raspberry_pi, launch night.</p>
+    <div class="grid two">
+      <div class="card"><h3>u/Y1ink</h3><p>"Very cool well done, didn't think this was possible."</p></div>
+      <div class="card"><h3>u/TenOfZero</h3><p>"If you can run a LLM on a Pentium 4, I think you can get one to run on pretty much anything made today."</p></div>
+      <div class="card"><h3>u/nivlow</h3><p>"Written by Qwen 35B running on a Pi 5" <span style="color:var(--green)">(it wishes — the car only reviews statements about itself)</span></p></div>
+      <div class="card"><h3>u/jamesbretz</h3><p>"lol what could go wrong?" <span style="color:var(--green)">(less than you'd think: the bus link is strictly read-only — CarWatch never writes to the car)</span></p></div>
+      <div class="card"><h3>u/jrallen7</h3><p>"Why in gods name would I willingly attach an AI to my car?" <span style="color:var(--green)">(fair question — see the next one)</span></p></div>
+      <div class="card"><h3>u/PaddleMonkey</h3><p>"It isn't to control the car, but to keep the driver/owner informed of what the car's needs are and then for the driver/owner to take action." <span style="color:var(--green)">(exactly right)</span></p></div>
     </div>
   </div>
 </section>
