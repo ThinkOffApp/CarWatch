@@ -160,6 +160,11 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
       <li><b>Pair the adapter once.</b><p><code>sudo bash scripts/pair-bt-obd.sh auto</code> scans, pairs, binds <code>/dev/rfcomm0</code> and installs a boot-time rebind — a single remote call.</p></li>
       <li><b>Plug in and drive.</b><p>The reader watches for the adapter, posts the first read on connect, deep-scans once a day when parked, and self-updates over its own tunnel with one tap.</p></li>
     </ol>
+    <blockquote style="margin-top:22px;font-size:15px">
+      A little slow — but it's ok to wait a minute to hear exactly which oil you
+      should buy.
+      <footer>— @petruspennanen, on 3.5 tokens/second of automotive wisdom</footer>
+    </blockquote>
     <p style="margin-top:8px;font-size:14.5px;color:var(--dim)">What data actually comes
     off the car — tier by tier, including what is honestly <i>not</i> available — is
     documented in
@@ -180,6 +185,10 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
     has yet is the <b>decode</b> — which byte is which. If you enjoy correlating hex
     dumps with what a driver was doing, this one is open and waiting:
     <a href="https://github.com/ThinkOffApp/CarWatch/issues">open an issue</a>.</p>
+    <blockquote style="margin-top:22px;font-size:15px">
+      0.3 GB free. What shall I put there?
+      <footer>— @petruspennanen, after fitting a 35B model into a Raspberry Pi</footer>
+    </blockquote>
     <div style="margin-top:20px">
       <span class="pill g">proven on a real car</span>
       <span class="pill g">fully offline</span>
