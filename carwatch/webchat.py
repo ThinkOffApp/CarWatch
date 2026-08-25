@@ -246,29 +246,35 @@ const $=id=>document.getElementById(id);
 // (petrus, in-car). At home (no tunnel) there is no token and none is needed.
 const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
-const F=(u,o={})=>{
+// Poll must die in 4s so the header never sits on connecting. Actions
+// (pair, deep scan, ask, speak) take tens of seconds; the same 4s abort
+// made every button look dead (petrus, MBUX Bluetooth, Aug 25).
+const F=(u,o={},ms=4000)=>{
   const c=new AbortController();
-  const t=setTimeout(()=>c.abort(),4000);
+  const t=setTimeout(()=>c.abort(),ms);
   return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));
 };
+const ACT_MS={'/api/obd/deep':180000,'/api/update':90000,'/api/car-pair':70000,'/api/obd':70000};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight}
 async function act(el,url,label){
   el.classList.add('busy');show(label+' ...');
-  try{const r=await F(url,{method:'POST'});const d=await r.json();
+  try{const r=await F(url,{method:'POST'},ACT_MS[url]||30000);const d=await r.json();
     show(label+'\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
   }catch(e){show(label+' failed: '+e)}
   el.classList.remove('busy')}
 async function toggleListen(){
   const on=!$('listenCtl').classList.contains('on');
-  try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})});
+  try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})},25000);
     const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
 function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening ON':'Listening off'}
 function speak(){const t=prompt('Text for the car to speak:');if(!t)return;
-  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
-    .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||'failed')))}
+  show('speaking ...');
+  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
+    .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed')))
+    .catch(e=>show('speak failed: '+e))}
 async function ask(){const t=$('q').value.trim();if(!t)return;
   const a=$('answer');a.style.display='block';a.textContent='thinking\u2026 (~1 min at 3.5 tok/s)';$('q').value='';
-  try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})});
+  try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},120000);
     const d=await r.json();a.textContent=d.answer||'(no answer)'}catch(e){a.textContent='could not reach the car brain'}}
 function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
   if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
