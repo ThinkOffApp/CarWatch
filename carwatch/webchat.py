@@ -241,34 +241,40 @@ section h2{font-size:13.5px;color:#62c7ff;margin-bottom:4px}
 <div class=links><a href="/">&#128172; chat</a><a href="/nerd">&#128300; nerd detail</a><a href="/cloudcar">&#9729;&#65039; cloud car</a></div>
 </div><script>
 const $=id=>document.getElementById(id);
+// Through the tunnel the page URL carries ?t=<token>; same-origin fetches
+// must forward it or they 401 and the dashboard hangs on "connecting"
+// (petrus, in-car). At home (no tunnel) there is no token and none is needed.
+const _tok=new URLSearchParams(location.search).get('t')||'';
+const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
+const F=(u,o)=>fetch(_q(u),o);
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight}
 async function act(el,url,label){
   el.classList.add('busy');show(label+' ...');
-  try{const r=await fetch(url,{method:'POST'});const d=await r.json();
+  try{const r=await F(url,{method:'POST'});const d=await r.json();
     show(label+'\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
   }catch(e){show(label+' failed: '+e)}
   el.classList.remove('busy')}
 async function toggleListen(){
   const on=!$('listenCtl').classList.contains('on');
-  try{const r=await fetch('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})});
+  try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})});
     const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
 function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening ON':'Listening off'}
 function speak(){const t=prompt('Text for the car to speak:');if(!t)return;
-  fetch('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
+  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
     .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||'failed')))}
 async function ask(){const t=$('q').value.trim();if(!t)return;
   const a=$('answer');a.style.display='block';a.textContent='thinking\u2026 (~1 min at 3.5 tok/s)';$('q').value='';
-  try{const r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})});
+  try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})});
     const d=await r.json();a.textContent=d.answer||'(no answer)'}catch(e){a.textContent='could not reach the car brain'}}
 function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
   if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
   if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
 async function poll(){
-  try{const s=await(await fetch('/api/status')).json();const f=s.facts||{};
+  try{const s=await(await F('/api/status')).json();const f=s.facts||{};
     $('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+' &middot; <b>'+(f.uptime||'')+'</b>';
     if(s.listening!==undefined)setListen(s.listening);
   }catch(e){$('status').textContent='Pi unreachable'}
-  try{const d=await(await fetch('/api/obd/all')).json();
+  try{const d=await(await F('/api/obd/all')).json();
     const g=$('groups');
     if(d&&d.groups&&Object.keys(d.groups).length){
       $('age').textContent=d.age_s!==undefined?('engine data from '+Math.round(d.age_s)+'s ago'+(d.age_s>180?' - STALE (ignition off?)':'')):'';
