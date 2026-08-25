@@ -231,10 +231,30 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
 #feed .line{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:8px 10px;margin:4px 0;font-size:13px}
 #feed .k{font-size:10px;color:#8ca1ad;text-transform:uppercase;letter-spacing:.04em}
 #feed .who{color:#62c7ff;font-weight:700}
+#cap{margin:8px 0;background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:8px 10px}
+#cap .k{font-size:10px;color:#8ca1ad;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.wheel-wrap{display:flex;align-items:center;gap:12px;margin:4px 0 8px}
+.wheel{width:72px;height:72px;border-radius:50%;border:6px solid #20313c;background:#0e171e;
+  display:flex;align-items:center;justify-content:center}
+.spoke{width:6px;height:70%;background:#62c7ff;border-radius:3px}
+#ang{font:700 16px ui-monospace,monospace;color:#40d98b}
+.bar{display:flex;align-items:center;gap:6px;margin:2px 0}
+.bar b{width:56px;font:11px ui-monospace,monospace;color:#62c7ff}
+.bar .t{flex:1;height:10px;background:#0e171e;border-radius:5px;overflow:hidden}
+.bar .t i{display:block;height:100%;background:#40d98b;width:0}
+.bar .n{width:86px;font:10px ui-monospace,monospace;color:#8ca1ad;text-align:right}
 </style></head><body><div class=wrap>
 <header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
 <div id=core class=core></div>
 <div id=age></div>
+<div id=cap>
+  <div class=k id=capnote>last CAN capture</div>
+  <div class=wheel-wrap>
+    <div class=wheel id=wheel><div class=spoke></div></div>
+    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x05 byte 4 around 128</div></div>
+  </div>
+  <div id=bars></div>
+</div>
 <div id=feed></div>
 <div id=groups></div>
 <div class=controls>
@@ -332,6 +352,25 @@ async function poll(){
     };
     $('feed').innerHTML=line('latest in room', rm.latest)+line('latest car mention', rm.car);
   }catch(e){const f=$('feed'); if(f) f.textContent='room feed unavailable'}
+  try{
+    const d=await(await F('/api/can/summary')).json();
+    const note=$('capnote');
+    if(!d||!d.ok){
+      note.textContent=(d&&d.error)||'no capture yet';
+      $('ang').textContent='--';
+      $('bars').innerHTML='';
+    }else{
+      note.textContent=(d.file||'capture')+' · '+d.frames+' frames · '+d.seconds+'s';
+      const st=d.steering||{};
+      const deg=((st.last||128)-128)*1.2;
+      $('wheel').style.transform='rotate('+deg+'deg)';
+      $('ang').textContent=(st.last==null?'--':st.last)+'  min '+(st.min==null?'-':st.min)+' max '+(st.max==null?'-':st.max);
+      const max=(d.streams&&d.streams[0]&&d.streams[0].n)||1;
+      $('bars').innerHTML=(d.streams||[]).map(s=>
+        '<div class=bar><b>'+s.id+'</b><div class=t><i style="width:'+Math.round(100*s.n/max)+'%"></i></div><div class=n>'+s.hz+' Hz · '+s.n+'</div></div>'
+      ).join('');
+    }
+  }catch(e){const n=$('capnote'); if(n) n.textContent='capture unavailable'}
 }
 poll();setInterval(poll,2000);
 </script></body></html>"""
@@ -841,6 +880,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"ok": False, "error": "no captures yet"}),
                                   "application/json")
             path = logs[-1]
+            try:
+                mtime = _os.path.getmtime(path)
+            except Exception:
+                mtime = 0
+            cache = getattr(self.__class__, "_can_summary_cache", None)
+            if cache and cache[0] == path and cache[1] == mtime:
+                return self._send(200, json.dumps(cache[2]), "application/json")
             counts = {}
             steer = []
             n = 0
@@ -878,6 +924,7 @@ class Handler(BaseHTTPRequestHandler):
                 "steering": ({"min": min(steer), "max": max(steer),
                               "last": steer[-1], "n": len(steer)} if steer else None),
             }
+            self.__class__._can_summary_cache = (path, mtime, payload)
             return self._send(200, json.dumps(payload), "application/json")
         elif self.path.startswith("/api/status"):
             # Machine-readable twin of /dash. CodeWatch local mode polls
