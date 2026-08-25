@@ -419,7 +419,7 @@ async function pollCloud(manual){
     const s=await (await F('/api/cloudcar',{},manual?12000:6000)).json();
     if(!s.ok){
       el.innerHTML='<div id=cloudnote>mercedes cloud: '+(s.error||'no data')+
-        (String(s.error||'').includes('token')?' &middot; <a href="'+_q('/cloudcar')+'" style=color:#62c7ff>set up</a>':'')+'</div>';
+        (/token|not connected/i.test(s.error||'')?' &middot; <a href="'+_q('/cloudcar')+'" style=color:#62c7ff>set up</a>':'')+'</div>';
       return;
     }
     el.innerHTML=Object.values(s.cars).map(c=>{
