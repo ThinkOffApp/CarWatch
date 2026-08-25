@@ -191,54 +191,61 @@ UNIFIED_PAGE = """<!doctype html><html><head><meta charset=utf-8>
 :root{color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:radial-gradient(circle at top,#142a35 0,#091016 48%);color:#e8f1f5;
-  font:15px/1.5 -apple-system,system-ui,sans-serif;padding:0 12px 40px}
+  font:15px/1.4 -apple-system,system-ui,sans-serif;padding:0 10px 24px}
 .wrap{max-width:980px;margin:0 auto}
-header{padding:18px 0 10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-h1{font-size:22px}
-#status{font:12px ui-monospace,monospace;color:#8ca1ad;text-align:right}
+header{padding:8px 0 4px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-size:16px}
+#status{font:11px ui-monospace,monospace;color:#8ca1ad;text-align:right}
 #status b{color:#40d98b}
-.controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px;margin:8px 0 18px}
-.ctl{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:13px;
-  padding:12px 10px;text-align:center;cursor:pointer;user-select:none;transition:transform .06s,border-color .15s}
+.core{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:6px 0}
+@media (max-width:520px){.core{grid-template-columns:repeat(3,1fr)}}
+.core .g{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:8px 4px;text-align:center}
+.core .n{font:700 22px/1.1 ui-monospace,monospace;color:#40d98b}
+.core .n.warn{color:#ffc857}.core .n.bad{color:#ff667d}
+.core .k{font-size:10px;color:#8ca1ad;margin-top:2px}
+.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 8px}
+.ctl{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;
+  padding:8px 4px;text-align:center;cursor:pointer;user-select:none}
 .ctl:active{transform:scale(.96)}.ctl:hover{border-color:#62c7ff}
-.ctl .ico{font-size:24px;display:block;margin-bottom:4px}
-.ctl .t{font-weight:700;font-size:13.5px}
-.ctl .d{font-size:11px;color:#8ca1ad;margin-top:2px}
+.ctl .ico{font-size:16px;display:block;margin-bottom:1px}
+.ctl .t{font-weight:700;font-size:11px}
+.ctl .d{display:none}
 .ctl.on{border-color:#40d98b}.ctl.on .t{color:#40d98b}
 .ctl.busy{border-color:#ffc857;opacity:.7;pointer-events:none}
-#groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px}
-section{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:13px;padding:10px 13px}
-section h2{font-size:13.5px;color:#62c7ff;margin-bottom:4px}
-.r{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:13.5px}
-.r .l{color:#c4d2d8}.r .v{font:700 15px ui-monospace,monospace;color:#40d98b;text-align:right}
+#groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+section{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:6px 8px}
+section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
+.r{display:flex;justify-content:space-between;gap:6px;padding:1px 0;font-size:12px}
+.r .l{color:#c4d2d8}.r .v{font:700 13px ui-monospace,monospace;color:#40d98b;text-align:right}
 .r .v.warn{color:#ffc857}.r .v.bad{color:#ff667d}
-#age{color:#8ca1ad;font-size:12px;margin:10px 0;font-family:ui-monospace,monospace}
-#out{background:#0e171e;border:1px solid #20313c;border-radius:10px;padding:10px 12px;
-  font:12px ui-monospace,monospace;color:#9fe8bd;white-space:pre-wrap;display:none;margin-bottom:14px;max-height:200px;overflow:auto}
-.ask{display:flex;gap:8px;margin-top:14px}
-.ask input{flex:1;padding:11px;border-radius:10px;border:1px solid #2a3039;background:#12151a;color:inherit;font-size:15px}
-.ask button{padding:11px 16px;border:0;border-radius:10px;background:#62c7ff;color:#031019;font-weight:700}
-#answer{background:#181c22;border:1px solid #262b33;border-radius:12px;padding:10px 12px;margin-top:10px;display:none;font-size:14px}
-.links{margin-top:16px;font-size:13px;color:#8ca1ad}
-.links a{color:#62c7ff;text-decoration:none;margin-right:14px}
+#age{color:#8ca1ad;font-size:11px;margin:4px 0;font-family:ui-monospace,monospace}
+#out{background:#0e171e;border:1px solid #20313c;border-radius:10px;padding:8px 10px;
+  font:12px ui-monospace,monospace;color:#9fe8bd;white-space:pre-wrap;display:none;margin:6px 0;max-height:140px;overflow:auto}
+.ask{display:flex;gap:6px;margin-top:8px}
+.ask input{flex:1;padding:8px;border-radius:8px;border:1px solid #2a3039;background:#12151a;color:inherit;font-size:14px}
+.ask button{padding:8px 12px;border:0;border-radius:8px;background:#62c7ff;color:#031019;font-weight:700}
+#answer{background:#181c22;border:1px solid #262b33;border-radius:10px;padding:8px 10px;margin-top:8px;display:none;font-size:13px}
+.links{margin-top:8px;font-size:11px;color:#8ca1ad}
+.links a{color:#62c7ff;text-decoration:none;margin-right:12px}
 </style></head><body><div class=wrap>
 <header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
+<div id=core class=core></div>
+<div id=age></div>
+<div id=groups></div>
 <div class=controls>
  <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
  <div class=ctl onclick="act(this,'/api/obd/deep','per-ECU deep scan (~1 min, parked)')"><span class=ico>&#128300;</span><span class=t>Deep scan</span><div class=d>per-ECU identity</div></div>
  <div class=ctl onclick="act(this,'/api/obd/record-arm','armed: records 120s raw CAN on the next moving read')"><span class=ico>&#127908;</span><span class=t>Record CAN</span><div class=d>arms next drive</div></div>
- <div class=ctl id=listenCtl onclick="toggleListen()"><span class=ico>&#128066;</span><span class=t id=listenT>Listening&hellip;</span><div class=d>whisper ears</div></div>
- <div class=ctl onclick="speak()"><span class=ico>&#128266;</span><span class=t>Car audio</span><div class=d>speak via MBUX</div></div>
+ <div class=ctl id=listenCtl onclick="toggleListen()"><span class=ico>&#128066;</span><span class=t id=listenT>Listen</span><div class=d>whisper ears</div></div>
+ <div class=ctl onclick="speak()"><span class=ico>&#128266;</span><span class=t>Speak</span><div class=d>speak via MBUX</div></div>
+ <div class=ctl onclick="act(this,'/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)')"><span class=ico>&#128279;</span><span class=t>Pair</span><div class=d>MBUX audio</div></div>
  <div class=ctl onclick="act(this,'/api/update','pull latest code + restart services')"><span class=ico>&#11014;&#65039;</span><span class=t>Update</span><div class=d>self-update</div></div>
- <div class=ctl onclick="act(this,'/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)')"><span class=ico>&#128279;</span><span class=t>Pair car</span><div class=d>MBUX audio</div></div>
  <div class=ctl onclick="location.href='/journal'"><span class=ico>&#128220;</span><span class=t>Journal</span><div class=d>service log</div></div>
 </div>
 <div id=out></div>
-<div id=age></div>
-<div id=groups></div>
-<div class=ask><input id=q placeholder="Ask your car something"><button onclick="ask()">Ask</button></div>
+<div class=ask><input id=q placeholder="Ask your car"><button onclick="ask()">Ask</button></div>
 <div id=answer></div>
-<div class=links><a href="/">&#128172; chat</a><a href="/nerd">&#128300; nerd detail</a><a href="/cloudcar">&#9729;&#65039; cloud car</a></div>
+<div class=links><a href="/">chat</a><a href="/nerd">all PIDs</a></div>
 </div><script>
 const $=id=>document.getElementById(id);
 // Through the tunnel the page URL carries ?t=<token>; same-origin fetches
@@ -279,6 +286,10 @@ async function ask(){const t=$('q').value.trim();if(!t)return;
 function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
   if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
   if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
+const CORE=[['speed_kmh','speed'],['engine_rpm','rpm'],['hybrid_battery_pct','hybrid'],['module_voltage','12V'],['coolant_c','coolant']];
+const CORE_SET=Object.fromEntries(CORE);
+function flat(d){const o={};if(!d||!d.groups)return o;
+  Object.values(d.groups).forEach(vals=>Object.values(vals).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
 async function poll(){
   try{const r=await F('/api/status');const s=await r.json();
     if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>Open this dashboard from the app link (it needs the access token) or from the home network</span>';return}
@@ -287,12 +298,20 @@ async function poll(){
     if(s.listening!==undefined)setListen(s.listening);
   }catch(e){$('status').innerHTML='<span style=color:#ff667d>Cannot reach the car - open this page from the app link so it carries the access token, or use the home network URL</span>'}
   try{const d=await(await F('/api/obd/all')).json();
-    const g=$('groups');
+    const g=$('groups');const c=$('core');
     if(d&&d.groups&&Object.keys(d.groups).length){
+      const m=flat(d);
+      c.innerHTML=CORE.map(([k,label])=>{
+        const r=m[k]||{}; const n=Number(r.value); const u=r.unit||'';
+        return '<div class=g><div class="n '+sev(u,k,n)+'">'+(r.value==null?'—':r.value)+'</div><div class=k>'+label+(u?' '+u:'')+'</div></div>';
+      }).join('');
       $('age').textContent=d.age_s!==undefined?('engine data from '+Math.round(d.age_s)+'s ago'+(d.age_s>180?' - STALE (ignition off?)':'')):'';
-      g.innerHTML=Object.entries(d.groups).map(([name,vals])=>
-        '<section><h2>'+name+'</h2>'+Object.values(vals).map(r=>
-          '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>').join('');
+      g.innerHTML=Object.entries(d.groups).map(([name,vals])=>{
+        const rows=Object.values(vals).filter(r=>r&&!CORE_SET[r.key]);
+        if(!rows.length)return '';
+        return '<section><h2>'+name+'</h2>'+rows.map(r=>
+          '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>';
+      }).join('');
     }else{$('age').textContent='no engine data cached - plug the adapter and turn the ignition on';}
   }catch(e){}
 }
