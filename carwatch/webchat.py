@@ -247,16 +247,6 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
 <header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
 <div id=core class=core></div>
 <div id=age></div>
-<div id=cap>
-  <div class=k id=capnote>last CAN capture</div>
-  <div class=wheel-wrap>
-    <div class=wheel id=wheel><div class=spoke></div></div>
-    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x0500 D0 around 128</div></div>
-  </div>
-  <div id=bars></div>
-</div>
-<div id=feed></div>
-<div id=groups></div>
 <div class=controls>
  <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
  <div class=ctl onclick="act(this,'/api/obd/deep','per-ECU deep scan (~1 min, parked)')"><span class=ico>&#128300;</span><span class=t>Deep scan</span><div class=d>per-ECU identity</div></div>
@@ -270,6 +260,16 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
 <div id=out></div>
 <div class=ask><input id=q placeholder="Ask your car"><button onclick="ask()">Ask</button></div>
 <div id=answer></div>
+<div id=cap>
+  <div class=k id=capnote>last CAN capture</div>
+  <div class=wheel-wrap>
+    <div class=wheel id=wheel><div class=spoke></div></div>
+    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x0500 D0 around 128</div></div>
+  </div>
+  <div id=bars></div>
+</div>
+<div id=feed></div>
+<div id=groups></div>
 <div class=links><a href="/">chat</a><a href="/nerd">all PIDs</a><a href="/streams">streams</a></div>
 </div><script>
 const $=id=>document.getElementById(id);
