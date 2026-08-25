@@ -222,7 +222,7 @@ section h2{font-size:13.5px;color:#62c7ff;margin-bottom:4px}
 .links{margin-top:16px;font-size:13px;color:#8ca1ad}
 .links a{color:#62c7ff;text-decoration:none;margin-right:14px}
 </style></head><body><div class=wrap>
-<header><h1>&#128663; CarWatch</h1><div id=status>connecting&hellip;</div></header>
+<header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
 <div class=controls>
  <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
  <div class=ctl onclick="act(this,'/api/obd/deep','per-ECU deep scan (~1 min, parked)')"><span class=ico>&#128300;</span><span class=t>Deep scan</span><div class=d>per-ECU identity</div></div>
@@ -246,7 +246,11 @@ const $=id=>document.getElementById(id);
 // (petrus, in-car). At home (no tunnel) there is no token and none is needed.
 const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
-const F=(u,o)=>fetch(_q(u),o);
+const F=(u,o={})=>{
+  const c=new AbortController();
+  const t=setTimeout(()=>c.abort(),4000);
+  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));
+};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight}
 async function act(el,url,label){
   el.classList.add('busy');show(label+' ...');
@@ -836,7 +840,10 @@ class Handler(BaseHTTPRequestHandler):
         # Writes and probes are the dangerous half: gate them the same way.
         if not self._authorised():
             return self._deny()
-        if self.path == "/api/update":
+        # Tunnel links append ?t=token. Exact path match 404'd Read now
+        # (petrus in-car, Aug 25). Auth still reads the query on self.path.
+        path = self.path.split("?", 1)[0]
+        if path == "/api/update":
             # One-tap self-update from the dashboard, from ANYWHERE (petrus
             # was blocked getting a fix onto the car while it was on his
             # hotspot behind NAT). The Pi pulls the latest code from GitHub
@@ -854,7 +861,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/obd":
+        if path == "/api/obd":
             # One-tap OBD from the dashboard: runs the COMPLETE session
             # (eth0 up -> gateway discovery -> routing activation -> PID
             # reads) and returns the stage-by-stage JSON trace, so a failure
@@ -880,7 +887,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/bt-pair":
+        if path == "/api/bt-pair":
             # One-shot wireless-OBD swap: scan for the BT dongle (Vgate iCar
             # Pro 2S), pair, bind /dev/rfcomm0, persist, test. Read-only w.r.t.
             # the car (BT pairing only). Runs the committed script.
@@ -896,7 +903,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/cloudcar/login":
+        if path == "/api/cloudcar/login":
             # Two-step credential-safe login: {"email": ...} makes the vendor
             # send a one-time code to the OWNER's email; {"code": ...}
             # exchanges it for tokens the provider stores itself (0600).
@@ -924,7 +931,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/car-pair":
+        if path == "/api/car-pair":
             # One-time: pair the Pi to the CAR's Bluetooth audio (A2DP sink) so
             # the Pi can speak through the car speakers. petrus puts MBUX in
             # pairing mode, then taps this. sudo because the script restarts
@@ -944,7 +951,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/car-speak":
+        if path == "/api/car-speak":
             # Speak arbitrary text through the car's paired A2DP sink. No sudo:
             # keep bluealsa-aplay in the user session. Text is passed as an argv
             # element (list form), never a shell string, so no injection.
@@ -970,7 +977,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/obd/deep":
+        if path == "/api/obd/deep":
             # The PER-ECU read, distinct from /api/obd/scan which only lists
             # advertised PIDs. petrus asked four times for this and kept being
             # handed the capability list instead; that conflation is the bug
@@ -1002,7 +1009,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/obd/record-arm":
+        if path == "/api/obd/record-arm":
             # Arm the one-shot in-drive capture: obdwatch runs it on the next
             # read where the car is moving (dongle sleeps with the ignition,
             # so recording from outside while parked just gets errno 5).
@@ -1025,7 +1032,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/obd/record":
+        if path == "/api/obd/record":
             # Raw ATMA capture for the broadcast-stream decode (petrus,
             # Aug 24: "selvittaa broadcast-virta"). Same read-only pause/
             # restore path as deep, just longer and saved to disk.
@@ -1055,7 +1062,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/obd/scan":
+        if path == "/api/obd/scan":
             # READ-ONLY capability probe: which PIDs the car advertises, VIN,
             # stored DTCs. Never writes. Produces the "what our module can get
             # from this car" list (petrus, Aug 19). ELM327 only - DoIP has no
@@ -1079,7 +1086,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
-        if self.path == "/api/listen":
+        if path == "/api/listen":
             # Voice-listener on/off from the dashboard (petrus: "have a
             # setting for that on the dashboard"). Toggles the systemd
             # service so the choice survives reboots.
@@ -1103,7 +1110,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps(
                     {"ok": False, "error": str(e)}), "application/json")
-        if self.path == "/api/wifi":
+        if path == "/api/wifi":
             # Network switching from the phone dashboard (petrus: "can you
             # have switch to hotspot / key in wifi details in the dashboard").
             # LAN-local by nature: whoever can reach this page shares the
