@@ -251,7 +251,7 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
   <div class=k id=capnote>last CAN capture</div>
   <div class=wheel-wrap>
     <div class=wheel id=wheel><div class=spoke></div></div>
-    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x05 byte 4 around 128</div></div>
+    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x0500 D0 around 128</div></div>
   </div>
   <div id=bars></div>
 </div>
@@ -376,7 +376,8 @@ poll();setInterval(poll,2000);
 </script></body></html>"""
 
 # Playback of the last ATMA capture. Live ATMA wedges the ELM, so this page
-# reads the file, not the adapter. Steering is a candidate (0x05 byte4 ~128).
+# reads the file, not the adapter. Frames are 12 hex bytes: 2-byte ID, 00 00
+# pad, 8 data. Steering candidate is 0x0500 D0 around 128, not proven.
 STREAMS_PAGE = """<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>CarWatch streams</title>
@@ -401,7 +402,7 @@ a{color:#62c7ff}
 <div id=note>Last capture, not live. Steering is a candidate, not proven.</div>
 <div class=wheel-wrap>
   <div class=wheel id=wheel><div class=spoke></div></div>
-  <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:12px">0x05 byte 4 around 128</div></div>
+  <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:12px">0x0500 D0 around 128</div></div>
 </div>
 <div id=bars></div>
 <div style="margin-top:14px"><a href="/dash">dash</a></div>
@@ -894,11 +895,11 @@ class Handler(BaseHTTPRequestHandler):
             with open(path, errors="replace") as fh:
                 for line in fh:
                     parts = line.split()
-                    if len(parts) < 8 or parts[0].startswith("{"):
+                    if len(parts) < 13 or parts[0].startswith("{"):
                         continue
                     hx = parts[1:]
                     try:
-                        [int(x, 16) for x in hx[:8]]
+                        [int(x, 16) for x in hx[:12]]
                     except Exception:
                         continue
                     n += 1
@@ -909,11 +910,10 @@ class Handler(BaseHTTPRequestHandler):
                     if ts is not None:
                         t0 = ts if t0 is None else t0
                         t1 = ts
-                    two = (hx[0] + hx[1]).upper()
-                    one = hx[0].upper()
-                    key = two if one == "10" or one in ("0C", "0E", "12") else one
+                    # 12 hex tokens: 2-byte ID, 00 00 pad, 8 data (claudeMB, 2026-08-25)
+                    key = (hx[0] + hx[1]).upper()
                     counts[key] = counts.get(key, 0) + 1
-                    if one == "05" and len(hx) >= 5:
+                    if key == "0500":
                         steer.append(int(hx[4], 16))
             seconds = round((t1 - t0), 1) if t0 and t1 else 120.0
             streams = [{"id": "0x" + k, "n": v, "hz": round(v / seconds, 2)}
