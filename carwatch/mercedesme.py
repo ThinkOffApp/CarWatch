@@ -138,8 +138,7 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
     def auth_state(self) -> dict:
         if not _token():
             return {"authenticated": False, "step": "need_code",
-                    "hint": "paste the HA long-lived access token "
-                            "(HA profile > Security), not any Mercedes login"}
+                    "hint": "Home Assistant token"}
         return {"authenticated": True, "step": "ready",
                 "hint": f"reading {_ha_url()}"}
 
@@ -170,7 +169,7 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
             return self._cache
         token = _token()
         if not token:
-            return cloudcar.empty_state(self.name, "no HA token yet - open /cloudcar")
+            return cloudcar.empty_state(self.name, "not connected yet")
         try:
             states = _get("/api/states", token)
         except Exception as e:

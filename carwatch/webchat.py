@@ -98,32 +98,51 @@ f.onsubmit=async e=>{e.preventDefault();const text=q.value.trim();if(!text)retur
 # vendor emails a code -> code -> tokens on the Pi. NO password field exists.
 CLOUDCAR_PAGE = """<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>cloud car</title></head>
-<body style="background:#111;color:#ddd;font:14px monospace;margin:0;padding:14px">
-<h2 style="margin:0 0 4px;color:#6cf">Cloud car data</h2>
-<div style="color:#888;margin-bottom:10px">Vendor-cloud readings (doors, tires, charge) for the dashboards.
-Login asks ONLY your account email + the one-time code the vendor mails you. Never a password.</div>
+<title>Mercedes cloud</title></head>
+<body style="background:#111;color:#ddd;font:16px/1.45 -apple-system,system-ui,sans-serif;margin:0;padding:16px">
+<h2 style="margin:0 0 8px;color:#6cf">Mercedes cloud</h2>
+<div style="color:#bbb;margin-bottom:12px;max-width:36em">
+Doors, tires, charge, and lock from Mercedes.me. This page is not the OBD plug.
+It reads Home Assistant at home. You never type a Mercedes password here.
+</div>
+<ol style="color:#bbb;margin:0 0 14px 1.2em;padding:0;max-width:36em">
+<li>On home wifi open Home Assistant (http://192.168.50.241:8123)</li>
+<li>Tap your name, then Security, then Create long-lived access token</li>
+<li>Copy the token and paste it below, then tap Connect</li>
+</ol>
 <div id=authbox style="margin:10px 0"></div>
-<pre id=status style="white-space:pre-wrap;color:#9e9"></pre>
-<div style="color:#555;margin-top:10px"><a href="/dash" style="color:#6cf">dash</a> &middot; <a href="/nerd" style="color:#6cf">nerd</a> &middot; <a href="/" style="color:#6cf">chat</a></div>
+<div id=status style="color:#9e9;margin-top:12px;max-width:36em"></div>
+<div style="color:#555;margin-top:16px;font-size:14px"><a href="/dash" style="color:#6cf">dash</a> &middot; <a href="/nerd" style="color:#6cf">nerd</a> &middot; <a href="/" style="color:#6cf">chat</a></div>
 <script>
+const _tok=new URLSearchParams(location.search).get('t')||'';
+const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
 const ab=document.getElementById('authbox'),st=document.getElementById('status');
-async function post(b){const r=await fetch('/api/cloudcar/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json()}
-function form(ph,key,btn){ab.innerHTML=`<input id=v placeholder="${ph}" style="background:#222;color:#ddd;border:1px solid #555;padding:8px;font:14px monospace;width:55%">
-<button onclick="send('${key}')" style="background:#333;color:#6f6;border:1px solid #555;padding:8px 12px;font:14px monospace">${btn}</button> <span id=msg style="color:#fc6"></span>`}
+async function post(b){const r=await fetch(_q('/api/cloudcar/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});return r.json()}
+function form(ph,key,btn){ab.innerHTML='<input id=v placeholder="'+ph+'" autocomplete=off style="background:#222;color:#ddd;border:1px solid #555;padding:10px;font:16px sans-serif;width:100%;max-width:28em;box-sizing:border-box;margin-bottom:8px"><button onclick="send(\\''+key+'\\')" style="background:#333;color:#6f6;border:1px solid #555;padding:10px 14px;font:16px sans-serif">'+btn+'</button> <span id=msg style="color:#fc6"></span>'}
 async function send(key){const v=document.getElementById('v').value.trim();if(!v)return;
-document.getElementById('msg').textContent='...';const d=await post({[key]:v});
-document.getElementById('msg').textContent=d.ok?'ok':(d.error||'failed');if(d.ok)setTimeout(tick,800)}
+document.getElementById('msg').textContent='checking...';const d=await post({[key]:v});
+document.getElementById('msg').textContent=d.ok?'connected':(d.error||'failed');if(d.ok)setTimeout(tick,800)}
+function human(s){
+  if(!s)return 'Waiting...';
+  if(s.ok && s.cars){
+    const names=Object.values(s.cars).map(c=>c.label||'car');
+    return 'Connected. Seeing: '+(names.join(', ')||'cars')+'. Open the dash for lock, doors, tires, charge.';
+  }
+  const e=String(s.error||'');
+  if(e.indexOf('not connected')>=0||e.indexOf('no HA token')>=0) return 'Not connected yet. Paste a Home Assistant token below.';
+  if(e.toLowerCase().indexOf('unreachable')>=0) return 'Cannot reach Home Assistant. Use home wifi, not the phone hotspot.';
+  return e||'Waiting...';
+}
 async function tick(){
  try{
-  const a=await (await fetch('/api/cloudcar/auth')).json();
-  if(a.step==='need_email')form('your vendor-account email','email','send code');
-  else if(a.step==='need_code')form(a.hint||'code from your email','code','confirm');
-  else if(a.step==='no_provider')ab.innerHTML='<span style="color:#fc6">provider plugin not installed yet</span>';
-  else ab.innerHTML='<span style="color:#6f6">authenticated</span>';
-  const s=await (await fetch('/api/cloudcar')).json();
-  st.textContent=JSON.stringify(s,null,1);
- }catch(e){st.textContent='unreachable: '+e}
+  const a=await (await fetch(_q('/api/cloudcar/auth'))).json();
+  if(a.step==='need_email')form('your email','email','Send code');
+  else if(a.step==='need_code')form('Home Assistant token','code','Connect');
+  else if(a.step==='no_provider')ab.innerHTML='<span style="color:#fc6">Cloud plugin is not installed on this Pi.</span>';
+  else ab.innerHTML='<span style="color:#6f6">Connected to Home Assistant.</span>';
+  const s=await (await fetch(_q('/api/cloudcar'))).json();
+  st.textContent=human(s);
+ }catch(e){st.textContent='Cannot reach the Pi. Open this page from the car link or home wifi.'}
 }
 tick();setInterval(tick,5000);
 </script></body></html>"""
