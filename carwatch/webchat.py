@@ -312,8 +312,8 @@ async function poll(){
         return '<section><h2>'+name+'</h2>'+rows.map(r=>
           '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>';
       }).join('');
-    }else{$('age').textContent='no engine data cached - plug the adapter and turn the ignition on';}
-  }catch(e){}
+    }else{$('age').textContent=(d&&d.error)?('engine data unavailable: '+d.error+(d.age_s>180?' (last good '+Math.round(d.age_s)+'s ago)':'')):'no engine data cached - plug the adapter and turn the ignition on';}
+  }catch(e){$('age').textContent='could not load engine values: '+e}
 }
 poll();setInterval(poll,2000);
 </script></body></html>"""
