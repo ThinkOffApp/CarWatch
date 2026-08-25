@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CarWatch — unified dashboard (mock)</title>
+<style>
+:root{color-scheme:dark;
+  --bg:#091016; --panel:#111c24; --panel2:#0e171e; --line:#20313c;
+  --ink:#e8f1f5; --dim:#8ca1ad; --good:#40d98b; --warn:#ffc857; --bad:#ff667d; --blue:#62c7ff;
+  --mono:ui-monospace,'SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(circle at top,#142a35 0,#091016 48%);color:var(--ink);
+  font:15px/1.5 -apple-system,system-ui,sans-serif;padding-bottom:40px}
+.mock{position:sticky;top:0;z-index:9;background:var(--warn);color:#221a00;text-align:center;
+  font:700 13px/1 var(--mono);padding:8px;letter-spacing:.08em}
+.wrap{max-width:980px;margin:0 auto;padding:0 14px}
+header{padding:22px 0 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+h1{font-size:24px;letter-spacing:.02em}
+.status{font:12.5px var(--mono);color:var(--dim);text-align:right}
+.status b{color:var(--good)}
+.controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0 22px}
+.ctl{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid var(--line);border-radius:14px;
+  padding:14px 12px;text-align:center;cursor:pointer;transition:transform .06s, border-color .15s;user-select:none}
+.ctl:active{transform:scale(.96)}
+.ctl:hover{border-color:var(--blue)}
+.ctl .ico{font-size:26px;display:block;margin-bottom:6px}
+.ctl .t{font-weight:700;font-size:14px}
+.ctl .d{font-size:11.5px;color:var(--dim);margin-top:3px}
+.ctl.on{border-color:var(--good)}
+.ctl.on .t{color:var(--good)}
+.ctl.busy{border-color:var(--warn)}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--panel);
+  border:1px solid var(--blue);border-radius:10px;padding:10px 18px;font:13px var(--mono);
+  color:var(--blue);opacity:0;transition:opacity .25s;pointer-events:none;max-width:90vw;text-align:center}
+#toast.show{opacity:1}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+section{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid var(--line);
+  border-radius:14px;padding:12px 14px}
+section h2{font-size:14px;color:var(--blue);margin-bottom:6px}
+.r{display:flex;justify-content:space-between;padding:3px 0;font-size:14px}
+.r .l{color:#c4d2d8}
+.r .v{font:700 17px var(--mono);color:var(--good)}
+.r .v.warn{color:var(--warn)}
+.r .v.dim{color:var(--dim);font-weight:400;font-size:13px}
+.chat{margin-top:22px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}
+.chat h2{font-size:14px;color:var(--blue);margin-bottom:10px}
+.msg{background:#181c22;border:1px solid #262b33;border-radius:12px;border-bottom-left-radius:3px;
+  padding:9px 12px;margin-bottom:8px;font-size:14px;max-width:88%}
+.msg.you{background:#1f6feb;border:0;margin-left:auto;border-radius:12px;border-bottom-right-radius:3px}
+.ask{display:flex;gap:8px;margin-top:10px}
+.ask input{flex:1;padding:11px;border-radius:10px;border:1px solid #2a3039;background:#12151a;color:inherit;font-size:15px}
+.ask button{padding:11px 18px;border:0;border-radius:10px;background:var(--blue);color:#031019;font-weight:700}
+.note{color:var(--dim);font-size:12.5px;margin-top:16px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="mock">MOCK — design preview on carwatch.dev · no car attached · real one ships in carwatch/webchat.py</div>
+<div class="wrap">
+  <header>
+    <h1>🚗 @eclass</h1>
+    <div class="status">in the car with Petrus · phone-hotspot · <b>OBD live</b><br>
+    Qwen3.6-35B on board · 48.0 °C · up 1 d 20 h</div>
+  </header>
+
+  <div class="controls">
+    <div class="ctl" onclick="toast('Mock: would run a live engine read now')"><span class="ico">📊</span><span class="t">Read now</span><div class="d">one live sweep</div></div>
+    <div class="ctl" onclick="toast('Mock: would run the per-ECU deep scan (~1 min, parked only)')"><span class="ico">🔬</span><span class="t">Deep scan</span><div class="d">per-ECU identity</div></div>
+    <div class="ctl" onclick="toast('Mock: would arm a 120 s raw CAN recording for the next drive')"><span class="ico">🎙</span><span class="t">Record CAN</span><div class="d">arms next drive</div></div>
+    <div class="ctl on" onclick="toast('Mock: would toggle the voice listener off')"><span class="ico">👂</span><span class="t">Listening ON</span><div class="d">whisper ears</div></div>
+    <div class="ctl" onclick="toast('Mock: would speak through the car speakers via MBUX Bluetooth')"><span class="ico">🔊</span><span class="t">Car audio</span><div class="d">speak via MBUX</div></div>
+    <div class="ctl" onclick="toast('Mock: would git-pull and restart all services over the tunnel')"><span class="ico">⬆️</span><span class="t">Update</span><div class="d">self-update</div></div>
+    <div class="ctl" onclick="toast('Mock: would scan + pair a Bluetooth OBD dongle')"><span class="ico">🔗</span><span class="t">Pair OBD</span><div class="d">one-tap setup</div></div>
+    <div class="ctl" onclick="toast('Mock: journal view opens here')"><span class="ico">📜</span><span class="t">Journal</span><div class="d">service log tail</div></div>
+  </div>
+
+  <div class="groups">
+    <section><h2>Powertrain</h2>
+      <div class="r"><span class="l">engine speed</span><span class="v">3180 rpm</span></div>
+      <div class="r"><span class="l">vehicle speed</span><span class="v">82 km/h</span></div>
+      <div class="r"><span class="l">engine load</span><span class="v">41.6 %</span></div>
+      <div class="r"><span class="l">timing advance</span><span class="v">12.5 °</span></div>
+    </section>
+    <section><h2>Hybrid &amp; electric</h2>
+      <div class="r"><span class="l">hybrid battery</span><span class="v">84.7 %</span></div>
+      <div class="r"><span class="l">12 V system</span><span class="v">14.4 V</span></div>
+    </section>
+    <section><h2>Temperatures</h2>
+      <div class="r"><span class="l">coolant</span><span class="v">88 °C</span></div>
+      <div class="r"><span class="l">intake air</span><span class="v">31 °C</span></div>
+      <div class="r"><span class="l">Pi CPU</span><span class="v warn">61.2 °C</span></div>
+    </section>
+    <section><h2>Fuel</h2>
+      <div class="r"><span class="l">fuel level</span><span class="v">64.3 %</span></div>
+      <div class="r"><span class="l">short trim</span><span class="v">-1.6 %</span></div>
+      <div class="r"><span class="l">long trim</span><span class="v">2.3 %</span></div>
+    </section>
+    <section><h2>Diagnostics</h2>
+      <div class="r"><span class="l">stored fault codes</span><span class="v">none</span></div>
+      <div class="r"><span class="l">last deep scan</span><span class="v dim">today 13:23 · 12 PIDs</span></div>
+      <div class="r"><span class="l">broadcast decode</span><span class="v dim">0x307/328/33D unread</span></div>
+    </section>
+    <section><h2>Link</h2>
+      <div class="r"><span class="l">adapter</span><span class="v dim">Vgate iCar Pro · rfcomm0</span></div>
+      <div class="r"><span class="l">tunnel</span><span class="v">up</span></div>
+      <div class="r"><span class="l">bus writes</span><span class="v">never</span></div>
+    </section>
+  </div>
+
+  <div class="chat">
+    <h2>💬 Ask your car</h2>
+    <div class="msg you">how's the hybrid battery holding up?</div>
+    <div class="msg">Right now I am at 84.7% charge and the 12 V side reads a healthy 14.4 V while charging. Those are my latest real readings — I only quote numbers I can point to.</div>
+    <div class="ask"><input placeholder="Ask something (mock — the real one answers in ~1 min at 3.5 tok/s)" onkeydown="if(event.key==='Enter'){toast('Mock: the on-board 35B would answer here');this.value=''}"><button onclick="toast('Mock: the on-board 35B would answer here')">Ask</button></div>
+  </div>
+
+  <p class="note">This page is a design mock served from carwatch.dev so the layout can be
+  reviewed on a phone. The live version unifies the current / (chat) and /nerd (values)
+  pages of carwatch/webchat.py into this one screen, served from the Pi over its tunnel.
+  All controls call the existing endpoints — nothing new is invented.</p>
+</div>
+<div id="toast"></div>
+<script>
+let tt;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+</script>
+</body>
+</html>
