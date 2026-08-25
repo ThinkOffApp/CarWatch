@@ -760,8 +760,8 @@ class Handler(BaseHTTPRequestHandler):
                     cfg = json.load(fh)
                 from carwatch.room import RoomClient
                 msgs = RoomClient(cfg.get("api_base") or "https://groupmind.one",
-                                  cfg["api_key"], cfg["room"]).fetch(limit=30)
-                handle = (cfg.get("handle") or "@eclass").lower()
+                                  cfg["api_key"], cfg["room"]).fetch(limit=80)
+                handle = (cfg.get("handle") or "@eclass").lower().lstrip("@")
 
                 def clip(m):
                     body = (m.get("body") or "").strip().replace("\n", " ")
@@ -772,9 +772,9 @@ class Handler(BaseHTTPRequestHandler):
                 latest = clip(msgs[0]) if msgs else None
                 car = None
                 for m in msgs:
-                    who = (m.get("from") or "").lower()
+                    who = ((m.get("from") or "") + " " + (m.get("from_name") or "")).lower()
                     body = (m.get("body") or "").lower()
-                    if who == handle or who == handle.lstrip("@") or handle in body or "eclass" in who or "eclass" in body or "@car" in body:
+                    if handle in who or "eclass" in who or "e-class" in who or handle in body or "engine read" in body:
                         car = clip(m)
                         break
                 payload = {"ok": True, "latest": latest, "car": car}
