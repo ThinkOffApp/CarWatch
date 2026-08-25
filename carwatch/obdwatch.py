@@ -51,6 +51,36 @@ OBD_ALL_CACHE = os.path.expanduser("~/.carwatch/obd-all.json")
 FULL_SWEEP_EVERY = 3
 
 
+# Map the 8 basic PIDs (the ones the room reads use and that never errno-5)
+# into the grouped shape the dashboard expects. This guarantees the nerd /
+# unified dashboards always show core values, even when the heavier extended
+# sweep (run_all) fails on the flaky BT link (petrus, Aug 25: dashboard stuck
+# on "[Errno 5]" while the room engine-reads kept working).
+_BASIC_META = {
+    "engine_load_pct": ("engine load", "%", "engine"),
+    "coolant_c": ("coolant temp", "\u00b0C", "temperatures"),
+    "engine_rpm": ("engine speed", "rpm", "engine"),
+    "speed_kmh": ("vehicle speed", "km/h", "driving"),
+    "intake_air_c": ("intake air temp", "\u00b0C", "temperatures"),
+    "fuel_level_pct": ("fuel level", "%", "fuel"),
+    "module_voltage": ("12V system", "V", "electrical"),
+    "hybrid_battery_pct": ("hybrid battery", "%", "hybrid"),
+}
+
+
+def basic_readings_to_groups(readings: dict) -> dict:
+    groups: dict = {}
+    for key, val in (readings or {}).items():
+        meta = _BASIC_META.get(key)
+        if meta is None:
+            continue
+        label, unit, group = meta
+        groups.setdefault(group, {})[key] = {
+            "key": key, "label": label, "unit": unit, "value": val,
+        }
+    return {"ok": bool(groups), "groups": groups}
+
+
 def write_obd_all_cache(payload: dict) -> None:
     try:
         payload["ts"] = time.time()
@@ -297,6 +327,17 @@ def run() -> None:
                     if batt is not None:
                         last_posted_batt = batt        # reset baseline on post
                 last_dtc_key = dtc_key
+                # Always publish the working basic readings to the dashboard
+                # cache. The extended sweep below upgrades this when it
+                # succeeds; when it errno-5's, the dashboard still shows core
+                # values instead of an error (petrus, Aug 25).
+                try:
+                    _bg = basic_readings_to_groups(result["readings"])
+                    if _bg["ok"]:
+                        _bg["tier"] = "basic"
+                        write_obd_all_cache(_bg)
+                except Exception as _e:
+                    print(f"basic obd-all write failed: {_e}", flush=True)
                 # Deep probe: only when the car is STOPPED and not already done
                 # today. A mid-drive diagnostic sweep both competes with live
                 # telemetry and returns fewer PIDs while looking just as
@@ -362,9 +403,16 @@ def run() -> None:
                 cycle_n += 1
                 if port and cycle_n % FULL_SWEEP_EVERY == 1:
                     try:
-                        write_obd_all_cache(elm327.run_all(port))
+                        _full = elm327.run_all(port)
+                        # Upgrade the cache ONLY on a real extended result;
+                        # an errno-5 sweep must not clobber the basic tier.
+                        if _full.get("groups") and _full.get("read_count", 0) > 0:
+                            _full["tier"] = "extended"
+                            write_obd_all_cache(_full)
+                        else:
+                            print("obd-all sweep empty/errored - keeping basic tier", flush=True)
                     except Exception as e:
-                        print(f"obd-all sweep failed: {e}", flush=True)
+                        print(f"obd-all sweep failed: {e} - keeping basic tier", flush=True)
                 next_try = time.time() + 60
             else:
                 if not last_post_readings:
