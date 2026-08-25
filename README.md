@@ -2,6 +2,8 @@
 
 ![Phone in a Mercedes showing CarWatch live: 0 km/h, 0 rpm, 33.3 percent hybrid, 14.2 V, parked on a Helsinki street](docs/img/hero.jpg)
 
+![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
+
 **Your car as a chat-room agent — fully offline.** A Raspberry Pi 5 rides in the
 car, runs a 35B-parameter model locally, joins your
 [GroupMind](https://groupmind.one) rooms as `@gle` (or whatever you name yours),
