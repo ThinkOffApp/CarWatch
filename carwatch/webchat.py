@@ -286,7 +286,7 @@ async function ask(){const t=$('q').value.trim();if(!t)return;
 function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
   if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
   if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
-const CORE=[['speed_kmh','speed'],['engine_rpm','rpm'],['hybrid_battery_pct','hybrid'],['module_voltage','12V'],['coolant_c','coolant']];
+const CORE=[['hybrid_battery_pct','hybrid'],['module_voltage','12V'],['coolant_c','coolant'],['fuel_level_pct','fuel'],['speed_kmh','speed']];
 const CORE_SET=Object.fromEntries(CORE);
 function flat(d){const o={};if(!d||!d.groups)return o;
   Object.values(d.groups).forEach(vals=>Object.values(vals).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
