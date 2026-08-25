@@ -266,7 +266,7 @@ function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scro
 async function act(el,url,label){
   el.classList.add('busy');show(label+' ...');
   try{const r=await F(url,{method:'POST'},ACT_MS[url]||30000);const d=await r.json();
-    show(label+'\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
+    show(label+'\\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
   }catch(e){show(label+' failed: '+e)}
   el.classList.remove('busy')}
 async function toggleListen(){
@@ -303,7 +303,7 @@ async function poll(){
       const m=flat(d);
       c.innerHTML=CORE.map(([k,label])=>{
         const r=m[k]||{}; const n=Number(r.value); const u=r.unit||'';
-        return '<div class=g><div class="n '+sev(u,k,n)+'">'+(r.value==null?'—':r.value)+'</div><div class=k>'+label+(u?' '+u:'')+'</div></div>';
+        return '<div class=g><div class="n '+sev(u,k,n)+'">'+(r.value==null?'-':r.value)+'</div><div class=k>'+label+(u?' '+u:'')+'</div></div>';
       }).join('');
       $('age').textContent=d.age_s!==undefined?('engine data from '+Math.round(d.age_s)+'s ago'+(d.age_s>180?' - STALE (ignition off?)':'')):'';
       g.innerHTML=Object.entries(d.groups).map(([name,vals])=>{
