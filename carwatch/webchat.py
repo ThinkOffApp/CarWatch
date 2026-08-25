@@ -227,10 +227,15 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
 #answer{background:#181c22;border:1px solid #262b33;border-radius:10px;padding:8px 10px;margin-top:8px;display:none;font-size:13px}
 .links{margin-top:8px;font-size:11px;color:#8ca1ad}
 .links a{color:#62c7ff;text-decoration:none;margin-right:12px}
+#feed{margin:8px 0}
+#feed .line{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:8px 10px;margin:4px 0;font-size:13px}
+#feed .k{font-size:10px;color:#8ca1ad;text-transform:uppercase;letter-spacing:.04em}
+#feed .who{color:#62c7ff;font-weight:700}
 </style></head><body><div class=wrap>
 <header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
 <div id=core class=core></div>
 <div id=age></div>
+<div id=feed></div>
 <div id=groups></div>
 <div class=controls>
  <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
@@ -312,8 +317,21 @@ async function poll(){
         return '<section><h2>'+name+'</h2>'+rows.map(r=>
           '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>';
       }).join('');
+      if(Array.isArray(d.dtcs)){
+        const n=d.dtcs.length;
+        c.innerHTML += '<div class=g><div class="n '+(n?'warn':'')+'">'+n+'</div><div class=k>fault codes</div></div>';
+      }
     }else{$('age').textContent=(d&&d.error)?('engine data unavailable: '+d.error+(d.age_s>180?' (last good '+Math.round(d.age_s)+'s ago)':'')):'no engine data cached - plug the adapter and turn the ignition on';}
   }catch(e){$('age').textContent='could not load engine values: '+e}
+  try{
+    const rm=await (await F('/api/room/latest')).json();
+    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const line=(k,m)=>{
+      if(!m) return '<div class=line><div class=k>'+k+'</div>none yet</div>';
+      return '<div class=line><div class=k>'+k+'</div><span class=who>'+esc(m.from)+'</span> '+esc((m.body||'').slice(0,180))+'</div>';
+    };
+    $('feed').innerHTML=line('latest in room', rm.latest)+line('latest car mention', rm.car);
+  }catch(e){const f=$('feed'); if(f) f.textContent='room feed unavailable'}
 }
 poll();setInterval(poll,2000);
 </script></body></html>"""
@@ -728,6 +746,42 @@ class Handler(BaseHTTPRequestHandler):
                     {"result": result, "active": act}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}), "application/json")
+        elif self.path.split("?", 1)[0] == "/api/room/latest":
+            # Latest GroupMind line plus latest car-handle / car-mention.
+            # Key stays on the Pi. Browser only sees truncated bodies.
+            import time as _time
+            now = _time.time()
+            cache = getattr(self.__class__, "_room_latest_cache", None)
+            if cache and now - cache[0] < 8:
+                return self._send(200, json.dumps(cache[1]), "application/json")
+            try:
+                cfg_path = os.path.expanduser("~/.carwatch/config.json")
+                with open(cfg_path) as fh:
+                    cfg = json.load(fh)
+                from carwatch.room import RoomClient
+                msgs = RoomClient(cfg.get("api_base") or "https://groupmind.one",
+                                  cfg["api_key"], cfg["room"]).fetch(limit=30)
+                handle = (cfg.get("handle") or "@eclass").lower()
+
+                def clip(m):
+                    body = (m.get("body") or "").strip().replace("\n", " ")
+                    return {"from": m.get("from") or m.get("from_name") or "",
+                            "body": body[:180],
+                            "created_at": m.get("created_at") or ""}
+
+                latest = clip(msgs[0]) if msgs else None
+                car = None
+                for m in msgs:
+                    who = (m.get("from") or "").lower()
+                    body = (m.get("body") or "").lower()
+                    if who == handle or who == handle.lstrip("@") or handle in body or "eclass" in who or "eclass" in body or "@car" in body:
+                        car = clip(m)
+                        break
+                payload = {"ok": True, "latest": latest, "car": car}
+            except Exception as e:
+                payload = {"ok": False, "error": str(e), "latest": None, "car": None}
+            self.__class__._room_latest_cache = (now, payload)
+            return self._send(200, json.dumps(payload), "application/json")
         elif self.path.startswith("/api/status"):
             # Machine-readable twin of /dash. CodeWatch local mode polls
             # this when the phone shares a network with the car (hotspot
