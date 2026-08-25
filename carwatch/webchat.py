@@ -118,7 +118,7 @@ async function tick(){
  try{
   const a=await (await fetch('/api/cloudcar/auth')).json();
   if(a.step==='need_email')form('your vendor-account email','email','send code');
-  else if(a.step==='need_code')form('code from your email','code','confirm');
+  else if(a.step==='need_code')form(a.hint||'code from your email','code','confirm');
   else if(a.step==='no_provider')ab.innerHTML='<span style="color:#fc6">provider plugin not installed yet</span>';
   else ab.innerHTML='<span style="color:#6f6">authenticated</span>';
   const s=await (await fetch('/api/cloudcar')).json();
@@ -198,6 +198,16 @@ h1{font-size:16px}
 #status{font:11px ui-monospace,monospace;color:#8ca1ad;text-align:right}
 #status b{color:#40d98b}
 .core{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:8px 0}
+#cloud{margin:8px 0}
+.car{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:10px 12px;margin:8px 0}
+.car h2{font-size:13px;color:#62c7ff;margin-bottom:6px}
+.glance{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.gi{text-align:center;min-width:60px}
+.gi .e{font-size:22px;display:block}
+.gi .l{font-size:10px;color:#8ca1ad}
+.gi .s{font:700 12px ui-monospace,monospace}
+.gi .s.ok{color:#40d98b}.gi .s.warn{color:#ffc857}.gi .s.bad{color:#ff667d}
+#cloudnote{font-size:11px;color:#8ca1ad;font-family:ui-monospace,monospace}
 @media (max-width:520px){.core{grid-template-columns:repeat(2,1fr)}}
 .core .g{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:16px 6px;text-align:center}
 .core .n{font:700 34px/1.05 ui-monospace,monospace;color:#40d98b}
@@ -256,10 +266,12 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
  <div class=ctl onclick="act(this,'/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)')"><span class=ico>&#128279;</span><span class=t>Pair</span><div class=d>MBUX audio</div></div>
  <div class=ctl onclick="act(this,'/api/update','pull latest code + restart services')"><span class=ico>&#11014;&#65039;</span><span class=t>Update</span><div class=d>self-update</div></div>
  <div class=ctl onclick="location.href='/journal'"><span class=ico>&#128220;</span><span class=t>Journal</span><div class=d>service log</div></div>
+ <div class=ctl onclick="pollCloud(true)"><span class=ico>&#9729;&#65039;</span><span class=t>Cloud</span><div class=d>refresh Mercedes data</div></div>
 </div>
 <div id=out></div>
 <div class=ask><input id=q placeholder="Ask your car"><button onclick="ask()">Ask</button></div>
 <div id=answer></div>
+<div id=cloud><div id=cloudnote>mercedes cloud: loading&#8230;</div></div>
 <div id=cap>
   <div class=k id=capnote>last CAN capture</div>
   <div class=wheel-wrap>
@@ -372,7 +384,49 @@ async function poll(){
     }
   }catch(e){const n=$('capnote'); if(n) n.textContent='capture unavailable'}
 }
+// Mercedes cloud glance: vendor data via the home HA, slower cadence than
+// OBD (HA itself polls Mercedes; 30s here adds nothing but load).
+function gi(e,l,s,cls){return '<div class=gi><span class=e>'+e+'</span><div class="s '+(cls||'')+'">'+s+'</div><div class=l>'+l+'</div></div>'}
+function agg(o,openWord){ // granular door/window dicts -> one honest word
+  if(!o)return null;
+  if(o.all_closed!==undefined)return o.all_closed==='on'?['closed','ok']:['open','warn'];
+  const vals=Object.values(o);if(!vals.length)return null;
+  const open=vals.filter(v=>v==='on'||v==='open').length;
+  return open?[open+' '+openWord,'warn']:['closed','ok'];
+}
+async function pollCloud(manual){
+  const el=$('cloud');
+  try{
+    const s=await (await F('/api/cloudcar',{},manual?12000:6000)).json();
+    if(!s.ok){
+      el.innerHTML='<div id=cloudnote>mercedes cloud: '+(s.error||'no data')+
+        (String(s.error||'').includes('token')?' &middot; <a href="'+_q('/cloudcar')+'" style=color:#62c7ff>set up</a>':'')+'</div>';
+      return;
+    }
+    el.innerHTML=Object.values(s.cars).map(c=>{
+      const parts=[];
+      const lk=c.lock&&String(c.lock.locked||'');
+      if(lk)parts.push(gi(lk==='locked'?'&#128274;':'&#128275;','lock',lk,lk==='locked'?'ok':'bad'));
+      const d=agg(c.doors,'open');if(d)parts.push(gi('&#128682;','doors',d[0],d[1]));
+      const w=agg(c.windows,'open');if(w)parts.push(gi('&#129695;','windows',w[0],w[1]));
+      if(c.sunroof)parts.push(gi('&#9728;&#65039;','sunroof',c.sunroof,c.sunroof==='closed'?'ok':'warn'));
+      if(c.tires_kpa){const t=Object.values(c.tires_kpa);const spread=Math.max(...t)-Math.min(...t);
+        parts.push(gi('&#128663;','tires kPa',t.join('/'),spread>20?'warn':'ok'));}
+      if(c.ev&&c.ev.soc_pct!==undefined){const p=c.ev.soc_pct;
+        parts.push(gi('&#128267;','charge',p+'%'+(c.ev.range_km?' &middot; '+c.ev.range_km+' km':''),p>50?'ok':(p>20?'warn':'bad')));}
+      if(c.ev&&(c.ev.charging==='on'||c.ev.charging===true))parts.push(gi('&#9889;','charging','now','ok'));
+      if(c.fuel&&(c.fuel.level_pct!==undefined||c.fuel.range_km!==undefined)){
+        const fp=c.fuel.level_pct!==undefined?c.fuel.level_pct+'%':'';
+        const fr=c.fuel.range_km!==undefined?c.fuel.range_km+' km':'';
+        parts.push(gi('&#9981;','fuel',[fp,fr].filter(Boolean).join(' &middot; '),''));}
+      if(c.fuel&&c.fuel.adblue_pct!==undefined)parts.push(gi('&#128167;','AdBlue',c.fuel.adblue_pct+'%',''));
+      if(c.odometer_km!==undefined)parts.push(gi('&#128207;','odometer',Math.round(c.odometer_km)+' km',''));
+      return '<div class=car><h2>'+c.label+'</h2><div class=glance>'+parts.join('')+'</div></div>';
+    }).join('')+'<div id=cloudnote>from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; read-only</div>';
+  }catch(e){el.innerHTML='<div id=cloudnote>mercedes cloud unreachable: '+e+'</div>'}
+}
 poll();setInterval(poll,2000);
+pollCloud();setInterval(pollCloud,30000);
 </script></body></html>"""
 
 # Playback of the last ATMA capture. Live ATMA wedges the ELM, so this page
@@ -1414,6 +1468,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Serve the car's chat page")
     ap.add_argument("--port", type=int, default=8088)
     args = ap.parse_args()
+    # Register cloud providers (import side-effect). Guarded: a broken or
+    # absent provider must never take down the car's own dashboard.
+    try:
+        from carwatch import mercedesme  # noqa: F401
+    except Exception as e:
+        print(f"cloudcar provider not loaded: {e}")
     print(f"CarWatch chat on http://0.0.0.0:{args.port}  (model: {MODEL_URL})")
     ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
 
