@@ -16,21 +16,34 @@ PIPER="$HOME/.local/bin/piper"
 # Car BT MAC is remembered here after pairing so 'say' needs no argument.
 CAR_MAC_FILE="$HOME/.carwatch/car-bt-mac"
 
+car_mac() {
+    local mac=""
+    [ -f "$CAR_MAC_FILE" ] && mac="$(cat "$CAR_MAC_FILE")"
+    if [ -z "$mac" ]; then
+        mac=$(bluetoothctl devices Paired 2>/dev/null | grep -iE "mbux|mercedes|benz" | awk '{print $2}' | head -1 || true)
+        if [ -n "$mac" ]; then
+            mkdir -p "$(dirname "$CAR_MAC_FILE")"
+            echo "$mac" > "$CAR_MAC_FILE"
+        fi
+    fi
+    echo "$mac"
+}
+
 speak() {
     local text="$1"
     [ -x "$PIPER" ] && [ -f "$VOICE" ] || { echo "piper/voice missing"; exit 1; }
     ensure_bluealsa >/dev/null 2>&1 || true
     local wav; wav="$(mktemp --suffix=.wav)"
     echo "$text" | "$PIPER" -m "$VOICE" -f "$wav" 2>/dev/null
-    local mac=""; [ -f "$CAR_MAC_FILE" ] && mac="$(cat "$CAR_MAC_FILE")"
+    local mac; mac="$(car_mac)"
     if [ -n "$mac" ]; then
-        # Route to the car's A2DP sink explicitly.
+        # Bond can exist while A2DP is down (measured: Paired yes, Connected no).
+        bluetoothctl connect "$mac" >/dev/null 2>&1 || true
+        sleep 2
         bluealsa-aplay --profile-a2dp "$mac" < "$wav" 2>/dev/null || \
         aplay -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \
         echo "playback failed - is the car connected? (car-speak.sh pair)"
     else
-        # No car paired yet: send to the default bluealsa sink (whatever A2DP
-        # device is connected), so it still works if the car auto-connected.
         bluealsa-aplay < "$wav" 2>/dev/null || echo "no A2DP sink - pair the car first"
     fi
     rm -f "$wav"
@@ -118,6 +131,18 @@ case "$CMD" in
         systemctl start bluetooth || true
         ensure_bluealsa || true
         bluetoothctl power on >/dev/null 2>&1 || true
+        # Already bonded: just connect. Removing the bond (do_pairmac) while
+        # driving made Pair car look dead (petrus, Aug 25).
+        EXISTING=$(bluetoothctl devices Paired 2>/dev/null | grep -iE "mbux|mercedes|benz" | head -1 || true)
+        if [ -n "$EXISTING" ]; then
+            MAC=$(echo "$EXISTING" | awk '{print $2}')
+            mkdir -p "$(dirname "$CAR_MAC_FILE")"; echo "$MAC" > "$CAR_MAC_FILE"
+            echo "already paired $EXISTING - connecting"
+            bluetoothctl connect "$MAC" || true
+            sleep 2
+            speak "CarWatch connected. You should hear me through your car speakers." || true
+            exit 0
+        fi
         echo "== scanning 20 s for the car's Bluetooth audio =="
         bluetoothctl --timeout 20 scan on >/dev/null 2>&1 || true
         echo "Devices bluetoothd sees (your Mercedes shows as 'MBUX <number>', e.g. MBUX 57313 - NOT the word 'Mercedes'):"
