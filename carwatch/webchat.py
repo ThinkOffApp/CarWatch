@@ -505,6 +505,17 @@ def answer(question: str, use_manual: bool = True) -> str:
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="text/html; charset=utf-8"):
+        if "html" in ctype and not isinstance(body, bytes):
+            from urllib.parse import urlparse, parse_qs
+            _t = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+            if _t and "</body>" in body:
+                _inj = ("<script>(function(){var t=new URLSearchParams("
+                        "location.search).get('t');if(!t)return;"
+                        "document.querySelectorAll('a[href^=\"/\"]').forEach("
+                        "function(a){var u=a.getAttribute('href');"
+                        "a.setAttribute('href',u+(u.indexOf('?')>-1?'&':'?')+'t='"
+                        "+encodeURIComponent(t))});})();</script></body>")
+                body = body.replace("</body>", _inj, 1)
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
