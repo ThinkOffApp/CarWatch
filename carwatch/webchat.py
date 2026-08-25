@@ -270,10 +270,12 @@ function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad
   if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
   if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
 async function poll(){
-  try{const s=await(await F('/api/status')).json();const f=s.facts||{};
+  try{const r=await F('/api/status');const s=await r.json();
+    if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>Open this dashboard from the app link (it needs the access token) or from the home network</span>';return}
+    const f=s.facts||{};
     $('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+' &middot; <b>'+(f.uptime||'')+'</b>';
     if(s.listening!==undefined)setListen(s.listening);
-  }catch(e){$('status').textContent='Pi unreachable'}
+  }catch(e){$('status').innerHTML='<span style=color:#ff667d>Cannot reach the car - open this page from the app link so it carries the access token, or use the home network URL</span>'}
   try{const d=await(await F('/api/obd/all')).json();
     const g=$('groups');
     if(d&&d.groups&&Object.keys(d.groups).length){
@@ -507,6 +509,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        if "html" in ctype:
+            # The dashboard changed several times in one day; a cached copy
+            # kept showing the old broken version (petrus, Aug 25).
+            self.send_header("Cache-Control", "no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(data)
 
