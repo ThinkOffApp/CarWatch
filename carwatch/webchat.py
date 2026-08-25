@@ -180,6 +180,107 @@ _OBD_ALL_MOCK = {
     },
 }
 
+# The unified admin: /dash and /nerd's jobs on ONE screen with graphical
+# controls (petrus, Aug 25: "unify /dash and /nerd, graphical buttons" -
+# layout approved via the carwatch.dev mock). Live values poll
+# /api/obd/all + /api/status; every button calls an endpoint that already
+# existed - nothing new happens to the car.
+UNIFIED_PAGE = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>CarWatch</title><style>
+:root{color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:radial-gradient(circle at top,#142a35 0,#091016 48%);color:#e8f1f5;
+  font:15px/1.5 -apple-system,system-ui,sans-serif;padding:0 12px 40px}
+.wrap{max-width:980px;margin:0 auto}
+header{padding:18px 0 10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+h1{font-size:22px}
+#status{font:12px ui-monospace,monospace;color:#8ca1ad;text-align:right}
+#status b{color:#40d98b}
+.controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px;margin:8px 0 18px}
+.ctl{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:13px;
+  padding:12px 10px;text-align:center;cursor:pointer;user-select:none;transition:transform .06s,border-color .15s}
+.ctl:active{transform:scale(.96)}.ctl:hover{border-color:#62c7ff}
+.ctl .ico{font-size:24px;display:block;margin-bottom:4px}
+.ctl .t{font-weight:700;font-size:13.5px}
+.ctl .d{font-size:11px;color:#8ca1ad;margin-top:2px}
+.ctl.on{border-color:#40d98b}.ctl.on .t{color:#40d98b}
+.ctl.busy{border-color:#ffc857;opacity:.7;pointer-events:none}
+#groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px}
+section{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:13px;padding:10px 13px}
+section h2{font-size:13.5px;color:#62c7ff;margin-bottom:4px}
+.r{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:13.5px}
+.r .l{color:#c4d2d8}.r .v{font:700 15px ui-monospace,monospace;color:#40d98b;text-align:right}
+.r .v.warn{color:#ffc857}.r .v.bad{color:#ff667d}
+#age{color:#8ca1ad;font-size:12px;margin:10px 0;font-family:ui-monospace,monospace}
+#out{background:#0e171e;border:1px solid #20313c;border-radius:10px;padding:10px 12px;
+  font:12px ui-monospace,monospace;color:#9fe8bd;white-space:pre-wrap;display:none;margin-bottom:14px;max-height:200px;overflow:auto}
+.ask{display:flex;gap:8px;margin-top:14px}
+.ask input{flex:1;padding:11px;border-radius:10px;border:1px solid #2a3039;background:#12151a;color:inherit;font-size:15px}
+.ask button{padding:11px 16px;border:0;border-radius:10px;background:#62c7ff;color:#031019;font-weight:700}
+#answer{background:#181c22;border:1px solid #262b33;border-radius:12px;padding:10px 12px;margin-top:10px;display:none;font-size:14px}
+.links{margin-top:16px;font-size:13px;color:#8ca1ad}
+.links a{color:#62c7ff;text-decoration:none;margin-right:14px}
+</style></head><body><div class=wrap>
+<header><h1>&#128663; CarWatch</h1><div id=status>connecting&hellip;</div></header>
+<div class=controls>
+ <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
+ <div class=ctl onclick="act(this,'/api/obd/deep','per-ECU deep scan (~1 min, parked)')"><span class=ico>&#128300;</span><span class=t>Deep scan</span><div class=d>per-ECU identity</div></div>
+ <div class=ctl onclick="act(this,'/api/obd/record-arm','armed: records 120s raw CAN on the next moving read')"><span class=ico>&#127908;</span><span class=t>Record CAN</span><div class=d>arms next drive</div></div>
+ <div class=ctl id=listenCtl onclick="toggleListen()"><span class=ico>&#128066;</span><span class=t id=listenT>Listening&hellip;</span><div class=d>whisper ears</div></div>
+ <div class=ctl onclick="speak()"><span class=ico>&#128266;</span><span class=t>Car audio</span><div class=d>speak via MBUX</div></div>
+ <div class=ctl onclick="act(this,'/api/update','pull latest code + restart services')"><span class=ico>&#11014;&#65039;</span><span class=t>Update</span><div class=d>self-update</div></div>
+ <div class=ctl onclick="act(this,'/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)')"><span class=ico>&#128279;</span><span class=t>Pair car</span><div class=d>MBUX audio</div></div>
+ <div class=ctl onclick="location.href='/journal'"><span class=ico>&#128220;</span><span class=t>Journal</span><div class=d>service log</div></div>
+</div>
+<div id=out></div>
+<div id=age></div>
+<div id=groups></div>
+<div class=ask><input id=q placeholder="Ask your car something"><button onclick="ask()">Ask</button></div>
+<div id=answer></div>
+<div class=links><a href="/">&#128172; chat</a><a href="/nerd">&#128300; nerd detail</a><a href="/cloudcar">&#9729;&#65039; cloud car</a></div>
+</div><script>
+const $=id=>document.getElementById(id);
+function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight}
+async function act(el,url,label){
+  el.classList.add('busy');show(label+' ...');
+  try{const r=await fetch(url,{method:'POST'});const d=await r.json();
+    show(label+'\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
+  }catch(e){show(label+' failed: '+e)}
+  el.classList.remove('busy')}
+async function toggleListen(){
+  const on=!$('listenCtl').classList.contains('on');
+  try{const r=await fetch('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})});
+    const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
+function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening ON':'Listening off'}
+function speak(){const t=prompt('Text for the car to speak:');if(!t)return;
+  fetch('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})})
+    .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||'failed')))}
+async function ask(){const t=$('q').value.trim();if(!t)return;
+  const a=$('answer');a.style.display='block';a.textContent='thinking\u2026 (~1 min at 3.5 tok/s)';$('q').value='';
+  try{const r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})});
+    const d=await r.json();a.textContent=d.answer||'(no answer)'}catch(e){a.textContent='could not reach the car brain'}}
+function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
+  if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
+  if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
+async function poll(){
+  try{const s=await(await fetch('/api/status')).json();const f=s.facts||{};
+    $('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+' &middot; <b>'+(f.uptime||'')+'</b>';
+    if(s.listening!==undefined)setListen(s.listening);
+  }catch(e){$('status').textContent='Pi unreachable'}
+  try{const d=await(await fetch('/api/obd/all')).json();
+    const g=$('groups');
+    if(d&&d.groups&&Object.keys(d.groups).length){
+      $('age').textContent=d.age_s!==undefined?('engine data from '+Math.round(d.age_s)+'s ago'+(d.age_s>180?' - STALE (ignition off?)':'')):'';
+      g.innerHTML=Object.entries(d.groups).map(([name,vals])=>
+        '<section><h2>'+name+'</h2>'+Object.values(vals).map(r=>
+          '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>').join('');
+    }else{$('age').textContent='no engine data cached - plug the adapter and turn the ignition on';}
+  }catch(e){}
+}
+poll();setInterval(poll,2000);
+</script></body></html>"""
+
 DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>vadelma dash</title></head>
@@ -683,7 +784,7 @@ class Handler(BaseHTTPRequestHandler):
                               text=True, timeout=5).stdout.split() or ["?"])[0]
             except Exception:
                 pass
-            self._send(200, DASH_PAGE.replace("__IP__", ip))
+            self._send(200, UNIFIED_PAGE)
         elif self.path.startswith("/journal"):
             # The car's thinking, phone-readable: last agent-journal lines,
             # auto-refreshing. petrus asked "how can I see the journal" -
