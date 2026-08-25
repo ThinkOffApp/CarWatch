@@ -161,14 +161,26 @@ def record_bus(elm, seconds: float = 90.0, out_dir: str = None) -> dict:
     elm.cmd("ATE0", 1.0)
     elm.cmd("ATL0", 1.0)
     elm.cmd("ATH1", 1.0)
+    # The first drive's capture came back 75% "DATA ERROR": ATSP0 (auto)
+    # leaves the ELM mis-framing the raw bus in ATMA. Probe once to let it
+    # settle the real protocol, read which one it locked (ATDPN), then PIN
+    # that number with ATSPn so monitor-all frames on stable boundaries.
+    # 11-bit/500k (6) and 29-bit/500k (7) are the CAN variants; anything
+    # else we still monitor but note in the header for the decode.
     elm.cmd("ATSP0", 1.0)
     elm.cmd("0100", 4.0)
+    proto = elm.cmd("ATDPN", 1.0).strip().replace(">", "").strip()
+    proto_num = proto[-1] if proto else "0"
+    if proto_num in ("6", "7", "8", "9", "A", "B", "C"):
+        elm.cmd("ATSP" + proto_num, 1.0)   # pin it so ATMA frames cleanly
+    elm.cmd("ATCAF0", 1.0)                  # no auto-formatting: raw frames
     os.write(elm.fd, b"ATMA\r")
     frames = 0
     ids = set()
     end = time.time() + seconds
     with open(path, "w") as f:
-        f.write(json.dumps({"started": time.time(), "seconds": seconds}) + "\n")
+        f.write(json.dumps({"started": time.time(), "seconds": seconds,
+                            "protocol": proto}) + "\n")
         buf = bytearray()
         while time.time() < end:
             try:
