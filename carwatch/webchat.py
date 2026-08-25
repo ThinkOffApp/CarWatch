@@ -250,7 +250,7 @@ section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
 <div id=out></div>
 <div class=ask><input id=q placeholder="Ask your car"><button onclick="ask()">Ask</button></div>
 <div id=answer></div>
-<div class=links><a href="/">chat</a><a href="/nerd">all PIDs</a></div>
+<div class=links><a href="/">chat</a><a href="/nerd">all PIDs</a><a href="/streams">streams</a></div>
 </div><script>
 const $=id=>document.getElementById(id);
 // Through the tunnel the page URL carries ?t=<token>; same-origin fetches
@@ -334,6 +334,58 @@ async function poll(){
   }catch(e){const f=$('feed'); if(f) f.textContent='room feed unavailable'}
 }
 poll();setInterval(poll,2000);
+</script></body></html>"""
+
+# Playback of the last ATMA capture. Live ATMA wedges the ELM, so this page
+# reads the file, not the adapter. Steering is a candidate (0x05 byte4 ~128).
+STREAMS_PAGE = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>CarWatch streams</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#091016;color:#e8f1f5;font:15px/1.4 -apple-system,system-ui,sans-serif;padding:12px}
+h1{font-size:18px;margin-bottom:8px}
+#note{color:#8ca1ad;font-size:12px;margin-bottom:12px}
+.wheel-wrap{display:flex;align-items:center;gap:16px;margin:12px 0 18px}
+.wheel{width:120px;height:120px;border-radius:50%;border:8px solid #20313c;background:#13232c;
+  display:flex;align-items:center;justify-content:center;position:relative}
+.spoke{width:8px;height:70%;background:#62c7ff;border-radius:4px}
+#ang{font:700 22px ui-monospace,monospace;color:#40d98b}
+.bar{display:flex;align-items:center;gap:8px;margin:4px 0}
+.bar b{width:72px;font:12px ui-monospace,monospace;color:#62c7ff}
+.bar .t{flex:1;height:14px;background:#13232c;border-radius:7px;overflow:hidden}
+.bar .t i{display:block;height:100%;background:#40d98b;width:0}
+.bar .n{width:90px;font:11px ui-monospace,monospace;color:#8ca1ad}
+a{color:#62c7ff}
+</style></head><body>
+<h1>CAN streams</h1>
+<div id=note>Last capture, not live. Steering is a candidate, not proven.</div>
+<div class=wheel-wrap>
+  <div class=wheel id=wheel><div class=spoke></div></div>
+  <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:12px">0x05 byte 4 around 128</div></div>
+</div>
+<div id=bars></div>
+<div style="margin-top:14px"><a href="/dash">dash</a></div>
+<script>
+const F=(u)=>{const t=new URLSearchParams(location.search).get('t')||'';
+  return fetch(t?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(t)):u)};
+F('/api/can/summary').then(r=>r.json()).then(d=>{
+  const note=document.getElementById('note');
+  if(!d.ok){note.textContent=d.error||'no capture';return}
+  note.textContent=(d.file||'capture')+' · '+d.frames+' frames · '+d.seconds+'s · 0 DATA ERROR in this file';
+  const st=d.steering||{};
+  const deg=((st.last||128)-128)*1.2;
+  document.getElementById('wheel').style.transform='rotate('+deg+'deg)';
+  document.getElementById('ang').textContent=(st.last==null?'--':st.last)+'  min '+st.min+' max '+st.max;
+  const bars=document.getElementById('bars');
+  const max=(d.streams&&d.streams[0]&&d.streams[0].n)||1;
+  (d.streams||[]).forEach(s=>{
+    const row=document.createElement('div'); row.className='bar';
+    row.innerHTML='<b>'+s.id+'</b><div class=t><i></i></div><div class=n>'+s.hz+' Hz · '+s.n+'</div>';
+    row.querySelector('i').style.width=Math.round(100*s.n/max)+'%';
+    bars.appendChild(row);
+  });
+}).catch(e=>{document.getElementById('note').textContent=String(e)});
 </script></body></html>"""
 
 DASH_PAGE = '''<!doctype html><html><head><meta charset=utf-8>
@@ -782,6 +834,51 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {"ok": False, "error": str(e), "latest": None, "car": None}
             self.__class__._room_latest_cache = (now, payload)
             return self._send(200, json.dumps(payload), "application/json")
+        elif self.path.split("?", 1)[0] == "/api/can/summary":
+            import glob as _glob, os as _os
+            logs = sorted(_glob.glob(_os.path.expanduser("~/.carwatch/can-logs/rec-*.log")))
+            if not logs:
+                return self._send(200, json.dumps({"ok": False, "error": "no captures yet"}),
+                                  "application/json")
+            path = logs[-1]
+            counts = {}
+            steer = []
+            n = 0
+            t0 = t1 = None
+            with open(path, errors="replace") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) < 8 or parts[0].startswith("{"):
+                        continue
+                    hx = parts[1:]
+                    try:
+                        [int(x, 16) for x in hx[:8]]
+                    except Exception:
+                        continue
+                    n += 1
+                    try:
+                        ts = float(parts[0])
+                    except Exception:
+                        ts = None
+                    if ts is not None:
+                        t0 = ts if t0 is None else t0
+                        t1 = ts
+                    two = (hx[0] + hx[1]).upper()
+                    one = hx[0].upper()
+                    key = two if one == "10" or one in ("0C", "0E", "12") else one
+                    counts[key] = counts.get(key, 0) + 1
+                    if one == "05" and len(hx) >= 5:
+                        steer.append(int(hx[4], 16))
+            seconds = round((t1 - t0), 1) if t0 and t1 else 120.0
+            streams = [{"id": "0x" + k, "n": v, "hz": round(v / seconds, 2)}
+                       for k, v in sorted(counts.items(), key=lambda kv: -kv[1])]
+            payload = {
+                "ok": True, "file": _os.path.basename(path), "frames": n,
+                "seconds": seconds, "streams": streams,
+                "steering": ({"min": min(steer), "max": max(steer),
+                              "last": steer[-1], "n": len(steer)} if steer else None),
+            }
+            return self._send(200, json.dumps(payload), "application/json")
         elif self.path.startswith("/api/status"):
             # Machine-readable twin of /dash. CodeWatch local mode polls
             # this when the phone shares a network with the car (hotspot
@@ -867,6 +964,8 @@ class Handler(BaseHTTPRequestHandler):
             # vendor emails a one-time code -> code -> tokens on the Pi.
             # The owner's PASSWORD is never asked anywhere on this page.
             return self._send(200, CLOUDCAR_PAGE)
+        elif self.path.startswith("/streams"):
+            return self._send(200, STREAMS_PAGE)
         elif self.path.startswith("/nerd"):
             # Nerd dashboard (codex-authored carwatch/nerd.html): every decoded
             # PID in grouped cards with threshold colors + sparklines, fed by
