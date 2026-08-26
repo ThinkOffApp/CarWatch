@@ -813,6 +813,12 @@ class Handler(BaseHTTPRequestHandler):
                 data = f.read()[-2_000_000:]
             return self._send(200, data, "text/plain")
         if self.path.split("?", 1)[0] in ("/", "/index.html"):
+            # "/" now serves the single-screen dash too, so an existing
+            # bookmark to the root lands on the new view instead of the old
+            # front page (petrus + claudemm both hit "/" and saw the old page
+            # after the dash shipped at "/dash"). Old page still at /legacy.
+            self._send(200, UNIFIED_PAGE)
+        elif self.path.split("?", 1)[0] == "/legacy":
             self._send(200, PAGE)
         elif self.path == "/api/wifi/scan":
             import subprocess as _sp
