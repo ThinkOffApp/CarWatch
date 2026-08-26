@@ -368,7 +368,7 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
             car["slug"] = slug  # the dashboard addresses commands by slug
 
         # Car title = the common prefix of its entities' friendly names
-        # ("ISK-579 Odometer" + "ISK-579 Lock" -> "ISK-579"). The slug is the
+        # ("ABC-123 Odometer" + "ABC-123 Lock" -> "ABC-123"). The slug is the
         # fallback ONLY when it doesn't look like a VIN - a VIN-slugged car
         # (fresh add, no friendly rename) must never put the VIN on a screen.
         import os.path as _osp  # commonprefix works on any str list
