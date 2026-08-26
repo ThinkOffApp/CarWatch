@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CarWatch dash</title>
+<style>
+/* One screen, never scrolls. Sized for a Fold 8 open in a car mount.
+   The whole page is a fixed-height grid: if data grows, cells scroll
+   internally, the page never does. */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0e11; --panel:#151a1f; --line:#232b33;
+  --ink:#e8edf2; --dim:#8b98a5; --faint:#5b6672;
+  --ok:#3ecf7e; --warn:#ffb020; --bad:#ff4d4d; --accent:#5ab0ff;
+  --gap:10px;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font:15px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body{display:grid;grid-template-rows:auto 1fr auto;gap:var(--gap);padding:var(--gap)}
+
+/* ---------- 1. the verdict: the whole car in one line ---------- */
+.verdict{display:flex;align-items:center;gap:14px;background:var(--panel);
+  border:1px solid var(--line);border-left:5px solid var(--ok);border-radius:12px;padding:12px 16px}
+.verdict.attention{border-left-color:var(--warn)}
+.verdict.fault{border-left-color:var(--bad)}
+.vstate{font-size:30px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.vstate.ok{color:var(--ok)} .vstate.warn{color:var(--warn)} .vstate.bad{color:var(--bad)}
+.vwhy{font-size:17px;color:var(--dim);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vcar{font-size:15px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- 2. the two labelled zones ---------- */
+.zones{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);min-height:0}
+.zone{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;display:flex;flex-direction:column;min-height:0}
+.zhead{display:flex;align-items:baseline;justify-content:space-between;
+  margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.zname{font-size:12px;letter-spacing:.10em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.zage{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.zage.stale{color:var(--warn)}
+
+/* big readings: only the few that matter, sized to be read at a glance */
+.reads{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.read{background:#0f1418;border:1px solid var(--line);border-radius:10px;padding:16px 8px;text-align:center}
+.rval{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.rval.ok{color:var(--ok)} .rval.warn{color:var(--warn)} .rval.bad{color:var(--bad)}
+.rval.stale{color:var(--faint)}
+.runit{font-size:17px;color:var(--dim);font-weight:400}
+.rlab{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+
+/* chips: a healthy group collapses to ONE chip. It expands only when wrong. */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{display:flex;align-items:center;gap:8px;background:#0f1418;border:1px solid var(--line);
+  border-radius:999px;padding:10px 16px;font-size:16px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none}
+.chip.warn .dot{background:var(--warn)} .chip.warn{color:var(--warn);border-color:#3a2f14}
+.chip.bad .dot{background:var(--bad)} .chip.bad{color:var(--bad);border-color:#3d1f1f}
+.chip .k{color:var(--dim)}
+
+/* steering: a bar that moves is proof of life a number cannot give */
+.steer{margin-top:14px}
+.strow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.slab{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.sval{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.sbar{position:relative;height:12px;background:#0f1418;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.sfill{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.85;
+  left:50%;width:6%;transition:left .15s linear,width .15s linear}
+.szero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--faint);opacity:.6}
+
+/* last drive: fills the honest emptiness of an engine that is off */
+.lastdrive{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.ldhead{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.ldrow{display:flex;justify-content:space-between;padding:9px 0;font-size:17px;color:var(--dim)}
+.ldv{color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* the car from above: state as shape */
+.carmap{margin:22px auto auto;position:relative;width:250px;height:280px}
+.cm-body{position:absolute;left:50px;right:50px;top:8px;bottom:8px;
+  background:#0f1418;border:2px solid var(--ok);border-radius:34px/26px}
+.cm-win{position:absolute;left:16px;right:16px;height:22px;border-radius:6px;
+  background:#1b2229;border:1px solid var(--line)}
+.cm-win.front{top:28px} .cm-win.rear{bottom:28px}
+.cm-roof{position:absolute;left:26px;right:26px;top:66px;height:58px;
+  border-radius:8px;background:#1b2229;border:1px solid var(--line)}
+.cm-tyre{position:absolute;width:44px;height:68px;border-radius:11px;
+  background:#0f1418;border:1px solid var(--line);display:flex;align-items:center;
+  justify-content:center;font-size:15px;color:var(--dim);font-variant-numeric:tabular-nums}
+.cm-tyre b{font-weight:600}
+.cm-tyre.warn{border-color:var(--warn);color:var(--warn)}
+.cm-tyre.bad{border-color:var(--bad);color:var(--bad)}
+.cm-tyre.tl{left:0;top:22px} .cm-tyre.tr{right:0;top:22px}
+.cm-tyre.bl{left:0;bottom:22px} .cm-tyre.br{right:0;bottom:22px}
+
+.stalebar{margin-top:auto;padding-top:10px;font-size:13px;color:var(--faint)}
+.stalebar b{color:var(--warn);font-weight:600}
+
+/* ---------- 3. actions + the other car ---------- */
+.actions{display:flex;gap:var(--gap);align-items:stretch}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:14px 18px;min-height:52px;font-size:16px;font-weight:550;
+  cursor:pointer;flex:1}
+button:active{background:#1d242b}
+button.ghost{flex:0 0 auto;color:var(--dim);font-weight:450}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* the second car: a strip, never a second full dashboard */
+.other{display:none;align-items:center;gap:14px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:10px 16px}
+.other.show{display:flex}
+.oname{font-weight:600;white-space:nowrap}
+.ostat{color:var(--dim);font-size:14px;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* portrait: stack the zones, still one screen */
+@media (max-aspect-ratio:1/1){
+  .zones{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+  .vstate{font-size:26px}
+}
+</style>
+</head>
+<body>
+
+<!-- 1. THE VERDICT. Everything below exists to justify this line. -->
+<div class="verdict" id="verdict">
+  <span class="vstate ok" id="vstate">READY</span>
+  <span class="vwhy" id="vwhy">Locked · everything closed · tyres fine</span>
+  <span class="vcar" id="vcar">ISK-579 · 47 812 km</span>
+</div>
+
+<!-- 2. TWO SOURCES, EACH NAMED. Never mixed: they age differently. -->
+<div class="zones">
+
+  <section class="zone">
+    <div class="zhead">
+      <span class="zname">OBD · live from the car</span>
+      <span class="zage stale" id="obdage">engine off · 6 min</span>
+    </div>
+    <div class="reads">
+      <div class="read"><div class="rval stale">—</div><div class="rlab">speed</div></div>
+      <div class="read"><div class="rval ok">12.6<span class="runit">V</span></div><div class="rlab">12V system</div></div>
+      <div class="read"><div class="rval stale">38<span class="runit">°C</span></div><div class="rlab">coolant</div></div>
+    </div>
+
+    <!-- Steering: petrus turns the wheel and wants to SEE it move. A number
+         alone does not prove liveness; the bar does, at a glance. -->
+    <div class="steer">
+      <div class="strow">
+        <span class="slab">Steering</span>
+        <span class="sval" id="sval">-12°</span>
+      </div>
+      <div class="sbar"><span class="sfill" id="sfill"></span><i class="szero"></i></div>
+    </div>
+    <div class="chips">
+      <span class="chip"><i class="dot"></i><span class="k">fault codes</span> none</span>
+      <span class="chip"><i class="dot"></i><span class="k">CAN</span> 2 518 frames</span>
+    </div>
+
+    <!-- Engine off leaves this zone empty, which reads as broken. The car
+         already records trips, so the space carries the last drive instead. -->
+    <div class="lastdrive">
+      <div class="ldhead">Last drive</div>
+      <div class="ldrow"><span>Home → Tapiola</span><span class="ldv">14:12 – 14:39</span></div>
+      <div class="ldrow"><span>Distance</span><span class="ldv">21.4 km</span></div>
+      <div class="ldrow"><span>Electric</span><span class="ldv">18.9 km · 88%</span></div>
+      <div class="ldrow"><span>Peak coolant</span><span class="ldv">91 °C</span></div>
+    </div>
+
+    <div class="stalebar">Engine is off, so these are the <b>last known</b> readings, not live.</div>
+  </section>
+
+  <section class="zone">
+    <div class="zhead">
+      <span class="zname">Mercedes me · cloud</span>
+      <span class="zage" id="cloudage">5 s ago</span>
+    </div>
+    <div class="reads">
+      <div class="read"><div class="rval ok">100<span class="runit">%</span></div><div class="rlab">charge</div></div>
+      <div class="read"><div class="rval ok">78<span class="runit">km</span></div><div class="rlab">electric range</div></div>
+      <div class="read"><div class="rval ok">41<span class="runit">L</span></div><div class="rlab">fuel</div></div>
+    </div>
+    <div class="chips">
+      <span class="chip"><i class="dot"></i>Locked</span>
+      <span class="chip"><i class="dot"></i>Doors, windows, roof closed</span>
+    </div>
+
+    <!-- The car itself, seen from above. Openings and tyres are read as SHAPE,
+         not as four more numbers. Numbers appear only where something is off. -->
+    <div class="carmap" aria-label="Car status: all closed, tyres normal">
+      <div class="cm-tyre tl"><b>2.4</b></div>
+      <div class="cm-tyre tr"><b>2.4</b></div>
+      <div class="cm-body">
+        <span class="cm-win front"></span>
+        <span class="cm-roof"></span>
+        <span class="cm-win rear"></span>
+      </div>
+      <div class="cm-tyre bl"><b>2.3</b></div>
+      <div class="cm-tyre br"><b>2.3</b></div>
+    </div>
+
+    <div class="stalebar">Read-only from Mercedes. Commands are limited to lock and close.</div>
+  </section>
+
+</div>
+
+<!-- 3. ACTIONS -->
+<div class="actions">
+  <button>Lock doors</button>
+  <button>Close windows</button>
+  <button class="ghost" id="othertoggle">Show OZA-505</button>
+</div>
+
+<div class="other" id="other">
+  <span class="oname">OZA-505</span>
+  <span class="ostat">Locked · closed · tyres OK · charge 1% · 3 km · read 12 s ago</span>
+  <button class="ghost">Open</button>
+</div>
+
+<script>
+// Steering demo: the real page sets this from /api/status d.steering.
+// Centre is straight; the bar grows left or right from the middle.
+(function(){
+  var v=document.getElementById('sval'), f=document.getElementById('sfill'), a=-12;
+  function paint(deg){
+    v.textContent=(deg>0?'+':'')+deg.toFixed(0)+'\u00b0';
+    var frac=Math.max(-1,Math.min(1,deg/540));           // lock to lock
+    var w=Math.abs(frac)*50;
+    f.style.width=Math.max(w,3)+'%';
+    f.style.left=(frac<0? 50-w : 50)+'%';
+  }
+  paint(a);
+  setInterval(function(){ a=Math.sin(Date.now()/900)*180; paint(a); },120);
+})();
+// The only interaction in the prototype: the second car is hidden by default
+// because two cars on one screen is what made the old dash scroll.
+document.getElementById('othertoggle').addEventListener('click', function () {
+  var o = document.getElementById('other');
+  var shown = o.classList.toggle('show');
+  this.textContent = shown ? 'Hide OZA-505' : 'Show OZA-505';
+});
+</script>
+</body>
+</html>
