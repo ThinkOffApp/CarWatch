@@ -41,6 +41,18 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
   access point, so the phone can always reach it, even in a garage with
   zero signal.
 
+## Remote access (manufacturer cloud while driving)
+
+The manufacturer-cloud section reads your car's data through a Home Assistant
+instance at home. On the road the Pi can't reach your home network, so that
+section needs a private path back to Home Assistant. The free, own-your-data
+answer is [**Tailscale**](https://tailscale.com/): your Pi and your HA machine
+join your own encrypted mesh, and the Pi reaches HA at a stable private IP
+from anywhere — home wifi never exposed to the internet, no subscription,
+nothing routed through us. Full setup in
+[docs/remote-access.md](docs/remote-access.md). (The OBD readings need none of
+this — they come straight from the car.)
+
 ## Why CarWatch
 
 Local AI is coming to every car. The only real question is who owns it. The
