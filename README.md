@@ -41,6 +41,31 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
   access point, so the phone can always reach it, even in a garage with
   zero signal.
 
+## Why CarWatch
+
+Local AI is coming to every car. The only real question is who owns it. The
+manufacturers are building their own, and their version wants what their
+version always wants: your data in their cloud, on their subscription, locked
+to their brand.
+
+CarWatch is the opposite by construction, and that is the whole point:
+
+- **Your data stays in your car.** The model runs on the Pi, offline. Nothing
+  is sent anywhere it does not have to be.
+- **Any brand.** The car-data layer is a vendor-neutral interface
+  ([carwatch/cloudcar.py](carwatch/cloudcar.py)); Mercedes is just the first
+  adapter. A Tesla, BMW or VW adapter implements three methods and drops in.
+- **Works with no signal.** Garages, tunnels, countryside dead zones. The
+  useful parts never depend on the network.
+- **No subscription, no lock-in.** AGPL, runs on ~300 € of hardware you own.
+
+That is ground a manufacturer structurally cannot stand on: they need the
+cloud, the lock-in, and the data. So CarWatch does not fight them on factory
+integration. It wins on independence, privacy, and every-brand openness, and
+it earns trust by being [honest about what it cannot
+know](https://github.com/ThinkOffApp/CarWatch/discussions/9) rather than
+confidently wrong about a two-ton machine.
+
 The build log with every dead end included lives in
 [docs/plan.md](docs/plan.md). Questions, ideas, and "here's mine on a
 different car" go in [Discussions](https://github.com/ThinkOffApp/CarWatch/discussions);
