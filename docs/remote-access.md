@@ -89,6 +89,23 @@ the same way (step 4 above).
 - **Do not** pay a monthly subscription for *only* a remote URL. Tailscale
   covers that need for free; per-user subscriptions defeat the point of a
   self-hosted, own-your-data project.
+- **Do not add your tailnet to Home Assistant's `trusted_networks`.** It is the
+  tempting next thought once the mesh works — skip the login when you are "on
+  the VPN" — and it is the one change that turns this setup from private into
+  open. `trusted_networks` authenticates by *source address*, and on a tailnet
+  every device shares that range, so any device that joins it, or any phone
+  that is lost or compromised, has your whole house with no password. Keep the
+  normal token login. The Pi already uses one.
+
+**Check that you got it right:** from the Pi, run
+
+```bash
+curl -o /dev/null -w '%{http_code}\n' http://100.x.y.z:8123/api/
+```
+
+`401` is the answer you want — Home Assistant is reachable *and* still asking
+for credentials. `200` means something is letting requests through
+unauthenticated, and you should find out what before driving off.
 
 > Using a reverse proxy instead of Tailscale (cloudflared, nginx, Nabu Casa
 > internally)? Home Assistant will reject the proxied request with **HTTP
