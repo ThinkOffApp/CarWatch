@@ -480,7 +480,9 @@ async function pollCloud(manual){
         `<button data-slug="${slug}" data-act="windows_close">&#129695; close windows</button>`+
         `</div>`;
       return `<div class=car><h2>${c.label}</h2><div class=glance>`+parts.join('')+`</div>`+cmds+`</div>`;
-    }).join('')+'<div id=cloudnote>from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; reads live, only lock/close-windows can be sent</div>';
+    }).join('')+'<div id=cloudnote>'+(s.stale
+        ? '&#9888;&#65039; '+(s.note||'last known values, not live')+' &middot; the car cannot reach Home Assistant from here'
+        : 'from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; reads live, only lock/close-windows can be sent')+'</div>';
   }catch(e){el.innerHTML='<div id=cloudnote>mercedes cloud unreachable: '+e+'</div>'}
 }
 // Delegated click for the per-car command buttons (they are re-rendered
@@ -1243,6 +1245,25 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-4000:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/cloudcar/ha-url":
+            # Repoint the Mercedes provider at a new Home Assistant URL at
+            # runtime (e.g. a Nabu Casa / tunnel URL) without SSH or redeploy,
+            # so cloud data can work on the road the moment HA has an internet
+            # address. Body: {"url": "https://..."} ("" clears the override).
+            try:
+                from carwatch import mercedesme as _mm
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                _mm.set_ha_url(str(body.get("url", "")).strip())
+                from carwatch import cloudcar as _cc
+                prov = _cc.get()
+                if prov is not None:
+                    prov._cache_at = 0.0  # force a fresh fetch next poll
+                return self._send(200, json.dumps(
+                    {"ok": True, "ha_url": _mm._ha_url()}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")

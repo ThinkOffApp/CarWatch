@@ -35,7 +35,21 @@ _DEFAULT_URL = "http://192.168.50.241:8123"  # the Mini's HA, home LAN
 _CACHE_S = 25.0  # HA itself polls Mercedes; hitting it harder adds nothing
 
 
+_URL_OVERRIDE = os.path.expanduser("~/.carwatch/ha-url")
+_LAST_GOOD = os.path.expanduser("~/.carwatch/cloud-last.json")
+
+
 def _ha_url() -> str:
+    # Runtime override wins: lets the HA URL be repointed remotely (POST
+    # /api/cloudcar/ha-url) the moment an internet path exists - no SSH, no
+    # redeploy - because the LAN URL is useless once the Pi leaves home.
+    try:
+        with open(_URL_OVERRIDE) as f:
+            u = f.read().strip()
+            if u:
+                return u.rstrip("/")
+    except Exception:
+        pass
     env = os.environ.get("CARWATCH_HA_URL")  # bench override (tests/fake_ha.py)
     if env:
         return env.rstrip("/")
@@ -44,6 +58,14 @@ def _ha_url() -> str:
             return (json.load(f).get("ha", {}).get("url") or _DEFAULT_URL).rstrip("/")
     except Exception:
         return _DEFAULT_URL
+
+
+def set_ha_url(url: str) -> None:
+    """Persist a runtime HA URL override (used by the /api/cloudcar/ha-url
+    endpoint). Empty string clears it, falling back to config/default."""
+    os.makedirs(os.path.dirname(_URL_OVERRIDE), exist_ok=True)
+    with open(_URL_OVERRIDE, "w") as f:
+        f.write(url.strip())
 
 
 def _token() -> str:
@@ -185,6 +207,23 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
         self._cache_at = 0.0
         return {"ok": True}
 
+    def _unreachable(self, why: str) -> dict:
+        """Honest offline state. If we have a last-good snapshot, return THAT
+        with an age + stale flag so the car shows real numbers on the road
+        instead of a blank, rather than pretending they are live."""
+        last = self._cache if self._cache.get("ok") else None
+        if last is None:
+            try:
+                with open(_LAST_GOOD) as f:
+                    last = json.load(f)
+            except Exception:
+                last = None
+        if last and last.get("cars"):
+            age = int(time.time() - last.get("fetched_at", 0))
+            return {**last, "ok": True, "stale": True, "age_s": age,
+                    "note": f"last known {age // 60} min ago - {why}"}
+        return cloudcar.empty_state(self.name, why)
+
     # -- data -------------------------------------------------------------
     def status(self) -> dict:
         now = time.time()
@@ -194,9 +233,17 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
         if not token:
             return cloudcar.empty_state(self.name, "not connected yet")
         try:
-            states = _get("/api/states", token)
-        except Exception as e:
-            return cloudcar.empty_state(self.name, f"HA unreachable: {e}")
+            # Fail FAST: a 4s ceiling so an unreachable HA (the Pi off its
+            # home network) never hangs the dashboard - it drops straight to
+            # last-known. The home LAN answers in well under a second.
+            states = _get("/api/states", token, timeout=4.0)
+        except Exception:
+            u = _ha_url()
+            homeish = "192.168." in u or "10." in u or ".local" in u
+            why = ("Home Assistant not reachable from here. On the road, give "
+                   "HA an internet address (Nabu Casa or a tunnel) and set it "
+                   "at /cloudcar." if homeish else "Home Assistant unreachable.")
+            return self._unreachable(why)
 
         # The suffix map does the recognizing. The first version required an
         # attribution attribute ("mbapi2020 stamps attribution") - that
@@ -283,6 +330,14 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                        "error": "", "cars": cars,
                        "entities_recognized": recognized}
         self._cache_at = now
+        # Persist the good snapshot so the car can show last-known values
+        # (with an honest age) when it later can't reach HA, and across a
+        # service restart.
+        try:
+            with open(_LAST_GOOD, "w") as f:
+                json.dump(self._cache, f)
+        except Exception:
+            pass
         return self._cache
 
     # -- commands ---------------------------------------------------------
