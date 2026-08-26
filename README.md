@@ -110,7 +110,8 @@ counterpart but has not yet met the physical car.
 | Hands-free voice: continuous VAD listener → whisper → grounded answer → room | **proven** (real voice transcribed on-Pi) |
 | Self-update from this repo (hourly timer + dashboard button) | **proven** |
 | Dial-out reachability behind any NAT (cloudflared quick tunnel) | **proven** (reached over the open internet) |
-| OBD engine reading over DoIP/ENET (RPM, coolant, speed, voltage) | **built + tested** against a protocol-accurate fake gateway ([tests/fake_gateway.py](tests/fake_gateway.py)); zero-touch daemon watches the cable and posts results by itself. **Unverified against the real car** — it will confirm or refute itself on the next drive |
+| OBD engine reading over Bluetooth ELM327 (RPM, coolant, speed, hybrid %, 12 V) | **proven** — live readings from the real car daily; zero-touch daemon reconnects and posts by itself. (The DoIP/ENET cable path was tried first and is dead on this car — no gateway answers; kept in [docs/plan.md](docs/plan.md) as a documented dead end) |
+| Raw CAN broadcast capture + decode tooling ([carwatch/candecode.py](carwatch/candecode.py)) | **proven capture** (2518 frames, 0 errors); signal naming needs a correlation drive — candidates only, honestly unlabeled |
 | Dashcam clip pull (WOLFBOX G900, hisnet CGI API mapped) | probe done, pipeline not wired |
 | MBUX dashboard render, mirror icon strip | planned |
 
@@ -119,8 +120,9 @@ counterpart but has not yet met the physical car.
 - Raspberry Pi 5, 16 GB (active cooling required — the SoC throttles without it)
 - USB microphone for voice (any class-compliant mic)
 - WOLFBOX G900 3-channel dashcam (wifi AP; CarWatch pulls event clips from it)
-- OBD access: ethernet-to-OBD (DoIP/ENET) cable — support built, real-car
-  verification pending; a standard ELM327-class adapter is the fallback path
+- OBD access: a ~15 € Bluetooth ELM327 adapter (Vgate iCar Pro tested) —
+  this is the proven path on the real car; the DoIP/ENET cable turned out
+  to be a dead end on Mercedes (no gateway answers over it)
 - Power: the dashcam hardwire kit feeds the camera; the Pi needs its own
   5V/5A USB-C feed (12V PD adapter, or the car's 230V socket + wall PSU)
 
