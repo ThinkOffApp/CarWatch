@@ -252,7 +252,10 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 .hero .big{font:800 64px/0.9 var(--mono);color:var(--ok)}
 .hero .unit{font:600 18px var(--mono);color:var(--dim)}
 .hero .lbl{font-size:12px;color:var(--dim);margin-left:auto;align-self:flex-end}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:auto}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+/* margin-top:auto used to shove these to the bottom of the zone, leaving a
+   dead gap under the speed. petrus: 'why is there empty space after speed'.
+   Readings now sit directly under the number they belong with. */
 .stat{background:#0e171e;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
 .stat .v{font:800 23px/1 var(--mono);color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.bad{color:var(--bad)}
 .stat .k{font-size:10.5px;color:var(--dim);margin-top:4px}
