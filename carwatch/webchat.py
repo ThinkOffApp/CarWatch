@@ -406,11 +406,12 @@ async function poll(){
 const STEER_CENTRE=128, STEER_SPAN=64;
 async function pollSteer(){
  try{
-  const d=await(await F('/api/can/summary')).json();
-  const st=d&&d.steering, w=$('steerwrap');
+  const d=await(await F('/api/steering')).json();
+  const st=(d&&d.ok!==false&&d.value!=null)?{last:d.value}:null, w=$('steerwrap');
   if(!st||st.last==null){ $('steerval').textContent='-'; $('steerfill').style.width='0';
     w.className='steer stale'; return; }
-  const raw=Number(st.last), off=raw-STEER_CENTRE;
+  const centre=(d&&d.centre!=null)?Number(d.centre):STEER_CENTRE;
+  const raw=Number(st.last), off=raw-centre;
   const frac=Math.max(-1,Math.min(1,off/STEER_SPAN)), pct=Math.abs(frac)*50;
   $('steerval').textContent=raw+(Math.abs(off)<2?' · centred':(off<0?' · left':' · right'));
   $('steerfill').style.width=Math.max(pct,1.5)+'%';
@@ -420,9 +421,14 @@ async function pollSteer(){
   // number: you turn the wheel, nothing moves, and you conclude the car is
   // disconnected. petrus sat in the car doing exactly that. Swap the source
   // and this label together the moment a live CAN endpoint exists.
-  const fromFile=!!(d&&d.file);
-  $('steerlab').textContent=fromFile?'steering wheel \u00b7 last recording, not live':'steering wheel';
-  w.className=fromFile?'steer replay':'steer';
+  // Say how old the sample is. Under ~15s is the wheel now; older means the
+  // sampler stopped, and that must look different rather than sit there
+  // pretending. Centre comes from the writer so one decode serves both ends.
+  const age=(d&&d.age_s!=null)?d.age_s:null, stale=(age===null||age>15);
+  $('steerlab').textContent = age===null ? 'steering wheel'
+    : (stale ? 'steering wheel \u00b7 ' + Math.round(age) + 's old'
+             : 'steering wheel \u00b7 live');
+  w.className = stale ? 'steer replay' : 'steer';
  }catch(e){ $('steerval').textContent='-'; $('steerwrap').className='steer stale'; }
 }
 
@@ -2256,6 +2262,27 @@ class Handler(BaseHTTPRequestHandler):
                  "error": "waiting for the first OBD cache snapshot",
                  "hint": "GET /api/obd/all?mock=1 for UI development"}),
                 "application/json")
+        elif self.path.startswith("/api/steering"):
+            # The wheel, live. obdwatch samples it between OBD passes and
+            # writes carwatch.steering's cache; this just serves that file.
+            # age_s is computed here rather than trusted from the writer, so
+            # a stopped sampler shows up as an ageing number instead of a
+            # value that looks current forever. petrus turns the wheel to see
+            # that the feed is alive - a stale reading that cannot be told
+            # apart from a live one is the whole failure this replaces.
+            import json as _j, time as _t, os as _o
+            _sp = _o.path.expanduser(
+                _o.environ.get("CARWATCH_STATE", "~/.carwatch")) + "/steering.json"
+            try:
+                with open(_sp) as _f:
+                    _d = _j.load(_f)
+                _ts = _d.get("ts")
+                _d["age_s"] = round(_t.time() - _ts, 1) if _ts else None
+            except FileNotFoundError:
+                _d = {"ok": False, "error": "no steering sample yet"}
+            except Exception as _e:
+                _d = {"ok": False, "error": str(_e)[:120]}
+            self._send(200, _j.dumps(_d), "application/json")
         elif self.path.startswith("/api/cloudcar"):
             # The "mokkula": normalized cloud vehicle data behind a pluggable
             # provider interface (carwatch.cloudcar). Read-only by design -
