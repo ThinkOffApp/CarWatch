@@ -1,8 +1,8 @@
 # CarWatch
 
-![Both cars live on the phone dashboard from the Mercedes cloud: lock state, windows, tire pressures, charge, fuel, AdBlue and odometer per car, read-only](docs/img/cloud-dash.jpg)
+![CarWatch on the phone in the car: OBD live from the car beside Mercedes me cloud data, parked at a Helsinki harbour](docs/img/hero.jpg)
 
-![The CarWatch in-car capture: the phone dashboard beside the vehicle display, showing live OBD and Mercedes cloud readings](docs/img/dash-screen.jpg)
+![The CarWatch single-screen dashboard: OBD live from the car on the left, Mercedes me cloud data on the right, each labelled](docs/img/dash-screen.jpg)
 
 ![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
 
