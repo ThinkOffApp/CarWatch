@@ -26,6 +26,9 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
 - 🎙️ **Hands-free voice**: a continuous listener (energy VAD → whisper.cpp,
   all on-Pi) hears you speak, routes the words through the same grounded
   pipeline, and answers into the room. No wake word ceremony, no cloud STT.
+- 📦 **Zero dependencies**: every line of CarWatch is Python standard
+  library — no pip install, no venv, nothing to version-fight on a fresh
+  Pi OS. `git clone` and it runs. (Verified by AST scan of every module.)
 - 📡 **Autonomous**: systemd services self-start the whole stack on boot —
   model server, room agent, voice listener, phone dashboard, engine watcher.
 - 🔧 **Maintainable from anywhere**: the car pulls its own updates from this
