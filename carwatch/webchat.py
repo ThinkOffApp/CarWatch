@@ -227,6 +227,13 @@ h1{font-size:16px}
 .gi .s{font:700 12px ui-monospace,monospace}
 .gi .s.ok{color:#40d98b}.gi .s.warn{color:#ffc857}.gi .s.bad{color:#ff667d}
 #cloudnote{font-size:11px;color:#8ca1ad;font-family:ui-monospace,monospace}
+.carcmds{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.carcmds button{flex:1;min-width:130px;background:#13232c;color:#e8f1f5;border:1px solid #2a4a3a;
+  border-radius:10px;padding:9px;font-size:13px;font-weight:600}
+.carcmds button:active{transform:scale(.97)}
+.carcmds button:disabled{opacity:.6}
+.carcmds button.ok{border-color:#40d98b;color:#40d98b}
+.carcmds button.bad{border-color:#ff667d;color:#ff667d}
 @media (max-width:520px){.core{grid-template-columns:repeat(2,1fr)}}
 .core .g{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:16px 6px;text-align:center}
 .core .n{font:700 34px/1.05 ui-monospace,monospace;color:#40d98b}
@@ -413,6 +420,20 @@ function agg(o,openWord){ // granular door/window dicts -> one honest word
   const open=vals.filter(v=>v==='on'||v==='open').length;
   return open?[open+' '+openWord,'warn']:['closed','ok'];
 }
+async function carCmd(btn,slug,action){
+  const label=btn.textContent;
+  if(!confirm(label.trim()+' - '+slug+'?\\nThis sends a real command to the car.'))return;
+  btn.disabled=true;btn.className='';const rest=Array.from(btn.parentNode.children);
+  rest.forEach(b=>b.disabled=true);btn.textContent='sending\\u2026';
+  try{
+    const r=await F('/api/cloudcar/cmd',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({car:slug,action:action})},20000);
+    const d=await r.json();
+    if(d.ok){btn.className='ok';btn.textContent='sent \\u2713';setTimeout(pollCloud,4000);}
+    else{btn.className='bad';btn.textContent=(d.error||'failed').slice(0,40);}
+  }catch(e){btn.className='bad';btn.textContent='error: '+e;}
+  setTimeout(()=>{rest.forEach(b=>b.disabled=false);btn.textContent=label;btn.className='';},4000);
+}
 async function pollCloud(manual){
   const el=$('cloud');
   try{
@@ -448,8 +469,13 @@ async function pollCloud(manual){
         parts.push(gi('&#9981;','fuel',[fp,fr].filter(Boolean).join(' &middot; '),''));}
       if(c.fuel&&c.fuel.adblue_pct!==undefined)parts.push(gi('&#128167;','AdBlue',c.fuel.adblue_pct+'%',''));
       if(c.odometer_km!==undefined)parts.push(gi('&#128207;','odometer',Math.round(c.odometer_km)+' km',''));
-      return '<div class=car><h2>'+c.label+'</h2><div class=glance>'+parts.join('')+'</div></div>';
-    }).join('')+'<div id=cloudnote>from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; read-only</div>';
+      const slug=c.slug||c.label;
+      const cmds='<div class=carcmds>'+
+        '<button onclick="carCmd(this,\''+slug+'\',\'lock\')">&#128274; lock doors</button>'+
+        '<button onclick="carCmd(this,\''+slug+'\',\'windows_close\')">&#129695; close windows</button>'+
+        '</div>';
+      return '<div class=car><h2>'+c.label+'</h2><div class=glance>'+parts.join('')+'</div>'+cmds+'</div>';
+    }).join('')+'<div id=cloudnote>from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; reads live, only lock/close-windows can be sent</div>';
   }catch(e){el.innerHTML='<div id=cloudnote>mercedes cloud unreachable: '+e+'</div>'}
 }
 poll();setInterval(poll,2000);
@@ -1206,6 +1232,26 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-4000:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/cloudcar/cmd":
+            # Owner-tapped, allowlisted make-safe commands (lock, close
+            # windows). The provider enforces the allowlist; unlock/open do
+            # not exist in it. (petrus, Aug 26: "make the lock doors and
+            # windows button work")
+            from carwatch import cloudcar as _cc
+            prov = _cc.get()
+            if prov is None or not hasattr(prov, "command"):
+                return self._send(200, json.dumps(
+                    {"ok": False, "error": "no command-capable provider"}),
+                    "application/json")
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                out = prov.command(str(body.get("car", "")).strip(),
+                                   str(body.get("action", "")).strip())
+                return self._send(200, json.dumps(out), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")

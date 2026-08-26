@@ -63,6 +63,28 @@ def _get(path: str, token: str, timeout: float = 8.0):
         return json.loads(r.read().decode())
 
 
+def _post(path: str, token: str, payload: dict, timeout: float = 15.0):
+    req = urllib.request.Request(
+        _ha_url() + path, data=json.dumps(payload).encode(),
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.status
+
+
+# The ONLY commands this module can ever send, chosen because they are the
+# make-safe direction and need no security PIN (doors_lock verified from
+# mbapi2020's own code; windows_close fails safe if Mercedes wants a PIN).
+# unlock / open / engine / sunroof are deliberately absent - adding one is a
+# petrus-level decision, not a code change to slip in. (Read-only-by-default
+# was the Aug 19 rule; petrus reversed it for these two on Aug 26: "make the
+# lock doors and windows button work".)
+_COMMANDS = {
+    "lock": "doors_lock",
+    "windows_close": "windows_close",
+}
+
+
 # mbapi2020 entity-id suffix -> (group, normalized key). Suffixes are matched
 # against the part after the car prefix, longest first, so "tire_pressure_
 # front_left" wins over "front_left".
@@ -133,6 +155,7 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
     def __init__(self):
         self._cache: dict = {}
         self._cache_at = 0.0
+        self._vins: dict[str, str] = {}  # slug -> VIN, never serialized
 
     # -- auth -------------------------------------------------------------
     def auth_state(self) -> dict:
@@ -216,11 +239,20 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
             fn = str(attrs.get("friendly_name", ""))
             if fn:
                 car.setdefault("_fns", []).append(fn)
+            # mbapi2020 stamps every entity with the car's display name and
+            # VIN. The name is the best label source; the VIN stays OFF the
+            # payload (instance-internal, needed only to address commands).
+            if attrs.get("car"):
+                car["label"] = str(attrs["car"])
+            if attrs.get("vin"):
+                self._vins[slug] = str(attrs["vin"])
 
         # A vehicle shows up as many entities; a lone suffix hit is another
         # integration's coincidence, not a car.
         cars = {slug: car for slug, car in cars.items()
                 if hits_per_slug.get(slug, 0) >= 3}
+        for slug, car in cars.items():
+            car["slug"] = slug  # the dashboard addresses commands by slug
 
         # Car title = the common prefix of its entities' friendly names
         # ("ISK-579 Odometer" + "ISK-579 Lock" -> "ISK-579"). The slug is the
@@ -229,6 +261,8 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
         import os.path as _osp  # commonprefix works on any str list
         for slug, car in cars.items():
             fns = car.pop("_fns", [])
+            if car["label"] != slug:
+                continue  # the entities' own "car" attribute already named it
             prefix = _osp.commonprefix(fns).strip(" -_") if len(fns) > 1 else ""
             if len(prefix) >= 3:
                 car["label"] = prefix
@@ -250,6 +284,37 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                        "entities_recognized": recognized}
         self._cache_at = now
         return self._cache
+
+    # -- commands ---------------------------------------------------------
+    def command(self, slug: str, action: str) -> dict:
+        """Send one ALLOWLISTED make-safe command (petrus's Aug 26 decision).
+        Everything else about this provider stays read-only; unlock/open can
+        not be expressed here at all."""
+        service = _COMMANDS.get(action)
+        if service is None:
+            return {"ok": False,
+                    "error": f"'{action}' is not an allowed command "
+                             f"(only: {', '.join(sorted(_COMMANDS))})"}
+        token = _token()
+        if not token:
+            return {"ok": False, "error": "no HA token - open /cloudcar"}
+        if slug not in self._vins:
+            self.status()  # refresh the slug->VIN map
+        vin = self._vins.get(slug)
+        if not vin:
+            return {"ok": False, "error": f"unknown car '{slug}'"}
+        try:
+            code = _post(f"/api/services/mbapi2020/{service}", token,
+                         {"vin": vin})
+        except Exception as e:
+            # Mercedes-side refusals (e.g. a PIN demand) surface here - report
+            # the vendor's words, never pretend the command landed.
+            return {"ok": False, "error": f"HA/Mercedes refused: {e}"}
+        self._cache_at = 0.0  # next poll shows the real post-command state
+        return {"ok": code in (200, 201),
+                "sent": action,
+                "note": "Mercedes confirms asynchronously - the dashboard "
+                        "shows the real state on the next cloud refresh"}
 
 
 cloudcar.register(MercedesMeHA())
