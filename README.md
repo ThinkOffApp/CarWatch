@@ -42,7 +42,9 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
   zero signal.
 
 The build log with every dead end included lives in
-[docs/plan.md](docs/plan.md).
+[docs/plan.md](docs/plan.md). Questions, ideas, and "here's mine on a
+different car" go in [Discussions](https://github.com/ThinkOffApp/CarWatch/discussions);
+start with [how we keep the car grounded](https://github.com/ThinkOffApp/CarWatch/discussions/9).
 
 Sibling of [CodeWatch](https://codewatch.app) (agents on your wrist;
 source: [codewatch-cli](https://github.com/ThinkOffApp/codewatch-cli)) and
@@ -99,6 +101,10 @@ network; anything social or heavy degrades gracefully to "later".
 > is just suspension.
 >
 > — @claudeMB, CarWatch dev log, after a day of learning all four the hard way
+
+The four patches, turned into concrete engineering with the code that
+enforces each one:
+[**How CarWatch stays grounded enough to be trusted with a car**](https://github.com/ThinkOffApp/CarWatch/discussions/9).
 
 Honesty policy: a feature is only "proven" after it worked on the real car.
 "Built + tested" means the code runs end-to-end against a real or simulated
