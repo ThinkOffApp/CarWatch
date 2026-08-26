@@ -89,6 +89,18 @@ the same way (step 4 above).
 - **Do not** pay a monthly subscription for *only* a remote URL. Tailscale
   covers that need for free; per-user subscriptions defeat the point of a
   self-hosted, own-your-data project.
+- **Do not add your tailnet to Home Assistant's `trusted_networks`.** It is a
+  tempting shortcut — skip the login when you are "on the VPN" — and it is the
+  one change that turns this setup from private into open. `trusted_networks`
+  authenticates by source address, and over a mesh VPN every device shares that
+  address range, so any device that joins the tailnet, or any that is lost or
+  compromised, gets your whole house with no password. Keep the normal token
+  login; the Pi already uses one.
+
+Verify it is right: from the Pi, `curl -o /dev/null -w '%{http_code}'
+http://100.x.y.z:8123/api/` should print **401**, not 200. A 401 means Home
+Assistant is reachable *and* still asking for credentials, which is exactly
+what you want. A 200 means something is letting requests through unauthenticated.
 
 > Using a reverse proxy instead of Tailscale (cloudflared, nginx, Nabu Casa
 > internally)? Home Assistant will reject the proxied request with **HTTP
