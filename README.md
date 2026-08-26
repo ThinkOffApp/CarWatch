@@ -213,6 +213,71 @@ Copy `config.example.json` to `/etc/carwatch/config.json`:
 - `home_ssids` — wifi networks that mean "parked at home"
 - `wolfbox` — dashcam AP name/password and poll interval
 
+## Remote access: the car needs to reach your home
+
+The Mercedes cloud card reads **your** Home Assistant, and Home Assistant lives
+at home. Parked on home wifi that is a LAN request and everything works. On the
+road, behind a phone hotspot, the car cannot reach your house at all — the dash
+shows the cloud section as unreachable rather than pretending. This is the wall
+every install hits the first time the car leaves the driveway.
+
+You do **not** need a paid subscription, a domain, or an open port to fix it.
+
+### Recommended: Tailscale (free)
+
+Tailscale puts the Pi and your home machine on one private network. Traffic goes
+device to device, encrypted; nothing about Home Assistant is published to the
+internet, and the address never changes.
+
+1. Install Tailscale on the machine running Home Assistant, and on the Pi:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh   # the Pi
+   sudo tailscale up
+   ```
+   On a Mac or Windows box, install the app and sign in. Use the **same account**
+   on both.
+2. Find the home machine's Tailscale address:
+   ```bash
+   tailscale ip -4
+   ```
+3. Point CarWatch at it — `http://<that-address>:8123` — on the cloud set-up page
+   (`/cloudcar`) or in `config.json`.
+
+That address works from anywhere the Pi has any internet at all, survives
+reboots on both ends, and costs nothing. Tailscale's free Personal plan covers
+several users and unlimited devices.
+
+**If Home Assistant runs in Docker**, it sits behind a proxy from HA's point of
+view, so tell it which proxy to trust — otherwise every request is rejected with
+`400 Bad Request`:
+
+```yaml
+# configuration.yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.17.0.1        # your Docker gateway; HA logs the real one it sees
+```
+
+Take the address from Home Assistant's own log line (`untrusted proxy <ip>`)
+rather than guessing — Docker Desktop on macOS does not use the docker0 bridge
+address. Do **not** add a `trusted_networks` auth provider: behind a tunnel or
+VPN every request arrives from that same address, so trusting it for
+authentication lets anyone in without credentials. `/api/` must answer `401`.
+
+### Alternative: Home Assistant Cloud (Nabu Casa)
+
+A paid subscription (~8 $/month) that gives a permanent encrypted URL and
+handles the proxy details for you. Worth it if you also want Alexa/Google voice
+control, cloud text-to-speech, or encrypted cloud backups — and it funds Home
+Assistant's own development. For CarWatch alone, Tailscale does the job for
+free.
+
+### What not to do
+
+Do not forward port 8123 from your router to Home Assistant. That publishes your
+house's login page to the internet permanently. Both options above avoid it.
+
 ## Bench-day probe
 
 The WOLFBOX's HTTP API is undocumented; `carwatch-probe` discovers it:
