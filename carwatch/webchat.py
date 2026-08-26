@@ -14,6 +14,7 @@ Deliberately stdlib-only and dependency-free: it has to work in a tunnel.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import sys
 import json
@@ -827,18 +828,42 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
+    def _peer_is_local(self) -> bool:
+        """The REAL connecting address, from the socket - not a spoofable
+        header. Trusted only if it is on the car's own network: private,
+        loopback, link-local, or Tailscale (100.64/10). A public peer means
+        the port is exposed to the internet and must present the token.
+        Fail closed on anything we can't parse."""
+        try:
+            ip = ipaddress.ip_address(self.client_address[0])
+        except (ValueError, IndexError, TypeError):
+            return False
+        ts = ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10")
+        return ip.is_private or ip.is_loopback or ip.is_link_local or ts
+
     def _authorised(self) -> bool:
-        if not self._came_through_tunnel():
-            return True                      # same network as the car
+        # A valid token authorises from anywhere.
         want = self._token()
         auth = (self.headers.get("Authorization") or "").strip()
-        if auth.lower().startswith("bearer ") and auth[7:].strip() == want:
+        if want and auth.lower().startswith("bearer ") and \
+                self._const_eq(auth[7:].strip(), want):
             return True
-        # ?t=... so a plain link works in a browser without any typing.
         from urllib.parse import urlparse, parse_qs
         got = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+        if want and self._const_eq(got, want):
+            return True
+        # No valid token. Trust the request ONLY if it did not arrive through
+        # the tunnel AND its real socket peer is on the car's own network.
+        # Header absence alone is NOT trust: a request straight to an exposed
+        # port carries no cf-* headers, and the old code let it skip the token
+        # and reach /api/update (code execution). The unspoofable peer IP
+        # closes that. (codexmb's finding, Aug 26 2026.)
+        return (not self._came_through_tunnel()) and self._peer_is_local()
+
+    @staticmethod
+    def _const_eq(a: str, b: str) -> bool:
         import hmac
-        return hmac.compare_digest(got, want)
+        return hmac.compare_digest(a, b)
 
     def _deny(self):
         self._send(401, json.dumps({"ok": False, "error": "token required"}),
