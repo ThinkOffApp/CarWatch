@@ -1,6 +1,6 @@
 # CarWatch
 
-![Phone in a Mercedes showing CarWatch live: 0 km/h, 0 rpm, 33.3 percent hybrid, 14.2 V, parked on a Helsinki street](docs/img/hero.jpg)
+![Phone in a Mercedes at a Helsinki marina at sunset, showing CarWatch: OBD live from the car beside Mercedes me cloud data, both cars locked and closed](docs/img/hero.jpg)
 
 ![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
 
