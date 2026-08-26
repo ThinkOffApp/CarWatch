@@ -828,18 +828,24 @@ class Handler(BaseHTTPRequestHandler):
                 return True
         return False
 
-    def _peer_is_local(self) -> bool:
+    def _peer_is_owner(self) -> bool:
         """The REAL connecting address, from the socket - not a spoofable
-        header. Trusted only if it is on the car's own network: private,
-        loopback, link-local, or Tailscale (100.64/10). A public peer means
-        the port is exposed to the internet and must present the token.
-        Fail closed on anything we can't parse."""
+        header. A token-less request is trusted ONLY from the Pi itself
+        (loopback) or the owner's Tailscale mesh (100.64/10) - NOT a generic
+        private LAN. The car roams onto cafe / hotel / airport wifi and phone
+        hotspots where every other client is also 192.168.x / 10.x; trusting
+        those would hand a stranger on the same wifi the dangerous routes
+        (/api/update = code execution). The owner reaches the dash from
+        elsewhere via the tokened link or over Tailscale. Fail closed on
+        anything we can't parse. (claudemm's product-case finding on top of
+        codexmb's header-spoof finding, Aug 26 2026.)"""
         try:
             ip = ipaddress.ip_address(self.client_address[0])
         except (ValueError, IndexError, TypeError):
             return False
-        ts = ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10")
-        return ip.is_private or ip.is_loopback or ip.is_link_local or ts
+        if ip.is_loopback:
+            return True
+        return ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10")
 
     def _authorised(self) -> bool:
         # A valid token authorises from anywhere.
@@ -853,12 +859,11 @@ class Handler(BaseHTTPRequestHandler):
         if want and self._const_eq(got, want):
             return True
         # No valid token. Trust the request ONLY if it did not arrive through
-        # the tunnel AND its real socket peer is on the car's own network.
-        # Header absence alone is NOT trust: a request straight to an exposed
-        # port carries no cf-* headers, and the old code let it skip the token
-        # and reach /api/update (code execution). The unspoofable peer IP
-        # closes that. (codexmb's finding, Aug 26 2026.)
-        return (not self._came_through_tunnel()) and self._peer_is_local()
+        # the tunnel AND its real socket peer is the Pi itself or the owner's
+        # Tailscale mesh. A generic private LAN is NOT trusted: on shared
+        # cafe/hotel/hotspot wifi that is full of strangers. This closes both
+        # codexmb's header-spoof bypass and claudemm's foreign-LAN case.
+        return (not self._came_through_tunnel()) and self._peer_is_owner()
 
     @staticmethod
     def _const_eq(a: str, b: str) -> bool:
