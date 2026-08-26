@@ -70,11 +70,30 @@ That's it. The Pi now reaches Home Assistant over your private tailnet from
 the car, the dashboard shows live cloud data on the road, and your home
 network is never exposed to anyone.
 
+## Alternative: Home Assistant Cloud (Nabu Casa)
+
+If you'd rather not run Tailscale, [Nabu Casa](https://www.nabucasa.com/)
+(Home Assistant's own subscription, a few € / month) gives you a stable
+remote URL and handles the proxy details for you. It's worth it if you *also*
+want Alexa / Google voice control, cloud text-to-speech, or encrypted cloud
+backups — and the money funds Home Assistant's development. For CarWatch's
+purpose alone, though, Tailscale does the job for free, so this is a
+convenience choice, not a requirement. Point CarWatch at the Nabu Casa URL
+the same way (step 4 above).
+
 ## What you should NOT do
 
-- **Do not** expose Home Assistant on a public URL just for this. It puts
-  your home behind a guessable address; the login page and any weak
-  integration become internet-reachable.
-- **Do not** pay a monthly subscription for a plain remote URL. Tailscale
-  covers the need for free, and paying per user would defeat the point of a
+- **Do not forward port 8123 from your router** to Home Assistant. That
+  publishes your house's login page — and any weak integration behind it — to
+  the whole internet, permanently. Both options above avoid it.
+- **Do not** pay a monthly subscription for *only* a remote URL. Tailscale
+  covers that need for free; per-user subscriptions defeat the point of a
   self-hosted, own-your-data project.
+
+> Using a reverse proxy instead of Tailscale (cloudflared, nginx, Nabu Casa
+> internally)? Home Assistant will reject the proxied request with **HTTP
+> 400** until its `configuration.yaml` lists the proxy's source IP under
+> `trusted_proxies` (with `use_x_forwarded_for: true`). Read that IP from
+> HA's own log line (`untrusted proxy <ip>`), don't guess it — on Docker
+> Desktop it's the host gateway, not the `docker0` bridge. Tailscale sidesteps
+> all of this because the Pi connects to HA directly, with no proxy.
