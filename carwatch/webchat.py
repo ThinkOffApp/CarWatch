@@ -302,7 +302,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=zone>
   <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
   <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
-  <div class=steer id=steerwrap><div class=steerrow><span class=steerlab id=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
+  <div class=steer id=steerwrap style="display:none"><div class=steerrow><span class=steerlab id=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
@@ -404,6 +404,13 @@ async function poll(){
 // (steering.last), CAN 0x0500 byte 0, 128 = straight (claudeMB's decode).
 // It is a RAW byte, not degrees, and it is labelled that way until calibrated.
 const STEER_CENTRE=128, STEER_SPAN=64;
+// HIDDEN 2026-08-26. This read CAN 0x0500 byte 0, believed to be the steering
+// angle. It is not. With petrus holding full left lock for 75 seconds the value
+// stayed 127-128 across 29 samples - a spread of one. The 125-131 wobble I had
+// earlier called "his turns" was noise around centre, and the 83-137 range seen
+// during a drive is something that correlates with driving, not with steering
+// input. The dial stays hidden until a signal is shown to track the wheel:
+// hold full lock, watch for a large excursion, and only then label it.
 async function pollSteer(){
  try{
   const d=await(await F('/api/steering')).json();
