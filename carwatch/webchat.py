@@ -430,7 +430,11 @@ async function carCmd(btn){
     const r=await F('/api/cloudcar/cmd',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({car:slug,action:action})},20000);
     const d=await r.json();
-    if(d.ok){btn.className='ok';btn.textContent='sent \\u2713';setTimeout(pollCloud,4000);}
+    if(d.ok){btn.className='ok';btn.textContent='sent \\u2713';
+      // Mercedes confirms asynchronously and HA polls it on its own clock,
+      // so the new state can lag. Re-poll a few times over a minute to catch
+      // it whenever the cloud refreshes (petrus asked: does it recheck?).
+      [4000,12000,30000,60000].forEach(ms=>setTimeout(pollCloud,ms));}
     else{btn.className='bad';btn.textContent=(d.error||'failed').slice(0,40);}
   }catch(e){btn.className='bad';btn.textContent='error: '+e;}
   setTimeout(()=>{rest.forEach(b=>b.disabled=false);btn.textContent=label;btn.className='';},4000);

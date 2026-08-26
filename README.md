@@ -113,6 +113,8 @@ counterpart but has not yet met the physical car.
 | Self-update from this repo (hourly timer + dashboard button) | **proven** |
 | Dial-out reachability behind any NAT (cloudflared quick tunnel) | **proven** (reached over the open internet) |
 | OBD engine reading over Bluetooth ELM327 (RPM, coolant, speed, hybrid %, 12 V) | **proven** — live readings from the real car daily; zero-touch daemon reconnects and posts by itself. (The DoIP/ENET cable path was tried first and is dead on this car — no gateway answers; kept in [docs/plan.md](docs/plan.md) as a documented dead end) |
+| Manufacturer-cloud read (Mercedes me via Home Assistant): lock, doors, windows, tires, charge, range, fuel, odometer — every car on the account | **proven** — live on the real cars (one Helsinki, one Berlin), read-only by construction |
+| Make-safe cloud commands (lock doors, close windows — the two that need no security PIN) | **proven** — close-windows sent from the dashboard actually closed a real open window; unlock/open/engine are deliberately not implementable |
 | Raw CAN broadcast capture + decode tooling ([carwatch/candecode.py](carwatch/candecode.py)) | **proven capture** (2518 frames, 0 errors); signal naming needs a correlation drive — candidates only, honestly unlabeled |
 | Dashcam clip pull (WOLFBOX G900, hisnet CGI API mapped) | probe done, pipeline not wired |
 | MBUX dashboard render, mirror icon strip | planned |
