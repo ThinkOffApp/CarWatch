@@ -3,3 +3,12 @@ dev.json
 *.pyc
 __pycache__/
 .DS_Store
+
+# Secrets. The real config lives in /etc/carwatch/config.json, never here -
+# but forks and PRs arrive from people whose editors drop .env files, so the
+# repo refuses them by default.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
