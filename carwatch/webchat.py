@@ -205,293 +205,211 @@ _OBD_ALL_MOCK = {
 # layout approved via the carwatch.dev mock). Live values poll
 # /api/obd/all + /api/status; every button calls an endpoint that already
 # existed - nothing new happens to the car.
+# One screen, no scroll (petrus, Aug 26: "actually single screen ... OBD
+# labelled + mercedes.me on the same screen, hide the other car behind a
+# button, synthesize don't list a million variables", sized for the Fold 8
+# unfolded). Two labelled zones - OBD (live from the car) and Mercedes me
+# (cloud) - a per-car tab that shows ONE car at a time, and a compact control
+# bar. The CAN capture, room feed and raw-PID list moved off this screen to
+# their own pages. Live values still poll the same endpoints; every button
+# calls one that already existed.
 UNIFIED_PAGE = """<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>CarWatch</title><style>
-:root{color-scheme:dark}
+:root{color-scheme:dark;
+ --line:#20313c; --ink:#e8f1f5; --dim:#8ca1ad;
+ --ok:#40d98b; --warn:#ffc857; --bad:#ff667d; --blue:#62c7ff;
+ --mono:ui-monospace,'SF Mono',Menlo,monospace}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:radial-gradient(circle at top,#142a35 0,#091016 48%);color:#e8f1f5;
-  font:15px/1.4 -apple-system,system-ui,sans-serif;padding:0 10px 24px}
-.wrap{max-width:980px;margin:0 auto}
-header{padding:8px 0 4px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-h1{font-size:16px}
-#status{font:11px ui-monospace,monospace;color:#8ca1ad;text-align:right}
-#status b{color:#40d98b}
-.core{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:8px 0}
-#cloud{margin:8px 0}
-.car{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:10px 12px;margin:8px 0}
-.car h2{font-size:13px;color:#62c7ff;margin-bottom:6px}
-.glance{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.gi{text-align:center;min-width:60px}
-.gi .e{font-size:22px;display:block}
-.gi .l{font-size:10px;color:#8ca1ad}
-.gi .s{font:700 12px ui-monospace,monospace}
-.gi .s.ok{color:#40d98b}.gi .s.warn{color:#ffc857}.gi .s.bad{color:#ff667d}
-#cloudnote{font-size:11px;color:#8ca1ad;font-family:ui-monospace,monospace}
-.carcmds{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-.carcmds button{flex:1;min-width:130px;background:#13232c;color:#e8f1f5;border:1px solid #2a4a3a;
-  border-radius:10px;padding:9px;font-size:13px;font-weight:600}
-.carcmds button:active{transform:scale(.97)}
-.carcmds button:disabled{opacity:.6}
-.carcmds button.ok{border-color:#40d98b;color:#40d98b}
-.carcmds button.bad{border-color:#ff667d;color:#ff667d}
-@media (max-width:520px){.core{grid-template-columns:repeat(2,1fr)}}
-.core .g{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:16px 6px;text-align:center}
-.core .n{font:700 34px/1.05 ui-monospace,monospace;color:#40d98b}
-.core .n.warn{color:#ffc857}.core .n.bad{color:#ff667d}
-.core .k{font-size:10px;color:#8ca1ad;margin-top:2px}
-.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 8px}
-.ctl{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;
-  padding:8px 4px;text-align:center;cursor:pointer;user-select:none}
-.ctl:active{transform:scale(.96)}.ctl:hover{border-color:#62c7ff}
-.ctl .ico{font-size:16px;display:block;margin-bottom:1px}
-.ctl .t{font-weight:700;font-size:11px}
-.ctl .d{display:none}
-.ctl.on{border-color:#40d98b}.ctl.on .t{color:#40d98b}
-.ctl.busy{border-color:#ffc857;opacity:.7;pointer-events:none}
-#groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
-section{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:6px 8px}
-section h2{font-size:11px;color:#62c7ff;margin-bottom:2px}
-.r{display:flex;justify-content:space-between;gap:6px;padding:1px 0;font-size:12px}
-.r .l{color:#c4d2d8}.r .v{font:700 13px ui-monospace,monospace;color:#40d98b;text-align:right}
-.r .v.warn{color:#ffc857}.r .v.bad{color:#ff667d}
-#age{color:#8ca1ad;font-size:11px;margin:4px 0;font-family:ui-monospace,monospace}
-#out{background:#0e171e;border:1px solid #20313c;border-radius:10px;padding:8px 10px;
-  font:12px ui-monospace,monospace;color:#9fe8bd;white-space:pre-wrap;display:none;margin:6px 0;max-height:140px;overflow:auto}
-.ask{display:flex;gap:6px;margin-top:8px}
-.ask input{flex:1;padding:8px;border-radius:8px;border:1px solid #2a3039;background:#12151a;color:inherit;font-size:14px}
-.ask button{padding:8px 12px;border:0;border-radius:8px;background:#62c7ff;color:#031019;font-weight:700}
-#answer{background:#181c22;border:1px solid #262b33;border-radius:10px;padding:8px 10px;margin-top:8px;display:none;font-size:13px}
-.links{margin-top:8px;font-size:11px;color:#8ca1ad}
-.links a{color:#62c7ff;text-decoration:none;margin-right:12px}
-#feed{margin:8px 0}
-#feed .line{background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:10px;padding:8px 10px;margin:4px 0;font-size:13px}
-#feed .k{font-size:10px;color:#8ca1ad;text-transform:uppercase;letter-spacing:.04em}
-#feed .who{color:#62c7ff;font-weight:700}
-#cap{margin:8px 0;background:linear-gradient(145deg,#13232c,#0e171e);border:1px solid #20313c;border-radius:12px;padding:8px 10px}
-#cap .k{font-size:10px;color:#8ca1ad;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
-.wheel-wrap{display:flex;align-items:center;gap:12px;margin:4px 0 8px}
-.wheel{width:72px;height:72px;border-radius:50%;border:6px solid #20313c;background:#0e171e;
-  display:flex;align-items:center;justify-content:center}
-.spoke{width:6px;height:70%;background:#62c7ff;border-radius:3px}
-#ang{font:700 16px ui-monospace,monospace;color:#40d98b}
-.bar{display:flex;align-items:center;gap:6px;margin:2px 0}
-.bar b{width:56px;font:11px ui-monospace,monospace;color:#62c7ff}
-.bar .t{flex:1;height:10px;background:#0e171e;border-radius:5px;overflow:hidden}
-.bar .t i{display:block;height:100%;background:#40d98b;width:0}
-.bar .n{width:86px;font:10px ui-monospace,monospace;color:#8ca1ad;text-align:right}
-</style></head><body><div class=wrap>
-<header><h1>&#128663; CarWatch</h1><div id=status>live</div></header>
-<div id=core class=core></div>
-<div id=age></div>
-<div class=controls>
- <div class=ctl onclick="act(this,'/api/obd','one live engine read')"><span class=ico>&#128202;</span><span class=t>Read now</span><div class=d>one live sweep</div></div>
- <div class=ctl onclick="act(this,'/api/obd/deep','per-ECU deep scan (~1 min, parked)')"><span class=ico>&#128300;</span><span class=t>Deep scan</span><div class=d>per-ECU identity</div></div>
- <div class=ctl onclick="act(this,'/api/obd/record-arm','armed: records 120s raw CAN on the next moving read')"><span class=ico>&#127908;</span><span class=t>Record CAN</span><div class=d>arms next drive</div></div>
- <div class=ctl id=listenCtl onclick="toggleListen()"><span class=ico>&#128066;</span><span class=t id=listenT>Listen</span><div class=d>whisper ears</div></div>
- <div class=ctl onclick="speak()"><span class=ico>&#128266;</span><span class=t>Speak</span><div class=d>speak via MBUX</div></div>
- <div class=ctl onclick="act(this,'/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)')"><span class=ico>&#128279;</span><span class=t>Pair</span><div class=d>MBUX audio</div></div>
- <div class=ctl onclick="act(this,'/api/update','pull latest code + restart services')"><span class=ico>&#11014;&#65039;</span><span class=t>Update</span><div class=d>self-update</div></div>
- <div class=ctl onclick="location.href='/journal'"><span class=ico>&#128220;</span><span class=t>Journal</span><div class=d>service log</div></div>
- <div class=ctl onclick="pollCloud(true)"><span class=ico>&#9729;&#65039;</span><span class=t>Cloud</span><div class=d>refresh Mercedes data</div></div>
+html,body{height:100%}
+body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:var(--ink);
+ font:15px/1.35 -apple-system,system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;padding:8px;gap:8px}
+.top{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.brand{font-size:17px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:#0e171e;
+ color:var(--dim);font-weight:700;font-size:14px;cursor:pointer;user-select:none}
+.tab.on{border-color:var(--blue);color:var(--blue);background:#12222c}
+#status{margin-left:auto;font:11.5px var(--mono);color:var(--dim);text-align:right;line-height:1.3}
+#status b{color:var(--ok)}
+.main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
+@media (max-width:760px){.main{grid-template-columns:1fr;grid-auto-rows:1fr}}
+.zone{background:linear-gradient(160deg,#13232c,#0d161d);border:1px solid var(--line);
+ border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.zone > h2{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);
+ display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.zone > h2 .src{color:var(--dim);font-weight:400;letter-spacing:.04em}
+.badge{margin-left:auto;font:700 10px var(--mono);padding:2px 8px;border-radius:999px;letter-spacing:.06em}
+.badge.live{background:#123024;color:var(--ok)} .badge.stale{background:#2c2410;color:var(--warn)}
+.badge.cloud{background:#102431;color:var(--blue)}
+.hero{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px}
+.hero .big{font:800 64px/0.9 var(--mono);color:var(--ok)}
+.hero .unit{font:600 18px var(--mono);color:var(--dim)}
+.hero .lbl{font-size:12px;color:var(--dim);margin-left:auto;align-self:flex-end}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:auto}
+.stat{background:#0e171e;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+.stat .v{font:800 23px/1 var(--mono);color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.bad{color:var(--bad)}
+.stat .k{font-size:10.5px;color:var(--dim);margin-top:4px}
+.nodev{margin:auto;text-align:center;color:var(--dim);font-size:14px}
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 8px;margin:8px 0}
+.mi{text-align:center}
+.mi .e{font-size:30px;line-height:1.1;display:block}
+.mi .s{font:800 15px var(--mono)} .mi .s.ok{color:var(--ok)} .mi .s.warn{color:var(--warn)} .mi .s.bad{color:var(--bad)} .mi .s.dim{color:var(--ink)}
+.mi .l{font-size:10.5px;color:var(--dim);margin-top:1px}
+#mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
+.cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
+.cmds button{flex:1;background:#12222c;color:var(--ink);border:1px solid #2a4a3a;border-radius:12px;
+ padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.cmds button:active{transform:scale(.98)} .cmds button:disabled{opacity:.6}
+.cmds button.ok{border-color:var(--ok);color:var(--ok)} .cmds button.bad{border-color:var(--bad);color:var(--bad)}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:6px;overflow-x:auto}
+.ctl{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px;
+ padding:8px 6px;background:#0e171e;border:1px solid var(--line);border-radius:12px;cursor:pointer;user-select:none}
+.ctl:active{transform:scale(.96)} .ctl.on{border-color:var(--ok)} .ctl.on .t{color:var(--ok)} .ctl.busy{border-color:var(--warn);opacity:.7}
+.ctl .i{font-size:19px} .ctl .t{font-size:10.5px;color:var(--dim);font-weight:700}
+.ask{flex:1 1 150px;display:flex;gap:6px;min-width:140px}
+.ask input{flex:1;padding:10px;border-radius:12px;border:1px solid #2a3039;background:#0e171e;color:inherit;font-size:14px}
+.ask button{padding:10px 16px;border:0;border-radius:12px;background:var(--blue);color:#03121b;font-weight:800}
+.links{flex:0 0 auto;font:11px var(--mono);color:var(--dim);display:flex;gap:12px;padding-left:4px}
+.links a{color:var(--blue);text-decoration:none}
+#out{position:fixed;left:8px;right:8px;bottom:8px;background:#0e171e;border:1px solid var(--blue);border-radius:12px;
+ padding:10px 12px;font:12px var(--mono);color:#9fe8bd;white-space:pre-wrap;max-height:40vh;overflow:auto;display:none;z-index:5}
+#answer{position:fixed;left:8px;right:8px;bottom:8px;background:#181c22;border:1px solid var(--blue);border-radius:12px;
+ padding:10px 12px;font-size:13px;max-height:40vh;overflow:auto;display:none;z-index:5}
+</style></head><body>
+<div class=top>
+ <div class=brand>&#128663; CarWatch</div>
+ <div class=tabs id=tabs></div>
+ <div id=status>live</div>
 </div>
-<div id=out></div>
-<div class=ask><input id=q placeholder="Ask your car"><button onclick="ask()">Ask</button></div>
-<div id=answer></div>
-<div id=cloud><div id=cloudnote>mercedes cloud: loading&#8230;</div></div>
-<div id=cap>
-  <div class=k id=capnote>last CAN capture</div>
-  <div class=wheel-wrap>
-    <div class=wheel id=wheel><div class=spoke></div></div>
-    <div><div id=ang>--</div><div style="color:#8ca1ad;font-size:11px">0x0500 D0 around 128</div></div>
-  </div>
-  <div id=bars></div>
+<div class=main>
+ <div class=zone>
+  <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
+  <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
+  <div class=stats id=stats></div>
+  <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
+ </div>
+ <div class=zone>
+  <h2>&#9729;&#65039; Mercedes me <span class=src>manufacturer cloud</span> <span class="badge cloud">read-only</span></h2>
+  <div class=mgrid id=merc></div>
+  <div id=mnote>loading&#8230;</div>
+  <div class=cmds id=cmds></div>
+ </div>
 </div>
-<div id=feed></div>
-<div id=groups></div>
-<div class=links><a href="/">chat</a><a href="/nerd">all PIDs</a><a href="/streams">streams</a></div>
-</div><script>
+<div class=bar>
+ <div class=ctl data-act=read><span class=i>&#128202;</span><span class=t>Read</span></div>
+ <div class=ctl data-act=record><span class=i>&#127908;</span><span class=t>Record</span></div>
+ <div class=ctl id=listenCtl data-act=listen><span class=i>&#128066;</span><span class=t id=listenT>Listen</span></div>
+ <div class=ctl data-act=speak><span class=i>&#128266;</span><span class=t>Speak</span></div>
+ <div class=ctl data-act=pair><span class=i>&#128279;</span><span class=t>Pair</span></div>
+ <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
+ <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
+ <div class=links><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
+</div>
+<div id=out></div><div id=answer></div>
+<script>
 const $=id=>document.getElementById(id);
-// Through the tunnel the page URL carries ?t=<token>; same-origin fetches
-// must forward it or they 401 and the dashboard hangs on "connecting"
-// (petrus, in-car). At home (no tunnel) there is no token and none is needed.
 const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
-// Poll must die in 4s so the header never sits on connecting. Actions
-// (pair, deep scan, ask, speak) take tens of seconds; the same 4s abort
-// made every button look dead (petrus, MBUX Bluetooth, Aug 25).
-const F=(u,o={},ms=4000)=>{
-  const c=new AbortController();
-  const t=setTimeout(()=>c.abort(),ms);
-  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));
-};
-const ACT_MS={'/api/obd/deep':180000,'/api/update':90000,'/api/car-pair':70000,'/api/obd':70000};
-function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight}
-async function act(el,url,label){
-  el.classList.add('busy');show(label+' ...');
-  try{const r=await F(url,{method:'POST'},ACT_MS[url]||30000);const d=await r.json();
-    show(label+'\\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1800));
-  }catch(e){show(label+' failed: '+e)}
-  el.classList.remove('busy')}
-async function toggleListen(){
-  const on=!$('listenCtl').classList.contains('on');
-  try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})},25000);
-    const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
-function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening ON':'Listening off'}
-function speak(){const t=prompt('Text for the car to speak:');if(!t)return;
-  show('speaking ...');
-  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
-    .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed')))
-    .catch(e=>show('speak failed: '+e))}
-async function ask(){const t=$('q').value.trim();if(!t)return;
-  const a=$('answer');a.style.display='block';a.textContent='thinking\u2026 (~1 min at 3.5 tok/s)';$('q').value='';
-  try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},120000);
-    const d=await r.json();a.textContent=d.answer||'(no answer)'}catch(e){a.textContent='could not reach the car brain'}}
-function sev(u,k,n){if(!isFinite(n))return'';if(u==='\u00b0C')return n>=110?'bad':n>=95?'warn':'';
-  if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
-  if(k.includes('battery')||k.includes('fuel_level'))return n<10?'bad':n<20?'warn':'';return''}
-const CORE=[['hybrid_battery_pct','hybrid'],['module_voltage','12V'],['coolant_c','coolant'],['fuel_level_pct','fuel'],['speed_kmh','speed']];
-const CORE_SET=Object.fromEntries(CORE);
+const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
+ return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
+const ACT={read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
+ pair:['/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)',70000],update:['/api/update','pull latest code + restart',90000]};
+function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight;
+ clearTimeout(show._t);show._t=setTimeout(()=>o.style.display='none',9000)}
+async function doAct(act){
+ if(act==='listen')return toggleListen();
+ if(act==='speak')return speak();
+ const a=ACT[act];if(!a)return;const el=document.querySelector('[data-act='+act+']');
+ el.classList.add('busy');show(a[1]+' ...');
+ try{const r=await F(a[0],{method:'POST'},a[2]);const d=await r.json();
+  show(a[1]+'\\n'+(d.output||d.error||JSON.stringify(d)).slice(0,1600));}catch(e){show(a[1]+' failed: '+e)}
+ el.classList.remove('busy')}
+async function toggleListen(){const on=!$('listenCtl').classList.contains('on');
+ try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})},25000);
+  const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
+function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening':'Listen'}
+function speak(){const t=prompt('Text for the car to speak:');if(!t)return;show('speaking ...');
+ F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
+ .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed'))).catch(e=>show('speak failed: '+e))}
+async function ask(){const t=$('q').value.trim();if(!t)return;const a=$('answer');
+ a.style.display='block';a.textContent='thinking… (~1 min at 3.5 tok/s)';$('q').value='';
+ clearTimeout(ask._t);ask._t=setTimeout(()=>a.style.display='none',20000);
+ try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},120000);
+  const d=await r.json();a.textContent=d.answer||'(no answer)';ask._t=setTimeout(()=>a.style.display='none',25000);}
+ catch(e){a.textContent='could not reach the car brain'}}
+document.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>doAct(el.getAttribute('data-act'))));
+$('askbtn').addEventListener('click',ask);$('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
+// --- OBD (the car the Pi rides in) ---
+function sev(u,k,n){if(!isFinite(n))return'';if(u&&u.indexOf('C')>=0&&k==='coolant_c')return n>=110?'bad':n>=95?'warn':'';
+ if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
+ if(k.includes('battery'))return n<10?'bad':n<20?'warn':'';return''}
 function flat(d){const o={};if(!d||!d.groups)return o;
-  Object.values(d.groups).forEach(vals=>Object.values(vals).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
+ Object.values(d.groups).forEach(v=>Object.values(v).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
+const STAT=[['engine_rpm','engine rpm'],['hybrid_battery_pct','hybrid battery'],['module_voltage','12V system'],
+ ['coolant_c','coolant'],['engine_load_pct','engine load']];
 async function poll(){
-  try{const r=await F('/api/status');const s=await r.json();
-    if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>Open this dashboard from the app link (it needs the access token) or from the home network</span>';return}
-    const f=s.facts||{};
-    $('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+' &middot; <b>'+(f.uptime||'')+'</b>';
-    if(s.listening!==undefined)setListen(s.listening);
-  }catch(e){$('status').innerHTML='<span style=color:#ff667d>Cannot reach the car - open this page from the app link so it carries the access token, or use the home network URL</span>'}
-  try{const d=await(await F('/api/obd/all')).json();
-    const g=$('groups');const c=$('core');
-    if(d&&d.groups&&Object.keys(d.groups).length){
-      const m=flat(d);
-      c.innerHTML=CORE.map(([k,label])=>{
-        const r=m[k]||{}; const n=Number(r.value); const u=r.unit||'';
-        return '<div class=g><div class="n '+sev(u,k,n)+'">'+(r.value==null?'-':r.value)+'</div><div class=k>'+label+(u?' '+u:'')+'</div></div>';
-      }).join('');
-      $('age').textContent=d.age_s!==undefined?('engine data from '+Math.round(d.age_s)+'s ago'+(d.age_s>180?' - STALE (ignition off?)':'')):'';
-      g.innerHTML=Object.entries(d.groups).map(([name,vals])=>{
-        const rows=Object.values(vals).filter(r=>r&&!CORE_SET[r.key]);
-        if(!rows.length)return '';
-        return '<section><h2>'+name+'</h2>'+rows.map(r=>
-          '<div class=r><span class=l>'+(r.label||r.key)+'</span><span class="v '+sev(r.unit||'',r.key||'',Number(r.value))+'">'+r.value+' '+(r.unit||'')+'</span></div>').join('')+'</section>';
-      }).join('');
-      if(Array.isArray(d.dtcs)){
-        const n=d.dtcs.length;
-        c.innerHTML += '<div class=g><div class="n '+(n?'warn':'')+'">'+n+'</div><div class=k>fault codes</div></div>';
-      }
-    }else{$('age').textContent=(d&&d.error)?('engine data unavailable: '+d.error+(d.age_s>180?' (last good '+Math.round(d.age_s)+'s ago)':'')):'no engine data cached - plug the adapter and turn the ignition on';}
-  }catch(e){$('age').textContent='could not load engine values: '+e}
-  try{
-    const rm=await (await F('/api/room/latest')).json();
-    const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const line=(k,m)=>{
-      if(!m) return '<div class=line><div class=k>'+k+'</div>none yet</div>';
-      return '<div class=line><div class=k>'+k+'</div><span class=who>'+esc(m.from)+'</span> '+esc((m.body||'').slice(0,180))+'</div>';
-    };
-    $('feed').innerHTML=line('latest in room', rm.latest)+line('latest car mention', rm.car);
-  }catch(e){const f=$('feed'); if(f) f.textContent='room feed unavailable'}
-  try{
-    const d=await(await F('/api/can/summary')).json();
-    const note=$('capnote');
-    if(!d||!d.ok){
-      note.textContent=(d&&d.error)||'no capture yet';
-      $('ang').textContent='--';
-      $('bars').innerHTML='';
-    }else{
-      note.textContent=(d.file||'capture')+' · '+d.frames+' frames · '+d.seconds+'s';
-      const st=d.steering||{};
-      const deg=((st.last||128)-128)*1.2;
-      $('wheel').style.transform='rotate('+deg+'deg)';
-      $('ang').textContent=(st.last==null?'--':st.last)+'  min '+(st.min==null?'-':st.min)+' max '+(st.max==null?'-':st.max);
-      const max=(d.streams&&d.streams[0]&&d.streams[0].n)||1;
-      $('bars').innerHTML=(d.streams||[]).map(s=>
-        '<div class=bar><b>'+s.id+'</b><div class=t><i style="width:'+Math.round(100*s.n/max)+'%"></i></div><div class=n>'+s.hz+' Hz · '+s.n+'</div></div>'
-      ).join('');
-    }
-  }catch(e){const n=$('capnote'); if(n) n.textContent='capture unavailable'}
+ try{const s=await(await F('/api/status')).json();
+  if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>open from the app link or Tailscale</span>';}
+  else{const f=s.facts||{};$('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+'<br><b>'+(f.uptime||'')+'</b>';
+   if(s.listening!==undefined)setListen(s.listening);}
+ }catch(e){$('status').innerHTML='<span style=color:#ff667d>cannot reach the car</span>'}
+ try{const d=await(await F('/api/obd/all')).json();
+  if(d&&d.groups&&Object.keys(d.groups).length){
+   const m=flat(d);const spd=m.speed_kmh;
+   $('spd').textContent=spd&&spd.value!=null?spd.value:'-';
+   const stale=d.age_s!==undefined&&d.age_s>180;
+   $('obdbadge').className='badge '+(stale?'stale':'live');
+   $('obdbadge').textContent=stale?'stale · ign off':'live · '+(d.age_s!==undefined?Math.round(d.age_s)+'s':'now');
+   const dt=Array.isArray(d.dtcs)?d.dtcs.length:0;
+   let cells=STAT.map(([k,l])=>{const r=m[k]||{};const n=Number(r.value);
+    return '<div class=stat><div class="v '+sev(r.unit||'',k,n)+'">'+(r.value==null?'-':r.value)+(k==='module_voltage'?'<span style=font-size:13px>V</span>':k.includes('pct')?'%':k==='coolant_c'?'&deg;':'')+'</div><div class=k>'+l+'</div></div>';});
+   cells.push('<div class=stat><div class="v '+(dt?'warn':'')+'">'+dt+'</div><div class=k>fault codes</div></div>');
+   $('stats').innerHTML=cells.join('');
+  }else{$('spd').textContent='-';$('stats').innerHTML='<div class=nodev style="grid-column:1/-1">'+((d&&d.error)||'no engine data - ignition off?')+'</div>';}
+ }catch(e){}
 }
-// Mercedes cloud glance: vendor data via the home HA, slower cadence than
-// OBD (HA itself polls Mercedes; 30s here adds nothing but load).
-function gi(e,l,s,cls){return '<div class=gi><span class=e>'+e+'</span><div class="s '+(cls||'')+'">'+s+'</div><div class=l>'+l+'</div></div>'}
-function agg(o,openWord){ // granular door/window dicts -> one honest word
-  if(!o)return null;
-  if(o.all_closed!==undefined)return o.all_closed==='on'?['closed','ok']:['open','warn'];
-  const vals=Object.values(o);if(!vals.length)return null;
-  const open=vals.filter(v=>v==='on'||v==='open').length;
-  return open?[open+' '+openWord,'warn']:['closed','ok'];
+// --- Mercedes me cloud (one car at a time) ---
+let CARS={},SEL=null;
+function agg(o){if(!o)return null;if(o.all_closed!==undefined)return o.all_closed==='on'?['closed','ok']:['open','warn'];
+ const v=Object.values(o);if(!v.length)return null;const n=v.filter(x=>x==='on'||x==='open').length;return n?[n+' open','warn']:['closed','ok']}
+function mi(e,s,l,cls){return '<div class=mi><span class=e>'+e+'</span><div class="s '+(cls||'dim')+'">'+s+'</div><div class=l>'+l+'</div></div>'}
+function renderTabs(){const t=$('tabs');const slugs=Object.keys(CARS);
+ t.innerHTML=slugs.map(sl=>'<div class="tab'+(sl===SEL?' on':'')+'" data-car="'+sl+'">'+(CARS[sl].label||sl)+'</div>').join('');
+ t.querySelectorAll('[data-car]').forEach(el=>el.addEventListener('click',()=>{SEL=el.getAttribute('data-car');renderTabs();renderCar()}))}
+function renderCar(){const c=CARS[SEL];const g=$('merc');if(!c){g.innerHTML='';return}
+ const p=[];const lk=c.lock&&String(c.lock.locked||'');
+ if(lk){const L=(lk==='locked'||lk==='1'||lk==='2'),U=(lk==='unlocked'||lk==='0');
+  p.push(mi(L?'&#128274;':(U?'&#128275;':'&#10067;'),L?'locked':(U?'unlocked':lk),'lock',L?'ok':(U?'bad':'')))}
+ const w=agg(c.windows);if(w)p.push(mi('&#129695;',w[0],'windows',w[1]));
+ const dr=agg(c.doors);if(dr)p.push(mi('&#128682;',dr[0],'doors',dr[1]));
+ if(c.tires_kpa){const tv=Object.values(c.tires_kpa);const sp=Math.max(...tv)-Math.min(...tv);
+  p.push(mi('&#128663;',tv.join('/'),'tyres kPa',sp>20?'warn':'ok'))}
+ if(c.ev&&c.ev.soc_pct!==undefined){const pc=c.ev.soc_pct;
+  p.push(mi('&#128267;',pc+'%'+(c.ev.range_km?' &middot; '+c.ev.range_km+'km':''),'charge',pc>50?'ok':(pc>20?'warn':'bad')))}
+ if(c.fuel&&(c.fuel.level_pct!==undefined||c.fuel.range_km!==undefined))
+  p.push(mi('&#9981;',[c.fuel.level_pct!==undefined?c.fuel.level_pct+'%':'',c.fuel.range_km!==undefined?c.fuel.range_km+'km':''].filter(Boolean).join(' &middot; '),'fuel',''));
+ if(c.fuel&&c.fuel.adblue_pct!==undefined)p.push(mi('&#128167;',c.fuel.adblue_pct+'%','AdBlue',''));
+ if(c.odometer_km!==undefined)p.push(mi('&#128207;',Math.round(c.odometer_km),'odometer km',''));
+ g.innerHTML=p.join('');
+ $('cmds').innerHTML='<button data-cmd=lock>&#128274; lock doors</button><button data-cmd=windows_close>&#129695; close windows</button>';
+ $('cmds').querySelectorAll('[data-cmd]').forEach(b=>b.addEventListener('click',()=>carCmd(b)))}
+async function carCmd(btn){const action=btn.getAttribute('data-cmd');const label=btn.textContent;
+ if(!confirm(label.trim()+' - '+(CARS[SEL].label||SEL)+'?\\nThis sends a real command to the car.'))return;
+ const sibs=Array.from(btn.parentNode.children);sibs.forEach(b=>b.disabled=true);btn.className='';btn.textContent='sending…';
+ try{const r=await F('/api/cloudcar/cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({car:SEL,action})},20000);
+  const d=await r.json();if(d.ok){btn.className='ok';btn.textContent='sent ✓';[4000,12000,30000].forEach(ms=>setTimeout(pollCloud,ms));}
+  else{btn.className='bad';btn.textContent=(d.error||'failed').slice(0,30);}}
+ catch(e){btn.className='bad';btn.textContent='error'}
+ setTimeout(()=>{sibs.forEach(b=>b.disabled=false);renderCar()},4000)}
+async function pollCloud(){
+ try{const s=await(await F('/api/cloudcar',{},8000)).json();
+  if(!s.ok&&!s.cars){$('mnote').innerHTML='mercedes cloud: '+((s.error||'no data'))+(/token|not connected/i.test(s.error||'')?' &middot; <a href='+_q('/cloudcar')+' style=color:#62c7ff>set up</a>':'');$('merc').innerHTML='';$('cmds').innerHTML='';return}
+  CARS=s.cars||{};if(!SEL||!CARS[SEL])SEL=Object.keys(CARS)[0]||null;
+  renderTabs();renderCar();
+  $('mnote').innerHTML=s.stale?('&#9888;&#65039; '+(s.note||'last known, not live')):('from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; only lock / close-windows can be sent');
+ }catch(e){$('mnote').textContent='mercedes cloud unreachable: '+e}
 }
-async function carCmd(btn){
-  const slug=btn.getAttribute('data-slug'),action=btn.getAttribute('data-act');
-  const label=btn.textContent;
-  if(!confirm(label.trim()+' - '+slug+'?\\nThis sends a real command to the car.'))return;
-  btn.disabled=true;btn.className='';const rest=Array.from(btn.parentNode.children);
-  rest.forEach(b=>b.disabled=true);btn.textContent='sending\\u2026';
-  try{
-    const r=await F('/api/cloudcar/cmd',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({car:slug,action:action})},20000);
-    const d=await r.json();
-    if(d.ok){btn.className='ok';btn.textContent='sent \\u2713';
-      // Mercedes confirms asynchronously and HA polls it on its own clock,
-      // so the new state can lag. Re-poll a few times over a minute to catch
-      // it whenever the cloud refreshes (petrus asked: does it recheck?).
-      [4000,12000,30000,60000].forEach(ms=>setTimeout(pollCloud,ms));}
-    else{btn.className='bad';btn.textContent=(d.error||'failed').slice(0,40);}
-  }catch(e){btn.className='bad';btn.textContent='error: '+e;}
-  setTimeout(()=>{rest.forEach(b=>b.disabled=false);btn.textContent=label;btn.className='';},4000);
-}
-async function pollCloud(manual){
-  const el=$('cloud');
-  try{
-    const s=await (await F('/api/cloudcar',{},manual?12000:6000)).json();
-    if(!s.ok){
-      el.innerHTML='<div id=cloudnote>mercedes cloud: '+(s.error||'no data')+
-        (/token|not connected/i.test(s.error||'')?' &middot; <a href="'+_q('/cloudcar')+'" style=color:#62c7ff>set up</a>':'')+'</div>';
-      return;
-    }
-    el.innerHTML=Object.values(s.cars).map(c=>{
-      const parts=[];
-      const lk=c.lock&&String(c.lock.locked||'');
-      if(lk){
-        // Mercedes lock states arrive as words OR numbers (GLE reports "2").
-        // Only a value we UNDERSTAND gets a color; unknowns render neutral
-        // raw rather than guessing red (honesty rule).
-        const locked=(lk==='locked'||lk==='1'||lk==='2');
-        const unlocked=(lk==='unlocked'||lk==='0');
-        parts.push(gi(locked?'&#128274;':(unlocked?'&#128275;':'&#10067;'),'lock',
-          locked?'locked':(unlocked?'unlocked':lk),locked?'ok':(unlocked?'bad':'')));
-      }
-      const d=agg(c.doors,'open');if(d)parts.push(gi('&#128682;','doors',d[0],d[1]));
-      const w=agg(c.windows,'open');if(w)parts.push(gi('&#129695;','windows',w[0],w[1]));
-      if(c.sunroof)parts.push(gi('&#9728;&#65039;','sunroof',c.sunroof,c.sunroof==='closed'?'ok':'warn'));
-      if(c.tires_kpa){const t=Object.values(c.tires_kpa);const spread=Math.max(...t)-Math.min(...t);
-        parts.push(gi('&#128663;','tires kPa',t.join('/'),spread>20?'warn':'ok'));}
-      if(c.ev&&c.ev.soc_pct!==undefined){const p=c.ev.soc_pct;
-        parts.push(gi('&#128267;','charge',p+'%'+(c.ev.range_km?' &middot; '+c.ev.range_km+' km':''),p>50?'ok':(p>20?'warn':'bad')));}
-      if(c.ev&&(c.ev.charging==='on'||c.ev.charging===true))parts.push(gi('&#9889;','charging','now','ok'));
-      if(c.fuel&&(c.fuel.level_pct!==undefined||c.fuel.range_km!==undefined)){
-        const fp=c.fuel.level_pct!==undefined?c.fuel.level_pct+'%':'';
-        const fr=c.fuel.range_km!==undefined?c.fuel.range_km+' km':'';
-        parts.push(gi('&#9981;','fuel',[fp,fr].filter(Boolean).join(' &middot; '),''));}
-      if(c.fuel&&c.fuel.adblue_pct!==undefined)parts.push(gi('&#128167;','AdBlue',c.fuel.adblue_pct+'%',''));
-      if(c.odometer_km!==undefined)parts.push(gi('&#128207;','odometer',Math.round(c.odometer_km)+' km',''));
-      const slug=c.slug||c.label;
-      const cmds=`<div class=carcmds>`+
-        `<button data-slug="${slug}" data-act="lock">&#128274; lock doors</button>`+
-        `<button data-slug="${slug}" data-act="windows_close">&#129695; close windows</button>`+
-        `</div>`;
-      return `<div class=car><h2>${c.label}</h2><div class=glance>`+parts.join('')+`</div>`+cmds+`</div>`;
-    }).join('')+'<div id=cloudnote>'+(s.stale
-        ? '&#9888;&#65039; '+(s.note||'last known values, not live')+' &middot; the car cannot reach Home Assistant from here'
-        : 'from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; reads live, only lock/close-windows can be sent')+'</div>';
-  }catch(e){el.innerHTML='<div id=cloudnote>mercedes cloud unreachable: '+e+'</div>'}
-}
-// Delegated click for the per-car command buttons (they are re-rendered
-// every cloud poll, so a listener on the container survives re-render).
-$('cloud').addEventListener('click',e=>{
-  const b=e.target.closest('button[data-act]');
-  if(b)carCmd(b);
-});
 poll();setInterval(poll,2000);
 pollCloud();setInterval(pollCloud,30000);
 </script></body></html>"""
