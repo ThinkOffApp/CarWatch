@@ -420,7 +420,8 @@ function agg(o,openWord){ // granular door/window dicts -> one honest word
   const open=vals.filter(v=>v==='on'||v==='open').length;
   return open?[open+' '+openWord,'warn']:['closed','ok'];
 }
-async function carCmd(btn,slug,action){
+async function carCmd(btn){
+  const slug=btn.getAttribute('data-slug'),action=btn.getAttribute('data-act');
   const label=btn.textContent;
   if(!confirm(label.trim()+' - '+slug+'?\\nThis sends a real command to the car.'))return;
   btn.disabled=true;btn.className='';const rest=Array.from(btn.parentNode.children);
@@ -470,14 +471,20 @@ async function pollCloud(manual){
       if(c.fuel&&c.fuel.adblue_pct!==undefined)parts.push(gi('&#128167;','AdBlue',c.fuel.adblue_pct+'%',''));
       if(c.odometer_km!==undefined)parts.push(gi('&#128207;','odometer',Math.round(c.odometer_km)+' km',''));
       const slug=c.slug||c.label;
-      const cmds='<div class=carcmds>'+
-        '<button onclick="carCmd(this,\''+slug+'\',\'lock\')">&#128274; lock doors</button>'+
-        '<button onclick="carCmd(this,\''+slug+'\',\'windows_close\')">&#129695; close windows</button>'+
-        '</div>';
-      return '<div class=car><h2>'+c.label+'</h2><div class=glance>'+parts.join('')+'</div>'+cmds+'</div>';
+      const cmds=`<div class=carcmds>`+
+        `<button data-slug="${slug}" data-act="lock">&#128274; lock doors</button>`+
+        `<button data-slug="${slug}" data-act="windows_close">&#129695; close windows</button>`+
+        `</div>`;
+      return `<div class=car><h2>${c.label}</h2><div class=glance>`+parts.join('')+`</div>`+cmds+`</div>`;
     }).join('')+'<div id=cloudnote>from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; reads live, only lock/close-windows can be sent</div>';
   }catch(e){el.innerHTML='<div id=cloudnote>mercedes cloud unreachable: '+e+'</div>'}
 }
+// Delegated click for the per-car command buttons (they are re-rendered
+// every cloud poll, so a listener on the container survives re-render).
+$('cloud').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-act]');
+  if(b)carCmd(b);
+});
 poll();setInterval(poll,2000);
 pollCloud();setInterval(pollCloud,30000);
 </script></body></html>"""
