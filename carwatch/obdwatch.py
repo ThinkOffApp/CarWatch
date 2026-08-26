@@ -26,7 +26,12 @@ from carwatch.obd_session import run_session
 CARRIER = "/sys/class/net/eth0/carrier"
 POLL_S = 5
 SETTLE_S = 6          # give the gateway a moment after link-up
-RETRY_COOLDOWN_S = 120  # after a failed session, retry this often while up
+RETRY_COOLDOWN_S = 15  # after a failed session, retry this often while up.
+                       # Was 120: when the car was parked/asleep a failed read
+                       # dropped the watcher into a 2-min wait, so turning the
+                       # ignition on could leave the dash dead for up to two
+                       # minutes - petrus turned the wheel, saw nothing, was
+                       # (rightly) sure it was broken (claudemm's find, Aug 26).
 RECONNECT_GAP_S = 30   # adapter absent longer than this = a real reconnect
                        # (post a fresh line); shorter = a wireless flap (stay
                        # quiet). Without this a flapping rfcomm0 re-posted the
@@ -413,7 +418,10 @@ def run() -> None:
                             print("obd-all sweep empty/errored - keeping basic tier", flush=True)
                     except Exception as e:
                         print(f"obd-all sweep failed: {e} - keeping basic tier", flush=True)
-                next_try = time.time() + 60
+                next_try = time.time() + 15   # refresh the dash cache often so
+                # it reads as live; room posts stay milestone-gated above, so a
+                # faster read cadence does NOT re-spam the room (was 60s, which
+                # made the "LIVE 29s" badge grow to a minute between updates).
             else:
                 if not last_post_readings:
                     hint = (result.get("summary", "no data")
@@ -421,7 +429,23 @@ def run() -> None:
                     post(f"OBD: adapter/link present but no engine data yet - {hint}")
                     last_post_readings = "(failed)"
                 next_try = time.time() + RETRY_COOLDOWN_S
-        time.sleep(POLL_S)
+        # Live steering fills what was idle sleep time: sample the wheel angle
+        # off the passive CAN broadcast (id 0x0500 byte 0) and cache it, so
+        # turning the wheel visibly moves the dashboard bar. FULLY ISOLATED and
+        # best-effort: it runs on its OWN short-lived connection, opened only
+        # AFTER run_session opened and closed its own (single-reader rule holds
+        # - they never overlap in one iteration), and every failure is swallowed
+        # so it can NEVER affect the PID reads. The ~2s burst is itself the
+        # loop's pacing when the adapter is present.
+        if port:
+            try:
+                from carwatch import steering as _steer
+                _steer.write_cache(_steer.sample_once(port, seconds=2.0))
+            except Exception as _se:
+                print(f"steering sample skipped: {_se}", flush=True)
+            time.sleep(1)
+        else:
+            time.sleep(POLL_S)
 
 
 if __name__ == "__main__":
