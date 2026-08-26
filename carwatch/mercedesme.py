@@ -213,16 +213,29 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                 car.setdefault("lock", {})[key] = val
             else:
                 car.setdefault(grp, {})[key] = val
-            # Label from the slug itself: "isk_579" -> "ISK-579". Deriving it
-            # from a friendly name picked whichever entity came last ("ISK-579
-            # Charging" as a car title, live, Aug 26) - the slug is stable.
-            if car["label"] == slug:
-                car["label"] = slug.replace("_", "-").upper()
+            fn = str(attrs.get("friendly_name", ""))
+            if fn:
+                car.setdefault("_fns", []).append(fn)
 
         # A vehicle shows up as many entities; a lone suffix hit is another
         # integration's coincidence, not a car.
         cars = {slug: car for slug, car in cars.items()
                 if hits_per_slug.get(slug, 0) >= 3}
+
+        # Car title = the common prefix of its entities' friendly names
+        # ("ISK-579 Odometer" + "ISK-579 Lock" -> "ISK-579"). The slug is the
+        # fallback ONLY when it doesn't look like a VIN - a VIN-slugged car
+        # (fresh add, no friendly rename) must never put the VIN on a screen.
+        import os.path as _osp  # commonprefix works on any str list
+        for slug, car in cars.items():
+            fns = car.pop("_fns", [])
+            prefix = _osp.commonprefix(fns).strip(" -_") if len(fns) > 1 else ""
+            if len(prefix) >= 3:
+                car["label"] = prefix
+            elif car["label"] == slug:
+                looks_like_vin = len(slug) > 12 and slug.isalnum()
+                car["label"] = "unnamed car" if looks_like_vin else \
+                    slug.replace("_", "-").upper()
 
         if not cars:
             self._cache = cloudcar.empty_state(
