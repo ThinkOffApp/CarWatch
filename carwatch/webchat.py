@@ -311,7 +311,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
  <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
  <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
- <div class=links><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
+ <div class=links><a href=# id=trustlink>trust wifi</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 </div>
 <div id=out></div><div id=answer></div>
 <script>
@@ -352,6 +352,13 @@ async function ask(){const t=$('q').value.trim();if(!t)return;const a=$('answer'
  catch(e){a.textContent='could not reach the car brain'}}
 document.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>doAct(el.getAttribute('data-act'))));
 $('askbtn').addEventListener('click',ask);$('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
+const _tl=$('trustlink');if(_tl)_tl.addEventListener('click',async(e)=>{e.preventDefault();
+ let w={};try{w=await(await F('/api/whoami')).json()}catch(_){}
+ const ssid=w.ssid||'this network';
+ if(w.on_home_wifi){show("'"+ssid+"' is already trusted - phones on it open the dash without a token.");return;}
+ if(!confirm("Trust '"+ssid+"' as home?\\nEvery device on this wifi will open the dash WITHOUT a token. Do this only on your own home wifi or your own phone hotspot, never on cafe/public wifi."))return;
+ try{const r=await F('/api/home-wifi/trust',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})},10000);
+  const d=await r.json();show(d.ok?("Trusted '"+d.ssid+"'. Every phone on this wifi now opens the dash without a token."):("failed: "+(d.error||'')));}catch(e){show('trust failed: '+e)}});
 // --- OBD (the car the Pi rides in) ---
 function sev(u,k,n){if(!isFinite(n))return'';if(u&&u.indexOf('C')>=0&&k==='coolant_c')return n>=110?'bad':n>=95?'warn':'';
  if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
@@ -2364,6 +2371,45 @@ class Handler(BaseHTTPRequestHandler):
                     if prov is not None:
                         prov._cache_at = 0.0  # force a fresh fetch next poll
                 return self._send(200, json.dumps(res), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/home-wifi/trust":
+            # Add (or remove) a wifi network to the trusted-home list so every
+            # device on it opens the dash token-less. petrus-controlled: he taps
+            # this from an already-open dash while on a network he owns (home
+            # wifi or his own phone hotspot). Body {"ssid": "..."} defaults to
+            # the Pi's current SSID; {"remove": true} drops it. Read-modify-write
+            # the config; clear the auth cache so it takes effect at once.
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                ssid = str(body.get("ssid", "")).strip()
+                if not ssid:
+                    from carwatch.trips import current_ssid
+                    ssid = current_ssid() or ""
+                if not ssid:
+                    return self._send(200, json.dumps(
+                        {"ok": False, "error": "no wifi network detected"}),
+                        "application/json")
+                cfg_path = os.path.expanduser("~/.carwatch/config.json")
+                with open(cfg_path) as fh:
+                    cfg = json.load(fh)
+                homes = [s for s in (cfg.get("home_ssids") or []) if s]
+                remove = bool(body.get("remove"))
+                if remove:
+                    homes = [s for s in homes if s != ssid]
+                elif ssid not in homes:
+                    homes.append(ssid)
+                cfg["home_ssids"] = homes
+                tmp = cfg_path + ".tmp"
+                with open(tmp, "w") as fh:
+                    json.dump(cfg, fh, indent=2)
+                os.replace(tmp, cfg_path)
+                self.__class__._home_wifi_cache = (0.0, False)  # force re-eval
+                return self._send(200, json.dumps(
+                    {"ok": True, "ssid": ssid, "trusted": not remove,
+                     "home_ssids": homes}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
