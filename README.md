@@ -4,6 +4,8 @@
 
 ![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
 
+![Both cars live on the phone dashboard from the Mercedes cloud: lock state, windows, tire pressures, charge, fuel, AdBlue and odometer per car, read-only](docs/img/cloud-dash.jpg)
+
 **Your car as a chat-room agent — fully offline.** A Raspberry Pi 5 rides in the
 car, runs a 35B-parameter model locally, joins your
 [GroupMind](https://groupmind.one) rooms as `@gle` (or whatever you name yours),
