@@ -101,7 +101,7 @@ flowchart LR
         OBD[carwatch-obd<br/>watches the OBD cable] --> AGENT
         BRAIN --> AGENT[carwatch-agent<br/>the @gle room agent]
         DASH[web dashboard :8088<br/>status / update / voice / wifi]
-        UPD[self-update<br/>hourly git pull] -.updates.-> car
+        UPD[self-update<br/>hourly git pull]
         REACH[dial-out tunnel<br/>reachable behind any NAT]
     end
     AGENT <-->|posts + mentions| GM[GroupMind rooms]
