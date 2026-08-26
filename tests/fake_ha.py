@@ -18,7 +18,9 @@ ATTR = "Data provided by Mercedes-Benz"
 
 
 def _e(eid, state, friendly, extra=None):
-    a = {"attribution": ATTR, "friendly_name": friendly}
+    # mbapi2020 sets NO attribution attribute (verified against its source,
+    # Aug 26 2026) - the fake must not be friendlier than reality.
+    a = {"friendly_name": friendly}
     a.update(extra or {})
     return {"entity_id": eid, "state": state, "attributes": a}
 
@@ -47,7 +49,9 @@ STATES = [
     _e("sensor.wdc292xxfake_range_liquid", "540", "GLE Range liquid", {"unit_of_measurement": "km"}),
     _e("sensor.wdc292xxfake_ignition_state", "lock", "GLE Ignition state"),
     _e("sensor.wdc292xxfake_odometer", "91002", "GLE Odometer", {"unit_of_measurement": "km"}),
-    # noise that must be ignored (wrong/no attribution)
+    # noise that must be ignored: a lone suffix hit from another integration
+    _e("lock.front_door_lock", "locked", "Front door"),
+    # noise that must be ignored (non-vehicle entities)
     _e("sensor.random_kitchen_temp", "21.5", "Kitchen temp", {"attribution": "someone else"}),
     {"entity_id": "sun.sun", "state": "below_horizon", "attributes": {}},
     # unavailable value that must be dropped, not shown as a fact

@@ -175,22 +175,27 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
         except Exception as e:
             return cloudcar.empty_state(self.name, f"HA unreachable: {e}")
 
-        # Keep only entities that are plausibly the Mercedes integration's:
-        # mbapi2020 stamps attribution, and its ids carry the car name/VIN.
+        # The suffix map does the recognizing. The first version required an
+        # attribution attribute ("mbapi2020 stamps attribution") - that
+        # assumption was FALSE: mbapi2020 sets no attribution at all, so all
+        # 108 real entities were rejected and the dash said "0 candidates"
+        # (claudemm's diagnosis, Aug 26 2026 - he grepped the integration's
+        # whole source for the word). A real car produces many matching
+        # entities, so a slug with fewer than 3 suffix hits is dropped below
+        # rather than letting some other integration's lone lock.front_door
+        # masquerade as a vehicle.
         cars: dict[str, dict] = {}
+        hits_per_slug: dict[str, int] = {}
         recognized = 0
         for ent in states:
             eid = ent.get("entity_id", "")
             attrs = ent.get("attributes", {}) or {}
-            attribution = str(attrs.get("attribution", "")).lower()
-            if "mercedes" not in attribution and "mbapi" not in attribution:
-                continue
-            recognized += 1
             body = eid.split(".", 1)[-1]
             hit = next(((grp, key) for suf, (grp, key) in _SUFFIX_MAP
                         if body.endswith(suf)), None)
             if hit is None:
                 continue
+            recognized += 1
             # Car slug = what precedes the matched suffix; falls back to the
             # friendly name's first word so both named + VIN cars group.
             grp, key = hit
@@ -198,6 +203,7 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
             slug = body[: len(body) - len(suf)].strip("_") or \
                 str(attrs.get("friendly_name", "car")).split()[0].lower()
             car = cars.setdefault(slug, {"label": slug})
+            hits_per_slug[slug] = hits_per_slug.get(slug, 0) + 1
             val = _norm_value(eid, ent.get("state"))
             if val is None:
                 continue
@@ -212,11 +218,16 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                 # "E 300 e Lock" -> "E 300 e"; keeps VINs off displays
                 car["label"] = fn.rsplit(" ", 1)[0]
 
+        # A vehicle shows up as many entities; a lone suffix hit is another
+        # integration's coincidence, not a car.
+        cars = {slug: car for slug, car in cars.items()
+                if hits_per_slug.get(slug, 0) >= 3}
+
         if not cars:
             self._cache = cloudcar.empty_state(
                 self.name,
-                f"HA answered but no Mercedes entities matched "
-                f"({recognized} candidates) - entity mapping needs the live probe")
+                f"HA answered but no vehicle matched the entity map "
+                f"({recognized} suffix hits) - send me the entity list")
             self._cache_at = now
             return self._cache
 
