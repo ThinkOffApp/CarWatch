@@ -264,6 +264,8 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 .steerfill{position:absolute;top:0;bottom:0;width:0;background:#5ab0ff;opacity:.9;transition:left .12s linear,width .12s linear}
 .steerzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff;opacity:.35}
 .steer.stale .steerval,.steer.stale .steerfill{opacity:.3}
+.steer.replay .steerlab{color:#ffb020}
+.steer.replay .steerfill{background:#8a94a0}
 .nodev{margin:auto;text-align:center;color:var(--dim);font-size:14px}
 .mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 8px;margin:8px 0}
 .mi{text-align:center}
@@ -300,7 +302,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=zone>
   <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
   <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
-  <div class=steer id=steerwrap><div class=steerrow><span class=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
+  <div class=steer id=steerwrap><div class=steerrow><span class=steerlab id=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
@@ -413,7 +415,14 @@ async function pollSteer(){
   $('steerval').textContent=raw+(Math.abs(off)<2?' · centred':(off<0?' · left':' · right'));
   $('steerfill').style.width=Math.max(pct,1.5)+'%';
   $('steerfill').style.left=(frac<0? 50-pct : 50)+'%';
-  w.className='steer';
+  // /api/can/summary summarises the last RECORDING on disk, not the live bus.
+  // Say that on the dial. A frozen number that looks live is worse than no
+  // number: you turn the wheel, nothing moves, and you conclude the car is
+  // disconnected. petrus sat in the car doing exactly that. Swap the source
+  // and this label together the moment a live CAN endpoint exists.
+  const fromFile=!!(d&&d.file);
+  $('steerlab').textContent=fromFile?'steering wheel \u00b7 last recording, not live':'steering wheel';
+  w.className=fromFile?'steer replay':'steer';
  }catch(e){ $('steerval').textContent='-'; $('steerwrap').className='steer stale'; }
 }
 
