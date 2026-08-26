@@ -22,12 +22,64 @@ dashboard can say honestly how much of the cloud it understood.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
+import socket
 import time
+import urllib.parse
 import urllib.request
 
 from carwatch import cloudcar
+
+
+# Hostnames that name a private mesh/LAN rather than the public internet.
+_PRIVATE_SUFFIXES = (".local", ".internal", ".ts.net", ".lan", ".home.arpa")
+
+
+def _is_private_ha(url: str) -> bool:
+    """True only if the HA URL points at a private / loopback / Tailscale /
+    LAN target. The HA Bearer token is sent to this host, so it must never go
+    to an arbitrary public server: a same-LAN attacker who repointed the
+    provider (POST /api/cloudcar/ha-url) could otherwise capture the token and
+    own the whole Home Assistant remotely (issue #14). Private-only also
+    matches the Tailscale remote-access design (docs/remote-access.md);
+    public HA exposure is not a supported CarWatch path.
+
+    Fail-closed: anything we can't resolve to a private address is rejected."""
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+    except Exception:
+        return False
+    if not host:
+        return False
+    low = host.lower()
+    if low == "localhost" or low.endswith(_PRIVATE_SUFFIXES):
+        return True
+    # Resolve to IP(s); every resolved address must be private/loopback.
+    # Tailscale's 100.64.0.0/10 is CGNAT space -> ip_address().is_private is
+    # False for it, so allow it explicitly.
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        # A bare literal IP that didn't resolve via DNS still parses below.
+        try:
+            infos = [(0, 0, 0, "", (host, 0))]
+        except Exception:
+            return False
+    tailscale = ipaddress.ip_network("100.64.0.0/10")
+    saw = False
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return False
+        saw = True
+        if not (ip.is_private or ip.is_loopback or ip.is_link_local
+                or (ip.version == 4 and ip in tailscale)):
+            return False
+    return saw
 
 _CONFIG = "/etc/carwatch/config.json"
 _TOKEN_FILE = os.path.expanduser("~/.carwatch/ha-token")
@@ -60,12 +112,21 @@ def _ha_url() -> str:
         return _DEFAULT_URL
 
 
-def set_ha_url(url: str) -> None:
+def set_ha_url(url: str) -> dict:
     """Persist a runtime HA URL override (used by the /api/cloudcar/ha-url
-    endpoint). Empty string clears it, falling back to config/default."""
+    endpoint). Empty string clears it, falling back to config/default. A
+    non-empty URL must be a private/Tailscale/LAN target (issue #14) or it is
+    refused."""
+    url = url.strip()
+    if url and not _is_private_ha(url):
+        return {"ok": False, "error":
+                "refused: HA URL must be a private / Tailscale / LAN address. "
+                "Public HA exposure would leak the access token. See "
+                "docs/remote-access.md (use Tailscale)."}
     os.makedirs(os.path.dirname(_URL_OVERRIDE), exist_ok=True)
     with open(_URL_OVERRIDE, "w") as f:
-        f.write(url.strip())
+        f.write(url)
+    return {"ok": True, "ha_url": _ha_url()}
 
 
 def _token() -> str:
@@ -77,8 +138,13 @@ def _token() -> str:
 
 
 def _get(path: str, token: str, timeout: float = 8.0):
+    # Defense in depth: never send the Bearer token to a non-private target,
+    # even if a bad URL reached config/env some other way (issue #14).
+    base = _ha_url()
+    if not _is_private_ha(base):
+        raise ValueError("refusing to send HA token to a non-private host")
     req = urllib.request.Request(
-        _ha_url() + path,
+        base + path,
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:

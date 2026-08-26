@@ -1257,13 +1257,13 @@ class Handler(BaseHTTPRequestHandler):
                 from carwatch import mercedesme as _mm
                 body = json.loads(self.rfile.read(
                     int(self.headers.get("Content-Length", 0))) or b"{}")
-                _mm.set_ha_url(str(body.get("url", "")).strip())
-                from carwatch import cloudcar as _cc
-                prov = _cc.get()
-                if prov is not None:
-                    prov._cache_at = 0.0  # force a fresh fetch next poll
-                return self._send(200, json.dumps(
-                    {"ok": True, "ha_url": _mm._ha_url()}), "application/json")
+                res = _mm.set_ha_url(str(body.get("url", "")).strip())
+                if res.get("ok"):
+                    from carwatch import cloudcar as _cc
+                    prov = _cc.get()
+                    if prov is not None:
+                        prov._cache_at = 0.0  # force a fresh fetch next poll
+                return self._send(200, json.dumps(res), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
