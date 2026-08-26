@@ -378,8 +378,14 @@ def run() -> None:
                 _arm = os.path.expanduser(
                     os.environ.get("CARWATCH_STATE", "~/.carwatch")
                 ) + "/record-armed"
-                moving = (result["readings"].get("speed_kmh") or 0) > 5
-                if port and moving and os.path.exists(_arm):
+                # Fire an armed capture whether MOVING or STATIONARY. The old
+                # moving>5 gate made a parked capture impossible, but the
+                # steering-wheel angle can ONLY be isolated from a PARKED sweep
+                # (nothing else on the bus moves then), so petrus armed Record
+                # parked and it never fired. We are inside a successful read, so
+                # the adapter is awake and a parked ATMA works (claudeMB +
+                # claudemm, Aug 26).
+                if port and os.path.exists(_arm):
                     try:
                         with open(_arm) as _f:
                             _secs = min(300.0, float(_f.read().strip() or 120))
@@ -388,7 +394,7 @@ def run() -> None:
                     try:
                         os.remove(_arm)
                         post(f"Recording my internal chatter for {int(_secs)}s "
-                             "while driving (raw CAN broadcast, for decoding)...")
+                             "(raw CAN broadcast, for decoding)...")
                         from carwatch import deepscan as _ds
                         _relm = elm327.Elm327(port)
                         try:
