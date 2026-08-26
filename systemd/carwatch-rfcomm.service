@@ -1,0 +1,16 @@
+[Unit]
+Description=CarWatch: bind the Bluetooth OBD dongle to /dev/rfcomm0
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# OBD_MAC comes from /etc/carwatch/rfcomm.env (written by install.sh from
+# config.json's "obd_mac", or by scripts/pair-bt-obd.sh after pairing).
+EnvironmentFile=/etc/carwatch/rfcomm.env
+ExecStartPre=/bin/sh -c 'rfcomm release 0 2>/dev/null || true'
+ExecStart=/usr/bin/rfcomm bind 0 ${OBD_MAC} 1
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,7 @@
   "api_key": "PUT-THE-CAR-AGENTS-KEY-HERE-NEVER-COMMIT-IT",
   "room": "your-room-slug",
   "handle": "@gle",
+  "obd_mac": "AA:BB:CC:DD:EE:FF",
   "home_ssids": [
     "YourHomeWifi"
   ],

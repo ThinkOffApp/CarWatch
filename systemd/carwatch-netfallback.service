@@ -1,0 +1,10 @@
+[Unit]
+Description=CarWatch network fallback (own AP when no wifi is reachable)
+After=NetworkManager.service
+
+[Service]
+ExecStart=/home/petrus/CarWatch/scripts/net-fallback.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

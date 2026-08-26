@@ -129,12 +129,29 @@ cd CarWatch
 ./install.sh
 ```
 
-Then put your credentials in `/etc/carwatch/config.json` (never in the repo —
-see `config.example.json`) and:
+The installer sets up the SAME systemd stack the reference car runs — every
+unit in `systemd/`, rewritten to your username — and then tells you exactly
+which optional steps remain (the llama.cpp build and the 14.3 GB model are
+guided, never downloaded silently). Put your credentials in
+`/etc/carwatch/config.json` (never in the repo — see `config.example.json`),
+then start the core:
 
 ```bash
-sudo systemctl enable --now carwatch
+sudo systemctl enable --now carwatch-chat carwatch-obd carwatch-agent
 ```
+
+`carwatch-chat` is the phone dashboard on `:8088`, `carwatch-obd` the engine
+watcher, `carwatch-agent` the room agent. Enable the extras
+(`carwatch-brain`, `carwatch-listen`, `carwatch-rfcomm`, `carwatch-reach`,
+…) as their hardware and config become ready — the installer's closing
+message lists what each one needs.
+
+**Works on any car**: the OBD readings (RPM, coolant, speed, battery voltage
+and friends) are standard OBD-II over a ~15 € ELM327 Bluetooth adapter — no
+Mercedes required. Only the vendor-cloud glance section (doors, tires,
+charge from the manufacturer's app account) is brand-specific today
+(Mercedes via Home Assistant); other brands plug in behind the same
+provider interface ([carwatch/cloudcar.py](carwatch/cloudcar.py)).
 
 After that the car keeps itself current: `update.sh` pulls this repo's main,
 installs any new systemd units, and restarts services — on a timer, from the

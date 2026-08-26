@@ -1,0 +1,16 @@
+[Unit]
+Description=CarWatch room agent (the car's ears - answers mentions on its own)
+After=network-online.target carwatch-brain.service
+Wants=network-online.target
+
+[Service]
+User=petrus
+WorkingDirectory=/home/petrus/CarWatch
+Environment=CARWATCH_STATE=/home/petrus/.carwatch
+Environment=PYTHONPATH=/home/petrus/CarWatch
+ExecStart=/usr/bin/python3 -m carwatch.agent
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

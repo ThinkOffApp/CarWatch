@@ -1,0 +1,17 @@
+[Unit]
+Description=CarWatch brain (on-Pi LLM, stays resident)
+After=network.target
+
+[Service]
+User=petrus
+# Model choice is the owner's call - never swap it silently.
+# Build llama.cpp on the Pi first (see README "Install"); install.sh prints
+# the model download command if the .gguf is missing.
+ExecStart=/home/petrus/carwatch-stack/llama.cpp/build/bin/llama-server   -m /home/petrus/models/Qwen3.6-35B-A3B-UD-Q3_K_S.gguf   -t 4 -c 4096 --reasoning off --reasoning-budget 0   --host 127.0.0.1 --port 8081
+Restart=always
+RestartSec=10
+# 15GB model off the microSD: give it time to load before systemd judges it
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
