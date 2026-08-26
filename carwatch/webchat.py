@@ -1837,6 +1837,7 @@ class Handler(BaseHTTPRequestHandler):
         roams (SSID not in home_ssids, or wifi down), this is False and a token
         is required, so the cafe/hotel/hotspot protection is untouched. Fail
         closed on any error - unknown SSID or missing config means 'not home'."""
+        import time
         now = time.time()
         ts, val = cls._home_wifi_cache
         if now - ts < 30:
