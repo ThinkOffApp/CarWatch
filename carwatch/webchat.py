@@ -256,6 +256,14 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 .stat{background:#0e171e;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
 .stat .v{font:800 23px/1 var(--mono);color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.bad{color:var(--bad)}
 .stat .k{font-size:10.5px;color:var(--dim);margin-top:4px}
+.steer{margin:6px 0 10px}
+.steerrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.steerlab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
+.steerval{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.steerbar{position:relative;height:12px;border-radius:7px;background:#0d1217;border:1px solid #223}
+.steerfill{position:absolute;top:0;bottom:0;width:0;background:#5ab0ff;opacity:.9;transition:left .12s linear,width .12s linear}
+.steerzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff;opacity:.35}
+.steer.stale .steerval,.steer.stale .steerfill{opacity:.3}
 .nodev{margin:auto;text-align:center;color:var(--dim);font-size:14px}
 .mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 8px;margin:8px 0}
 .mi{text-align:center}
@@ -292,6 +300,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=zone>
   <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
   <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
+  <div class=steer id=steerwrap><div class=steerrow><span class=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
@@ -388,6 +397,26 @@ async function poll(){
   }else{$('spd').textContent='-';$('stats').innerHTML='<div class=nodev style="grid-column:1/-1">'+((d&&d.error)||'no engine data - ignition off?')+'</div>';}
  }catch(e){}
 }
+// Steering: petrus turns the wheel to see that the feed is alive, and a
+// number alone does not show that - the bar does. Source is /api/can/summary
+// (steering.last), CAN 0x0500 byte 0, 128 = straight (claudeMB's decode).
+// It is a RAW byte, not degrees, and it is labelled that way until calibrated.
+const STEER_CENTRE=128, STEER_SPAN=64;
+async function pollSteer(){
+ try{
+  const d=await(await F('/api/can/summary')).json();
+  const st=d&&d.steering, w=$('steerwrap');
+  if(!st||st.last==null){ $('steerval').textContent='-'; $('steerfill').style.width='0';
+    w.className='steer stale'; return; }
+  const raw=Number(st.last), off=raw-STEER_CENTRE;
+  const frac=Math.max(-1,Math.min(1,off/STEER_SPAN)), pct=Math.abs(frac)*50;
+  $('steerval').textContent=raw+(Math.abs(off)<2?' · centred':(off<0?' · left':' · right'));
+  $('steerfill').style.width=Math.max(pct,1.5)+'%';
+  $('steerfill').style.left=(frac<0? 50-pct : 50)+'%';
+  w.className='steer';
+ }catch(e){ $('steerval').textContent='-'; $('steerwrap').className='steer stale'; }
+}
+
 // --- Mercedes me cloud (one car at a time) ---
 let CARS={},SEL=null;
 function agg(o){if(!o)return null;if(o.all_closed!==undefined)return o.all_closed==='on'?['closed','ok']:['open','warn'];
@@ -431,6 +460,8 @@ async function pollCloud(){
 }
 poll();setInterval(poll,2000);
 pollCloud();setInterval(pollCloud,30000);
+// 1s so the bar visibly tracks the wheel while it is being turned.
+pollSteer();setInterval(pollSteer,1000);
 </script></body></html>"""
 
 # Playback of the last ATMA capture. Live ATMA wedges the ELM, so this page
