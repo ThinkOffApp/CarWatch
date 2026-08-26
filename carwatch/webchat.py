@@ -425,7 +425,15 @@ async function pollCloud(manual){
     el.innerHTML=Object.values(s.cars).map(c=>{
       const parts=[];
       const lk=c.lock&&String(c.lock.locked||'');
-      if(lk)parts.push(gi(lk==='locked'?'&#128274;':'&#128275;','lock',lk,lk==='locked'?'ok':'bad'));
+      if(lk){
+        // Mercedes lock states arrive as words OR numbers (GLE reports "2").
+        // Only a value we UNDERSTAND gets a color; unknowns render neutral
+        // raw rather than guessing red (honesty rule).
+        const locked=(lk==='locked'||lk==='1'||lk==='2');
+        const unlocked=(lk==='unlocked'||lk==='0');
+        parts.push(gi(locked?'&#128274;':(unlocked?'&#128275;':'&#10067;'),'lock',
+          locked?'locked':(unlocked?'unlocked':lk),locked?'ok':(unlocked?'bad':'')));
+      }
       const d=agg(c.doors,'open');if(d)parts.push(gi('&#128682;','doors',d[0],d[1]));
       const w=agg(c.windows,'open');if(w)parts.push(gi('&#129695;','windows',w[0],w[1]));
       if(c.sunroof)parts.push(gi('&#9728;&#65039;','sunroof',c.sunroof,c.sunroof==='closed'?'ok':'warn'));

@@ -213,10 +213,11 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                 car.setdefault("lock", {})[key] = val
             else:
                 car.setdefault(grp, {})[key] = val
-            fn = str(attrs.get("friendly_name", ""))
-            if fn and len(fn.split()) > 1 and car["label"] == slug:
-                # "E 300 e Lock" -> "E 300 e"; keeps VINs off displays
-                car["label"] = fn.rsplit(" ", 1)[0]
+            # Label from the slug itself: "isk_579" -> "ISK-579". Deriving it
+            # from a friendly name picked whichever entity came last ("ISK-579
+            # Charging" as a car title, live, Aug 26) - the slug is stable.
+            if car["label"] == slug:
+                car["label"] = slug.replace("_", "-").upper()
 
         # A vehicle shows up as many entities; a lone suffix hit is another
         # integration's coincidence, not a car.
