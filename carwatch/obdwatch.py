@@ -251,6 +251,12 @@ def run() -> None:
     was_present = ""
     was_up = False
     last_post_readings = ""
+    # "no engine data yet" posts ONCE per data-less epoch. Cleared only by a
+    # SUCCESSFUL reading post, never by adapter reconnects: with the ignition
+    # off the BT adapter power-flaps, each flap > RECONNECT_GAP_S reset the
+    # post-state and re-posted the same no-data line into petrus's phone
+    # (4+ times on Aug 27, twice within 34s). State, not reconnects, decides.
+    no_data_posted = False
     last_dtc_key = None        # last stored-DTC set, to post only on a CHANGE
     last_posted_batt = None    # hybrid-SoC at the last post; a high-water mark
                                # that follows charge UP silently and posts on a
@@ -329,6 +335,7 @@ def run() -> None:
                 if first or dtc_changed or batt_step:
                     post(f"Engine read (live from my OBD port): {line}")
                     last_post_readings = line
+                    no_data_posted = False
                     if batt is not None:
                         last_posted_batt = batt        # reset baseline on post
                 last_dtc_key = dtc_key
@@ -429,11 +436,12 @@ def run() -> None:
                 # faster read cadence does NOT re-spam the room (was 60s, which
                 # made the "LIVE 29s" badge grow to a minute between updates).
             else:
-                if not last_post_readings:
+                if not last_post_readings and not no_data_posted:
                     hint = (result.get("summary", "no data")
                             if port else failure_hint(result))
                     post(f"OBD: adapter/link present but no engine data yet - {hint}")
                     last_post_readings = "(failed)"
+                    no_data_posted = True
                 next_try = time.time() + RETRY_COOLDOWN_S
         # Live steering fills what was idle sleep time: sample the wheel angle
         # off the passive CAN broadcast (id 0x0500 byte 0) and cache it, so
