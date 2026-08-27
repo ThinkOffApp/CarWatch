@@ -239,7 +239,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 #status{margin-left:auto;font:11.5px var(--mono);color:var(--dim);text-align:right;line-height:1.3}
 #status b{color:var(--ok)}
 .main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
-@media (max-width:760px){.main{grid-template-columns:1fr;grid-auto-rows:1fr}}
+@media (max-width:760px){.main{grid-template-columns:1fr;grid-auto-rows:auto}}
 .zone{background:linear-gradient(160deg,#13232c,#0d161d);border:1px solid var(--line);
  border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .zone > h2{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);
@@ -281,7 +281,9 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  padding:12px;font-size:14px;font-weight:700;cursor:pointer}
 .cmds button:active{transform:scale(.98)} .cmds button:disabled{opacity:.6}
 .cmds button.ok{border-color:var(--ok);color:var(--ok)} .cmds button.bad{border-color:var(--bad);color:var(--bad)}
-.bar{flex:0 0 auto;display:flex;align-items:center;gap:6px;overflow-x:auto}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:6px}
+.ctlrow{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.ctlrow::-webkit-scrollbar{display:none}
 .ctl{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px;
  padding:8px 6px;background:#0e171e;border:1px solid var(--line);border-radius:12px;cursor:pointer;user-select:none}
 .ctl:active{transform:scale(.96)} .ctl.on{border-color:var(--ok)} .ctl.on .t{color:var(--ok)} .ctl.busy{border-color:var(--warn);opacity:.7}
@@ -306,6 +308,31 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 #vdetail{font-size:12px;color:#9ab;white-space:normal;max-height:52px;overflow:auto;margin-top:2px}
 .vbar{height:6px;background:#1d2733;border-radius:3px;margin-top:5px;overflow:hidden}
 .vbar span{display:block;height:100%;width:0;background:#1c6dd0;border-radius:3px;transition:width .8s}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10;display:none;align-items:center;justify-content:center;padding:20px}
+#modal.on{display:flex}
+.mbox{background:#101b24;border:1px solid var(--blue);border-radius:16px;padding:18px;max-width:420px;width:100%}
+.mbox p{white-space:pre-wrap;font-size:14px;margin-bottom:12px}
+.mbox input{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3039;background:#0e171e;color:var(--ink);font-size:14px;margin-bottom:12px;display:none}
+.mrow{display:flex;gap:8px;justify-content:flex-end}
+.mrow button{padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:#0e171e;color:var(--ink);font-weight:700;font-size:14px}
+.mrow button.pri{background:var(--blue);border-color:var(--blue);color:#03121b}
+/* Phone layout: the page SCROLLS (nothing is clipped off the bottom any
+   more), the voice strip stays stuck to the top, and the control bar is a
+   fixed dock so lock doors / Ask stay reachable with or without fullscreen.
+   --barh is measured by script because the dock height depends on wrapping. */
+@media (max-width:760px){
+ html,body{height:auto;min-height:100%}
+ body{overflow-y:auto;overflow-x:hidden;padding-bottom:calc(var(--barh,118px) + 12px)}
+ .main{flex:0 0 auto}
+ .zone{overflow:visible}
+ .cmds{margin-top:10px}
+ .voice{position:sticky;top:0;z-index:5;border:1px solid #1d2733;border-radius:12px}
+ .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;flex-direction:column;align-items:stretch;
+  background:rgba(9,16,22,.96);border-top:1px solid var(--line);
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+ .links{justify-content:space-between;flex-wrap:wrap;padding:2px 2px 0}
+ #out,#answer{bottom:calc(var(--barh,118px) + 12px)}
+}
 </style></head><body>
 <div class=top>
  <div class=brand>&#128663; CarWatch</div>
@@ -335,19 +362,22 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
   <div class=cmds id=cmds></div>
  </div>
 </div>
+<div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 <div class=bar>
- <div class=ctl data-act=read><span class=i>&#128202;</span><span class=t>Read</span></div>
- <div class=ctl data-act=record><span class=i>&#127908;</span><span class=t>Record</span></div>
- <div class=ctl id=listenCtl data-act=listen><span class=i>&#128066;</span><span class=t id=listenT>Listen</span></div>
- <div class=ctl data-act=speak><span class=i>&#128266;</span><span class=t>Speak</span></div>
- <div class=ctl data-act=brief><span class=i>&#128483;&#65039;</span><span class=t>Brief</span></div>
- <div class=ctl data-act=pair><span class=i>&#128279;</span><span class=t>Pair</span></div>
- <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
- <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
+ <div class=ctlrow>
+  <div class=ctl data-act=read><span class=i>&#128202;</span><span class=t>Read</span></div>
+  <div class=ctl data-act=record><span class=i>&#127908;</span><span class=t>Record</span></div>
+  <div class=ctl id=listenCtl data-act=listen><span class=i>&#128066;</span><span class=t id=listenT>Listen</span></div>
+  <div class=ctl data-act=speak><span class=i>&#128266;</span><span class=t>Speak</span></div>
+  <div class=ctl data-act=brief><span class=i>&#128483;&#65039;</span><span class=t>Brief</span></div>
+  <div class=ctl data-act=pair><span class=i>&#128279;</span><span class=t>Pair</span></div>
+  <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
+  <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
+ </div>
  <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
- <div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 </div>
 <div id=out></div><div id=answer></div>
+<div id=modal><div class=mbox><p id=mTxt></p><input id=mIn><div class=mrow><button id=mNo>Cancel</button><button id=mOk class=pri>OK</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
 const _tok=new URLSearchParams(location.search).get('t')||'';
@@ -378,10 +408,30 @@ const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000]
  pair:['/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)',70000],update:['/api/update','pull latest code + restart',90000]};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight;
  clearTimeout(show._t);show._t=setTimeout(()=>o.style.display='none',9000)}
-function toggleFull(){const el=document.documentElement;
- try{if(!document.fullscreenElement){(el.requestFullscreen||el.webkitRequestFullscreen).call(el);$('fullCtl').classList.add('on');}
-  else{(document.exitFullscreen||document.webkitExitFullscreen).call(document);$('fullCtl').classList.remove('on');}}catch(e){show('fullscreen not available in this browser - use Chrome menu > Add to Home screen for a tab-free app')}}
+// Native confirm()/prompt() made Chrome DROP fullscreen on every car command
+// (petrus 27 Aug: pressing lock doors threw the dash out of fullscreen), so
+// every dialog is in-page now and fullscreen re-arms itself on the next tap.
+function cwModal(text,withInput){return new Promise(res=>{const m=$('modal'),i=$('mIn');
+ $('mTxt').textContent=text;i.style.display=withInput?'block':'none';i.value='';m.classList.add('on');
+ if(withInput)setTimeout(()=>i.focus(),60);
+ const done=v=>{m.classList.remove('on');$('mOk').onclick=$('mNo').onclick=i.onkeydown=null;res(v)};
+ $('mOk').onclick=()=>done(withInput?(i.value.trim()||null):true);
+ $('mNo').onclick=()=>done(withInput?null:false);
+ i.onkeydown=e=>{if(e.key==='Enter')$('mOk').click()}})}
+const cwConfirm=t=>cwModal(t,false),cwPrompt=t=>cwModal(t,true);
+let wantFull=false;try{wantFull=localStorage.getItem('cwFull')==='1'}catch(e){}
+function enterFull(){try{const el=document.documentElement;const p=(el.requestFullscreen||el.webkitRequestFullscreen).call(el);if(p&&p.catch)p.catch(()=>{})}
+ catch(e){show('fullscreen not available in this browser - use Chrome menu > Add to Home screen for a tab-free app')}}
+function setFullWant(v){wantFull=v;try{localStorage.setItem('cwFull',v?'1':'0')}catch(e){}}
+function toggleFull(){if(!document.fullscreenElement){setFullWant(true);enterFull()}
+ else{setFullWant(false);try{(document.exitFullscreen||document.webkitExitFullscreen).call(document)}catch(e){}}}
 document.addEventListener('fullscreenchange',()=>$('fullCtl').classList.toggle('on',!!document.fullscreenElement));
+// fullscreen STICKS: if it was on and got dropped (back gesture, Update
+// reload), any tap is a user gesture we can use to re-enter it.
+document.addEventListener('click',()=>{if(wantFull&&!document.fullscreenElement)enterFull()},true);
+function sizeBar(){const b=document.querySelector('.bar');if(!b)return;
+ document.documentElement.style.setProperty('--barh',(getComputedStyle(b).position==='fixed'?b.offsetHeight:0)+'px')}
+window.addEventListener('resize',sizeBar);sizeBar();
 async function doAct(act){
  if(act==='full')return toggleFull();
  if(act==='listen')return toggleListen();
@@ -395,7 +445,7 @@ async function toggleListen(){const on=!$('listenCtl').classList.contains('on');
  try{const r=await F('/api/listen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({on})},25000);
   const d=await r.json();setListen(d.listening)}catch(e){show('listen toggle failed: '+e)}}
 function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').textContent=on?'Listening':'Listen'}
-function speak(){const t=prompt('Text for the car to speak:');if(!t)return;show('speaking ...');
+async function speak(){const t=await cwPrompt('Text for the car to speak:');if(!t)return;show('speaking ...');
  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
  .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed'))).catch(e=>show('speak failed: '+e))}
 async function ask(){const t=$('q').value.trim();if(!t)return;const a=$('answer');
@@ -410,7 +460,7 @@ const _tl=$('trustlink');if(_tl)_tl.addEventListener('click',async(e)=>{e.preven
  let w={};try{w=await(await F('/api/whoami')).json()}catch(_){}
  const ssid=w.ssid||'this network';
  if(w.on_home_wifi){show("'"+ssid+"' is already trusted - phones on it open the dash without a token.");return;}
- if(!confirm("Trust '"+ssid+"' as home?\\nEvery device on this wifi will open the dash WITHOUT a token. Do this only on your own home wifi or your own phone hotspot, never on cafe/public wifi."))return;
+ if(!await cwConfirm("Trust '"+ssid+"' as home?\\nEvery device on this wifi will open the dash WITHOUT a token. Do this only on your own home wifi or your own phone hotspot, never on cafe/public wifi."))return;
  try{const r=await F('/api/home-wifi/trust',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})},10000);
   const d=await r.json();show(d.ok?("Trusted '"+d.ssid+"'. Every phone on this wifi now opens the dash without a token."):("failed: "+(d.error||'')));}catch(e){show('trust failed: '+e)}});
 // --- OBD (the car the Pi rides in) ---
@@ -508,7 +558,7 @@ function renderCar(){const c=CARS[SEL];const g=$('merc');if(!c){g.innerHTML='';r
  $('cmds').innerHTML='<button data-cmd=lock>&#128274; lock doors</button><button data-cmd=windows_close>&#129695; close windows</button>';
  $('cmds').querySelectorAll('[data-cmd]').forEach(b=>b.addEventListener('click',()=>carCmd(b)))}
 async function carCmd(btn){const action=btn.getAttribute('data-cmd');const label=btn.textContent;
- if(!confirm(label.trim()+' - '+(CARS[SEL].label||SEL)+'?\\nThis sends a real command to the car.'))return;
+ if(!await cwConfirm(label.trim()+' - '+(CARS[SEL].label||SEL)+'?\\nThis sends a real command to the car.'))return;
  const sibs=Array.from(btn.parentNode.children);sibs.forEach(b=>b.disabled=true);btn.className='';btn.textContent='sending…';
  try{const r=await F('/api/cloudcar/cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({car:SEL,action})},20000);
   const d=await r.json();if(d.ok){btn.className='ok';btn.textContent='sent ✓';[4000,12000,30000].forEach(ms=>setTimeout(pollCloud,ms));}
