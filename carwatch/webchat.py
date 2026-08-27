@@ -295,11 +295,30 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  padding:10px 12px;font:12px var(--mono);color:#9fe8bd;white-space:pre-wrap;max-height:40vh;overflow:auto;display:none;z-index:5}
 #answer{position:fixed;left:8px;right:8px;bottom:8px;background:#181c22;border:1px solid var(--blue);border-radius:12px;
  padding:10px 12px;font-size:13px;max-height:40vh;overflow:auto;display:none;z-index:5}
+.voice{display:flex;gap:12px;align-items:center;padding:8px 10px;background:#0d141c;border-bottom:1px solid #1d2733}
+#speakBtn{font-size:17px;padding:13px 20px;border-radius:14px;border:none;font-weight:700;color:#fff;
+ background:#1c6dd0;min-width:132px;flex:none}
+#speakBtn.armed{background:#0d8a4d;animation:vpulse 1.2s infinite}
+#speakBtn.busy{background:#8a5a0d}
+@keyframes vpulse{50%{opacity:.55}}
+.vstate{flex:1;min-width:0}
+#vstatus{font-size:14px;font-weight:600}
+#vdetail{font-size:12px;color:#9ab;white-space:normal;max-height:52px;overflow:auto;margin-top:2px}
+.vbar{height:6px;background:#1d2733;border-radius:3px;margin-top:5px;overflow:hidden}
+.vbar span{display:block;height:100%;width:0;background:#1c6dd0;border-radius:3px;transition:width .8s}
 </style></head><body>
 <div class=top>
  <div class=brand>&#128663; CarWatch</div>
  <div class=tabs id=tabs></div>
  <div id=status>live</div>
+</div>
+<div class=voice>
+ <button id=speakBtn>&#127908; Speak</button>
+ <div class=vstate>
+  <div id=vstatus>voice ready</div>
+  <div class=vbar id=vbarwrap style="display:none"><span id=vbar></span></div>
+  <div id=vdetail></div>
+ </div>
 </div>
 <div class=main>
  <div class=zone>
@@ -333,6 +352,26 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 const $=id=>document.getElementById(id);
 const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
+// --- voice loop state strip (petrus 27 Aug: show whether the car HEARD) ---
+function renderVoice(s){
+ const b=$('speakBtn'),st=$('vstatus'),d=$('vdetail'),bw=$('vbarwrap');
+ let bar=false; b.className='';
+ if(s.state==='armed'){b.textContent='Listening..';b.className='armed';st.textContent='say your question now';d.textContent='';}
+ else if(s.state==='listening'){b.textContent='Listening..';b.className='armed';st.textContent='hearing you…';d.textContent='';}
+ else if(s.state==='heard'){b.textContent='Heard ✓';b.className='busy';st.textContent='heard: “'+(s.text||'')+'”';d.textContent='';}
+ else if(s.state==='answering'){b.textContent='Answering..';b.className='busy';
+  st.textContent='answering… '+(s.elapsed_s!=null?s.elapsed_s+'s':'')+(s.expect_s?' of ~'+Math.round(s.expect_s)+'s typical':'');
+  bar=true;$('vbar').style.width=Math.round((s.progress||0)*100)+'%';
+  d.textContent=s.question?('Q: '+s.question):'';}
+ else if(s.state==='speaking'){b.textContent='Speaking..';b.className='busy';st.textContent='playing the answer';d.textContent=s.answer||'';}
+ else{b.textContent='🎤 Speak';
+  st.textContent=(s.listener_up===false)?'voice listener is OFF':(s.note||'voice ready – tap Speak or say the wake word');
+  d.textContent=s.answer||'';}
+ bw.style.display=bar?'block':'none';
+}
+async function pollVoice(){try{const r=await fetch(_q('/api/voice/state'));renderVoice(await r.json());}catch(e){}}
+$('speakBtn').onclick=async()=>{try{await fetch(_q('/api/voice/start'),{method:'POST'});pollVoice();}catch(e){}};
+setInterval(pollVoice,1500);pollVoice();
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
 const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000],read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
@@ -843,9 +882,23 @@ def answer(question: str, use_manual: bool = True) -> str:
         }).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=900) as r:
-        msg = json.load(r)["choices"][0]["message"]
-    return (msg.get("content") or "").strip() or "[the model spent its budget thinking and did not answer]"
+    # One question in the brain at a time (voicestate.brain_lock): a second
+    # ask waits instead of both crawling (27 Aug double-fire).
+    from carwatch import voicestate as _vs
+    with _vs.brain_lock():
+        _t0 = _time.time()
+        _vs.set_state("answering", question=question, started_at=_t0,
+                      expect_s=_vs.expect_s())
+        try:
+            with urllib.request.urlopen(req, timeout=900) as r:
+                msg = json.load(r)["choices"][0]["message"]
+            _vs.record_answer_s(_time.time() - _t0)
+        except Exception:
+            _vs.set_state("idle", note="answer failed - brain unreachable?")
+            raise
+    _out = (msg.get("content") or "").strip()
+    _vs.set_state("idle", answer=_out[:400])
+    return _out or "[the model spent its budget thinking and did not answer]"
 
 
 # PWA manifest + icon so the dash installs as a tab-free app on the phone
@@ -2282,6 +2335,36 @@ class Handler(BaseHTTPRequestHandler):
                 out = "(no play attempted since boot)"
             return self._send(200, json.dumps({"ok": True, "log": out}),
                               "application/json")
+        elif self.path.split("?", 1)[0] == "/api/voice/state":
+            # Live voice-loop state for the dash strip (petrus, 27 Aug: "I
+            # don't have any indication if it heard what I said at all").
+            # Adds derived progress so the client stays dumb: elapsed vs the
+            # median of recent answer times, plus streamed token count when
+            # the room-agent path is generating.
+            from carwatch import voicestate as _vs
+            import time as _t
+            st = _vs.get_state()
+            if st.get("state") == "answering":
+                el = _t.time() - float(st.get("started_at") or st.get("ts") or _t.time())
+                st["elapsed_s"] = round(el)
+                exp = float(st.get("expect_s") or 90)
+                frac = el / exp if exp > 0 else 0
+                if st.get("tokens") and st.get("max_tokens"):
+                    frac = max(frac, st["tokens"] / st["max_tokens"])
+                st["progress"] = round(min(frac, 0.97), 2)
+            elif st.get("state") == "armed" and not _vs.armed():
+                # The arm window lapsed with no speech - reflect it.
+                st = {"state": "idle", "ts": st.get("ts"),
+                      "note": "speak window ended (heard nothing)"}
+            try:
+                import subprocess as _sp
+                st["listener_up"] = _sp.run(
+                    ["pgrep", "-f", "carwatch[.]listen"],
+                    capture_output=True, timeout=3).returncode == 0
+            except Exception:
+                st["listener_up"] = None
+            return self._send(200, json.dumps({"ok": True, **st}),
+                              "application/json")
         elif self.path.split("?", 1)[0] == "/api/can/raw":
             # Serve the latest raw CAN capture so the byte-hunt can run at
             # home base over the mesh instead of "decode happens at home"
@@ -2605,6 +2688,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps(
                     {"ok": True, "bytes": n, "status": "playing in background",
                      "check": "/api/play/status"}), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/voice/start":
+            # The dash Speak button: arm the mic so the NEXT utterance is
+            # addressed to the car without a wake word. The listener owns
+            # the mic and consumes the arm file; this only signals.
+            from carwatch import voicestate as _vs
+            try:
+                _vs.arm()
+                return self._send(200, json.dumps(
+                    {"ok": True, "state": "armed",
+                     "window_s": _vs.ARM_WINDOW_S}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")

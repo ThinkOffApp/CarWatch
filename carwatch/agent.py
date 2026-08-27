@@ -254,27 +254,50 @@ def _think(question: str, asker: str) -> str:
     # carwatch-agent) and so faster surfaces (webchat, voice in the car)
     # can speak while the model is still generating, instead of everyone
     # staring at silence for two minutes.
+    #
+    # brain_lock: exactly ONE question in the model at a time. Two parallel
+    # generations each crawl at half of 3.5 tok/s (27 Aug double-fire);
+    # a second ask now WAITS instead. The streamed token count goes into
+    # voice-state so the dash progress bar shows real generation progress.
+    from carwatch import voicestate
     parts: list[str] = []
     line_buf = ""
-    with urllib.request.urlopen(req, timeout=1200) as resp:
-        for raw in resp:
-            raw = raw.decode("utf-8", "ignore").strip()
-            if not raw.startswith("data: ") or raw == "data: [DONE]":
-                continue
-            try:
-                delta = json.loads(raw[6:])["choices"][0]["delta"].get("content") or ""
-            except Exception:
-                continue
-            if not delta:
-                continue
-            parts.append(delta)
-            line_buf += delta
-            if len(line_buf) >= 60 or "\n" in delta:
-                print(f"  ... {line_buf.strip()}", flush=True)
-                line_buf = ""
+    with voicestate.brain_lock():
+        t0 = time.time()
+        voicestate.set_state("answering", question=question, started_at=t0,
+                             tokens=0, max_tokens=MAX_TOKENS,
+                             expect_s=voicestate.expect_s())
+        last_prog = t0
+        with urllib.request.urlopen(req, timeout=1200) as resp:
+            for raw in resp:
+                raw = raw.decode("utf-8", "ignore").strip()
+                if not raw.startswith("data: ") or raw == "data: [DONE]":
+                    continue
+                try:
+                    delta = json.loads(raw[6:])["choices"][0]["delta"].get("content") or ""
+                except Exception:
+                    continue
+                if not delta:
+                    continue
+                parts.append(delta)
+                line_buf += delta
+                if time.time() - last_prog > 2:
+                    voicestate.set_state("answering", question=question,
+                                         started_at=t0, tokens=len(parts),
+                                         max_tokens=MAX_TOKENS,
+                                         expect_s=voicestate.expect_s())
+                    last_prog = time.time()
+                if len(line_buf) >= 60 or "\n" in delta:
+                    print(f"  ... {line_buf.strip()}", flush=True)
+                    line_buf = ""
+        voicestate.record_answer_s(time.time() - t0)
     if line_buf.strip():
         print(f"  ... {line_buf.strip()}", flush=True)
-    return "".join(parts).strip()
+    answer = "".join(parts).strip()
+    # Hand the dash the finished text; the voice path overrides this with
+    # "speaking" right after, other surfaces are simply done.
+    voicestate.set_state("idle", answer=answer[:400])
+    return answer
 
 
 def _model_ready() -> bool:

@@ -27,6 +27,7 @@ import time
 import wave
 
 from carwatch.voice import transcribe, ask_gle
+from carwatch import voicestate
 
 RATE = 16000
 CHANNELS = 1
@@ -99,12 +100,22 @@ def handle_utterance(frames: bytes, on_text):
     result = None
     if text:
         wake = _wake_words()
-        if wake and not _addressed(text, wake):
-            # Not addressed to the car: log a stub locally, never post.
+        # The Speak button arms the mic: an armed utterance is for the car
+        # even without a wake word (petrus's dash flow, 27 Aug).
+        by_button = voicestate.armed()
+        if by_button:
+            voicestate.consume_arm()
+        if not by_button and wake and not _addressed(text, wake):
+            # Not addressed to the car: log a stub locally, never post -
+            # but SHOW it on the dash, so "it heard you, you just did not
+            # address it" is visible instead of indistinguishable from deaf.
             print(f"(ignored, no wake word): {text[:60]}", flush=True)
+            voicestate.set_state("idle",
+                                 note=f'heard (not addressed to me): "{text[:80]}"')
             lights.signal("idle")
             return None
         print(f"HEARD: {text}", flush=True)
+        voicestate.set_state("heard", text=text)
         result = on_text(text)
     else:
         # Duration + level make the journal diagnosable: a 0.8s spike at rms
@@ -113,6 +124,8 @@ def handle_utterance(frames: bytes, on_text):
         secs = len(frames) / (RATE * 2)
         print(f"(captured sound but no clear speech: {secs:.1f}s, rms {rms(frames):.0f})",
               flush=True)
+        voicestate.set_state("idle",
+                             note=f"caught sound but no clear speech ({secs:.1f}s)")
     lights.signal("idle")       # back to calm when done
     return result
 
@@ -262,6 +275,7 @@ def listen(threshold: float, on_text) -> None:
             if level >= threshold:
                 if not in_speech:
                     in_speech = True
+                    voicestate.set_state("listening")
                     speech = []
                     quiet = 0
                 speech.append(chunk)
@@ -290,7 +304,9 @@ def listen(threshold: float, on_text) -> None:
                                     proc.wait(timeout=5)
                                 except Exception:
                                     pass
+                            voicestate.set_state("speaking", answer=reply)
                             _speak(reply)
+                            voicestate.set_state("idle", answer=reply)
                             proc = _open_mic()
                             opened_at = time.time()
                     speech = []
