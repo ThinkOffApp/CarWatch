@@ -116,6 +116,18 @@ def default_state(
         facts["cameras"] = "three dashcam cameras exist but are NOT streaming to you"
         cannot.append("anything you would see out of your cameras")
 
-    facts["manual"] = ("your 489-page owner manual is indexed on board and can be searched, "
-                       "but only counts as read when a lookup is actually run")
+    # Page count is MEASURED from the index, never hardcoded: a hardcoded 489
+    # here coexisted with a hardcoded 745 in the README, and the car repeated
+    # whichever it was told. (manual.page_count caches by index mtime - cheap.)
+    try:
+        from carwatch.manual import page_count
+        _pages = page_count()
+    except Exception:
+        _pages = 0
+    if _pages:
+        facts["manual"] = (f"your {_pages}-page owner manual is indexed on board and can be "
+                           "searched, but only counts as read when a lookup is actually run")
+    else:
+        facts["manual"] = "no owner manual is indexed on board right now"
+        cannot.append("anything that would need the owner manual")
     return facts, cannot

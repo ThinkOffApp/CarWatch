@@ -160,10 +160,11 @@ def manual_status() -> str | None:
         with open(INDEX_PATH) as f:
             idx = _json.load(f)
         n = len(idx.get("chunks", []))
+        pages = max((c.get("page", 0) for c in idx.get("chunks", [])), default=0)
         src = idx.get("source", "owner's manual")
         if n:
-            return (f"{src} indexed on your disk, {n} sections; relevant "
-                    "excerpts are searched and given to you per question")
+            return (f"{src} indexed on your disk, {pages} pages in {n} sections; "
+                    "relevant excerpts are searched and given to you per question")
     except Exception:
         pass
     return None

@@ -112,6 +112,17 @@ def _load_index():
     return _cache
 
 
+def page_count() -> int:
+    """Highest page number in the index - the MEASURED size of what is
+    actually searchable. Exists because two different hardcoded page counts
+    (745 in the README, 489 in grounding) circulated at once and neither came
+    from looking; facts about what the car has must come from looking."""
+    cache = _load_index()
+    if not cache:
+        return 0
+    return max((c.get("page", 0) for c in cache["index"].get("chunks", [])), default=0)
+
+
 # Bridging what people SAY to what the manual PRINTS.
 #
 # petrus asked @gle about the "230V power source"; the search returned
