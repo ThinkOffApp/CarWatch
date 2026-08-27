@@ -150,7 +150,11 @@ def _usb_audio_device(kind: str):
         return None
     for line in out.splitlines():
         m = re.match(r"card (\d+): [^\[]*\[([^\]]*)\], device (\d+):", line)
-        if m and re.search(r"jabra|speak|usb", m.group(2), re.IGNORECASE):
+        # Match anywhere in the line, not just the card's bracket name: the
+        # SF-558 enumerates as 'card 2: SF558 [SF-558], device 0: USB Audio'
+        # - its 'USB' lives in the device half, and the card-name-only match
+        # made every mic consumer skip a mic that arecord plainly listed.
+        if m and re.search(r"jabra|speak|usb", line, re.IGNORECASE):
             return f"plughw:{m.group(1)},{m.group(3)}"
     return None
 
