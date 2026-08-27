@@ -183,7 +183,10 @@ case "$CMD" in
         # here by mistake it blocked forever waiting for an incoming stream,
         # which is exactly the silent hang measured 27 Aug. Hard timeout so
         # playback can never wedge silently again.
-        if timeout 30 aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>&1; then
+        # Timeout scales with the audio: 30s truncated a 44s answer mid-
+        # sentence (rc=124, 27 Aug). PCM s16/44.1k stereo = 176400 bytes/s.
+        DUR=$(( $(stat -c%s "$WAV" 2>/dev/null || echo 0) / 176400 + 15 ))
+        if timeout "$DUR" aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>&1; then
             echo "played via aplay ($(basename "$WAV"))"
         else
             echo "playback failed (aplay rc=$?) - car connected? source on vadelma?"
