@@ -738,9 +738,59 @@ def manual_context(question: str) -> str:
 
 def answer(question: str, use_manual: bool = True) -> str:
     from carwatch.grounding import build_system_prompt, default_state
+    from carwatch.selfstate import live_facts
 
     ctx = manual_context(question) if use_manual else ""
-    facts, cannot = default_state()  # nothing sensed yet; engine state unknown
+    # LIVE state, not default_state()'s "nothing sensed": petrus asked about
+    # a warning light while the dash showed live OBD, and the answer claimed
+    # "the OBD link is not up" plus "cannot sense tyre pressures" while the
+    # cloud cache held his exact kPa per tyre. The brain answers from its
+    # fact sheet - feed it the same caches the dash reads (petrus, 27 Aug,
+    # from the road: "this part of the answer wasn't correct").
+    facts, cannot = default_state()
+    try:
+        facts.update(live_facts())
+    except Exception:
+        pass
+    import time as _time
+    try:
+        with open(os.path.expanduser("~/.carwatch/obd-all.json")) as _f:
+            _c = json.load(_f)
+        _age = _time.time() - float(_c.get("ts", 0))
+        _vals = {k: v for k, v in (_c.get("readings") or {}).items()
+                 if isinstance(v, (int, float))}
+        if _vals and _age < 300:
+            facts["live OBD readings (the ONLY engine numbers you may quote)"] = (
+                ", ".join(f"{k}={v}" for k, v in sorted(_vals.items()))
+                + f" (read {int(_age)}s ago)")
+            _dtcs = _c.get("dtcs")
+            if isinstance(_dtcs, list):
+                facts["fault codes"] = (", ".join(map(str, _dtcs)) if _dtcs
+                                        else "none stored")
+            cannot = [c for c in cannot if "OBD" not in c and "engine" not in c]
+        elif _vals:
+            facts["last OBD readings"] = (
+                f"{int(_age)}s old (say the age if you quote them): "
+                + ", ".join(f"{k}={v}" for k, v in sorted(_vals.items())))
+    except Exception:
+        pass
+    try:
+        with open(os.path.expanduser("~/.carwatch/cloud-last.json")) as _f:
+            _cl = json.load(_f)
+        _clage = int(_time.time() - float(_cl.get("fetched_at", 0) or 0))
+        _bits = []
+        for _slug, _car in (_cl.get("cars") or {}).items():
+            if not isinstance(_car, dict):
+                continue
+            _t = _car.get("tires_kpa")
+            if _t:
+                _bits.append(f"{_car.get('label', _slug)}: tyres {_t} kPa")
+        if _bits:
+            facts["tyre pressures (manufacturer cloud)"] = (
+                "; ".join(_bits) + f" (cloud data, {_clage}s old)")
+            cannot = [c for c in cannot if "tyre" not in c.lower()]
+    except Exception:
+        pass
     system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
 
     req = urllib.request.Request(
