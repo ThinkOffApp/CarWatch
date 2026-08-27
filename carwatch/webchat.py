@@ -330,6 +330,8 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;flex-direction:column;align-items:stretch;
   background:rgba(9,16,22,.96);border-top:1px solid var(--line);
   padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+ /* .ask's 150px flex-basis is VERTICAL inside the column dock - pin it */
+ .bar .ask{flex:0 0 auto}
  .links{justify-content:space-between;flex-wrap:wrap;padding:2px 2px 0}
  #out,#answer{bottom:calc(var(--barh,118px) + 12px)}
 }
