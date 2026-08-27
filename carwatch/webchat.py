@@ -2242,6 +2242,24 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {"ok": False, "error": str(e), "latest": None, "car": None}
             self.__class__._room_latest_cache = (now, payload)
             return self._send(200, json.dumps(payload), "application/json")
+        elif self.path.split("?", 1)[0] == "/api/audio-bench/file":
+            # Serve the last bench recording (see POST /api/audio-bench).
+            try:
+                with open("/tmp/carwatch-bench.wav", "rb") as fh:
+                    blob = fh.read(16 * 1024 * 1024)
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/wav")
+                self.send_header("Content-Length", str(len(blob)))
+                self.end_headers()
+                self.wfile.write(blob)
+                return
+            except FileNotFoundError:
+                return self._send(404, json.dumps(
+                    {"ok": False, "error": "no bench recording yet"}),
+                    "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         elif self.path.split("?", 1)[0] == "/api/play/status":
             # Result of the last /api/play - so background playback is never
             # invisible (the async-blindness lesson, 27 Aug).
@@ -2506,6 +2524,29 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-1500:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/audio-bench":
+            # Bench recorder (petrus's method, 27 Aug: "don't you record what
+            # it says and listen to it?"): record N seconds from the Pi's own
+            # mic to /tmp/carwatch-bench.wav, so a play fired in parallel gets
+            # HEARD, fetched and gap-analyzed at home base. The listener must
+            # be toggled OFF first - it is the mic's sole owner.
+            import subprocess as _sp
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                secs = min(180, max(2, int(body.get("seconds", 20))))
+                log = open("/tmp/carwatch-bench.log", "w")
+                _sp.Popen(
+                    ["arecord", "-q", "-d", str(secs), "-f", "S16_LE",
+                     "-r", "16000", "-c", "1", "/tmp/carwatch-bench.wav"],
+                    stdout=log, stderr=log)
+                return self._send(200, json.dumps(
+                    {"ok": True, "recording_s": secs,
+                     "fetch": "/api/audio-bench/file when done"}),
+                    "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")

@@ -42,7 +42,7 @@ speak() {
         sleep 2
         # aplay = send direction; bluealsa-aplay was the receive tool and
         # blocked forever (27 Aug). Timeout guards the wedge.
-        timeout 30 aplay -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \
+        timeout 30 aplay --buffer-time=1000000 -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \
         echo "playback failed - is the car connected? (car-speak.sh pair)"
     else
         bluealsa-aplay < "$wav" 2>/dev/null || echo "no A2DP sink - pair the car first"
@@ -186,7 +186,14 @@ case "$CMD" in
         # Timeout scales with the audio: 30s truncated a 44s answer mid-
         # sentence (rc=124, 27 Aug). PCM s16/44.1k stereo = 176400 bytes/s.
         DUR=$(( $(stat -c%s "$WAV" 2>/dev/null || echo 0) / 176400 + 15 ))
-        if timeout "$DUR" aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>&1; then
+        # PAUSE the model server during playback (petrus's diagnosis, 27 Aug:
+        # "the pi is just overloaded... pause other processes"): inference
+        # bursts starve the SBC encoder and punch 1-2s holes in long speech.
+        # SIGSTOP is safe - a spoken answer always plays AFTER its generation
+        # finished, and the trap guarantees SIGCONT on every exit path.
+        pkill -STOP -f "llama[-]server" 2>/dev/null || true
+        trap 'pkill -CONT -f "llama[-]server" 2>/dev/null || true' EXIT
+        if timeout "$DUR" aplay --buffer-time=1000000 -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>&1; then
             echo "played via aplay ($(basename "$WAV"))"
         else
             echo "playback failed (aplay rc=$?) - car connected? source on vadelma?"
