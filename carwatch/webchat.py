@@ -2456,20 +2456,20 @@ class Handler(BaseHTTPRequestHandler):
                 text = ". ".join(parts) + "."
                 if age > 180:
                     text = f"From my last read {int(age // 60)} minutes ago: " + text
-                r = _sp.run(
+                # Speak in the BACKGROUND and return the text at once. Measured
+                # (Aug 27, parked): the synchronous path timed out - piper
+                # fights the resident 35B model for RAM and a BT connect
+                # attempt blocks on a page-timeout when MBUX sleeps. The tap
+                # must feel instant on camera; the audio follows when ready.
+                _sp.Popen(
                     ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
                      "say", text[:300]],
-                    capture_output=True, text=True, timeout=120,
+                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
                     cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "HOME": _os.path.expanduser("~")})
-                out = (r.stdout + r.stderr).strip()[-800:]
-                spoke = r.returncode == 0 and "failed" not in out.lower() \
-                    and "missing" not in out.lower()
                 return self._send(200, json.dumps(
-                    {"ok": True, "text": text, "spoke": spoke,
-                     "output": text + ("\n(spoken through the car)" if spoke
-                                       else "\n(car audio not connected - text only)"),
-                     "speak_output": out}),
+                    {"ok": True, "text": text, "spoke": "pending",
+                     "output": text + "\n(speaking through the car when audio is up)"}),
                     "application/json")
             except FileNotFoundError:
                 return self._send(200, json.dumps(
