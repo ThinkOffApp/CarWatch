@@ -40,8 +40,9 @@ speak() {
         # Bond can exist while A2DP is down (measured: Paired yes, Connected no).
         bluetoothctl connect "$mac" >/dev/null 2>&1 || true
         sleep 2
-        bluealsa-aplay --profile-a2dp "$mac" < "$wav" 2>/dev/null || \
-        aplay -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \
+        # aplay = send direction; bluealsa-aplay was the receive tool and
+        # blocked forever (27 Aug). Timeout guards the wedge.
+        timeout 30 aplay -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \
         echo "playback failed - is the car connected? (car-speak.sh pair)"
     else
         bluealsa-aplay < "$wav" 2>/dev/null || echo "no A2DP sink - pair the car first"
@@ -177,12 +178,15 @@ case "$CMD" in
         if [ -z "$MAC" ]; then echo "no car bonded"; exit 1; fi
         bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
         sleep 1
-        if bluealsa-aplay --profile-a2dp "$MAC" < "$WAV" 2>/dev/null; then
-            echo "played via bluealsa-aplay"
-        elif aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>/dev/null; then
-            echo "played via aplay"
+        # aplay INTO the bluealsa PCM is the send direction. bluealsa-aplay is
+        # the RECEIVE tool (captures from a phone to local speakers) - used
+        # here by mistake it blocked forever waiting for an incoming stream,
+        # which is exactly the silent hang measured 27 Aug. Hard timeout so
+        # playback can never wedge silently again.
+        if timeout 30 aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>&1; then
+            echo "played via aplay ($(basename "$WAV"))"
         else
-            echo "playback failed - is the car connected?"
+            echo "playback failed (aplay rc=$?) - car connected? source on vadelma?"
             exit 1
         fi
         ;;
