@@ -2567,13 +2567,30 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(self.rfile.read(
                     int(self.headers.get("Content-Length", 0))) or b"{}")
                 text = str(body.get("text", "")).strip()[:300]
+                # {"probe": true} reports the audio chain (piper/bluealsa/bond/
+                # connected) without synthesizing - remote diagnosis from home.
+                if body.get("probe"):
+                    r = _sp.run(
+                        ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
+                         "status"],
+                        capture_output=True, text=True, timeout=25,
+                        cwd=_os.path.expanduser("~/CarWatch"),
+                        env={**_os.environ, "HOME": _os.path.expanduser("~")})
+                    return self._send(200, json.dumps(
+                        {"ok": r.returncode == 0,
+                         "output": (r.stdout + r.stderr).strip()[-2000:]}),
+                        "application/json")
                 if not text:
                     return self._send(400, json.dumps(
                         {"ok": False, "error": "no text"}), "application/json")
+                # 30 s was too short lived: piper synthesis on a loaded Pi plus
+                # the bluetoothctl connect retry exceeded it (measured Aug 27,
+                # the handler killed the script mid-speak). 120 s covers the
+                # worst honest case; the UI already treats this as async-ish.
                 r = _sp.run(
                     ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
                      "say", text],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True, text=True, timeout=120,
                     cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "HOME": _os.path.expanduser("~")})
                 out = (r.stdout + r.stderr).strip()[-2000:]

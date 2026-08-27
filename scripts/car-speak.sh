@@ -165,6 +165,32 @@ case "$CMD" in
     test)
         speak "Hello Petrus. This is your car speaking through its own speakers. The audio path works."
         ;;
+    status)
+        # Report the audio chain WITHOUT synthesizing or touching the bond, so
+        # it is fast and safe to call remotely (the /api/car-speak probe).
+        # Exists since Aug 27 - its presence also proves which code the Pi runs.
+        [ -x "$PIPER" ] && echo "piper: present" || echo "piper: MISSING ($PIPER)"
+        [ -f "$VOICE" ] && echo "voice: present" || echo "voice: MISSING ($VOICE)"
+        BIN="$(command -v bluealsa || command -v bluealsad || true)"
+        if [ -z "$BIN" ]; then echo "bluealsa: NOT INSTALLED"
+        else
+            PID="$(pgrep -x "$(basename "$BIN")" | head -1 || true)"
+            if [ -n "$PID" ] && tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null | grep -q "a2dp-source"; then
+                echo "bluealsa: running with a2dp-source"
+            elif [ -n "$PID" ]; then echo "bluealsa: running WITHOUT a2dp-source (car connect would fail)"
+            else echo "bluealsa: installed, not running"; fi
+        fi
+        MAC="$(car_mac)"
+        if [ -z "$MAC" ]; then echo "car: never paired (no remembered MAC, no MBUX/Mercedes bond)"
+        else
+            echo "car MAC: $MAC"
+            INFO="$(bluetoothctl info "$MAC" 2>/dev/null || true)"
+            echo "$INFO" | grep -E "Name|Paired|Connected" | sed 's/^[[:space:]]*/  /'
+            echo "$INFO" | grep -q "Connected: yes" \
+                && echo "audio: READY (car connected as A2DP sink)" \
+                || echo "audio: car not connected right now (bond kept; connects when the car BT is on)"
+        fi
+        ;;
     *)
-        echo "usage: $0 {pair | pairmac <MAC> | say \"text\" | test}"; exit 1 ;;
+        echo "usage: $0 {pair | pairmac <MAC> | say \"text\" | test | status}"; exit 1 ;;
 esac
