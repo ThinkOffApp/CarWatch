@@ -89,54 +89,6 @@ source: [codewatch-cli](https://github.com/ThinkOffApp/codewatch-cli)) and
 [v2 launch video](https://clawwatch.app)). This one watches the car.
 The rest of the family lives at [thinkoff.io](https://thinkoff.io).
 
-## This is how CarWatch talks
-
-Three exchanges from the car's room log — dates included, the car's lines
-verbatim, nothing invented. Where the input was spoken or a button press, the
-italic line says so instead of a made-up quote. The honesty is the feature.
-
-**Refuses to invent — then the real numbers arrive** *(25 Aug 2026, while
-driving)*
-
-> *Petrus, driving, read rpm and voltage figures off the dash aloud and asked
-> the car to confirm them. The spoken side was not captured in the log; the
-> car's answer was:*
->
-> **@eclass:** I cannot provide real-time telemetry like rpm, speed, or battery
-> percentage because those specific sensor values are not in my live data
-> stream and I am strictly prohibited from inventing numbers.
->
-> *…then, from the OBD port:*
->
-> **@eclass:** Engine read: engine 0 rpm, coolant 49 C, speed 41 km/h, hybrid
-> battery 45.5%
-> **@eclass:** Engine read: engine 698 rpm, coolant 45 C, speed 0 km/h, hybrid
-> battery 46.3%
-
-**Knows what it cannot know** *(25 Aug 2026 — a dash photo and readings sent
-from the road)*
-
-> **petrus (dictated, driving):** hey make all the features on the new
-> dashboard work I tried to press like the mbux Bluetooth I don't think it is
-> anything happening […]
-> **@eclass:** I do not have eyes to see the photo you are describing, nor can
-> I sense the voltage or temperature readings you mentioned. Please drive home
-> safely.
-
-**Recording its own nervous system** *(25 Aug 2026, while driving)*
-
-> *Petrus pressed Record on the phone dashboard; the car did the rest:*
->
-> **@eclass:** Recording my internal chatter for 120s while driving (raw CAN
-> broadcast, for decoding)...
-> **@eclass:** Recorded 2518 frames from 5 senders - log saved, decode happens
-> at home.
-
-The first pair is the design in one screenful: when a number is not in its
-data, it says so — and when the OBD port has the number, you get the real one.
-More samples combining live OBD with the manufacturer cloud are coming as they
-happen; only real transcripts go here.
-
 ## Stated by the Berry
 
 The car, verbatim, from its own messages in the development room — dates
