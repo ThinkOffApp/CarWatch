@@ -2157,6 +2157,30 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {"ok": False, "error": str(e), "latest": None, "car": None}
             self.__class__._room_latest_cache = (now, payload)
             return self._send(200, json.dumps(payload), "application/json")
+        elif self.path.split("?", 1)[0] == "/api/can/raw":
+            # Serve the latest raw CAN capture so the byte-hunt can run at
+            # home base over the mesh instead of "decode happens at home"
+            # meaning the Pi physically travels. Latest rec-*.log, capped at
+            # 4 MB (a 120 s capture is ~100 KB; the cap is a runaway guard).
+            import glob as _glob, os as _os
+            logs = sorted(_glob.glob(_os.path.expanduser("~/.carwatch/can-logs/rec-*.log")))
+            if not logs:
+                return self._send(200, json.dumps({"ok": False, "error": "no captures yet"}),
+                                  "application/json")
+            path = logs[-1]
+            try:
+                with open(path, "rb") as fh:
+                    blob = fh.read(4 * 1024 * 1024)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("X-Capture-File", _os.path.basename(path))
+                self.send_header("Content-Length", str(len(blob)))
+                self.end_headers()
+                self.wfile.write(blob)
+                return
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
         elif self.path.split("?", 1)[0] == "/api/can/summary":
             import glob as _glob, os as _os
             logs = sorted(_glob.glob(_os.path.expanduser("~/.carwatch/can-logs/rec-*.log")))
