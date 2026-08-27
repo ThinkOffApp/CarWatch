@@ -91,26 +91,17 @@ The rest of the family lives at [thinkoff.io](https://thinkoff.io).
 
 ## This is how CarWatch talks
 
-Three exchanges, verbatim from the car's room log — dates included, nothing
-invented or edited. The honesty is the feature.
-
-**Who it is** *(19 Aug 2026 — the first real Q&A ever)*
-
-> **petrus:** Hi @gle! You're going for a drive today :)
-> **petrus:** Or are you @eclass now?
-> **@eclass:** I am @eclass, your 2021 Mercedes E 300e plug-in hybrid. I have
-> never changed my name and I do not intend to start.
-
-**Spoken in the cabin** *(20 Aug 2026 — voice, through the car's own mic path)*
-
-> **petrus (voice):** Hello, do you hear me in GLE or E-class? Or what's your
-> name this day? Can you answer me something?
-> **@eclass:** I hear you perfectly, Petrus. I am an E-class, specifically the
-> E 300e, not the GLE. You can call me eclass.
+Three exchanges from the car's room log — dates included, the car's lines
+verbatim, nothing invented. Where the input was spoken or a button press, the
+italic line says so instead of a made-up quote. The honesty is the feature.
 
 **Refuses to invent — then the real numbers arrive** *(25 Aug 2026, while
 driving)*
 
+> *Petrus, driving, read rpm and voltage figures off the dash aloud and asked
+> the car to confirm them. The spoken side was not captured in the log; the
+> car's answer was:*
+>
 > **@eclass:** I cannot provide real-time telemetry like rpm, speed, or battery
 > percentage because those specific sensor values are not in my live data
 > stream and I am strictly prohibited from inventing numbers.
@@ -122,7 +113,26 @@ driving)*
 > **@eclass:** Engine read: engine 698 rpm, coolant 45 C, speed 0 km/h, hybrid
 > battery 46.3%
 
-That last pair is the design in one screenful: when a number is not in its
+**Knows what it cannot know** *(25 Aug 2026 — a dash photo and readings sent
+from the road)*
+
+> **petrus (dictated, driving):** hey make all the features on the new
+> dashboard work I tried to press like the mbux Bluetooth I don't think it is
+> anything happening […]
+> **@eclass:** I do not have eyes to see the photo you are describing, nor can
+> I sense the voltage or temperature readings you mentioned. Please drive home
+> safely.
+
+**Recording its own nervous system** *(25 Aug 2026, while driving)*
+
+> *Petrus pressed Record on the phone dashboard; the car did the rest:*
+>
+> **@eclass:** Recording my internal chatter for 120s while driving (raw CAN
+> broadcast, for decoding)...
+> **@eclass:** Recorded 2518 frames from 5 senders - log saved, decode happens
+> at home.
+
+The first pair is the design in one screenful: when a number is not in its
 data, it says so — and when the OBD port has the number, you get the real one.
 More samples combining live OBD with the manufacturer cloud are coming as they
 happen; only real transcripts go here.
