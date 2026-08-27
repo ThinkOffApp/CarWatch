@@ -321,6 +321,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=ctl data-act=record><span class=i>&#127908;</span><span class=t>Record</span></div>
  <div class=ctl id=listenCtl data-act=listen><span class=i>&#128066;</span><span class=t id=listenT>Listen</span></div>
  <div class=ctl data-act=speak><span class=i>&#128266;</span><span class=t>Speak</span></div>
+ <div class=ctl data-act=brief><span class=i>&#128483;&#65039;</span><span class=t>Brief</span></div>
  <div class=ctl data-act=pair><span class=i>&#128279;</span><span class=t>Pair</span></div>
  <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
  <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
@@ -334,7 +335,7 @@ const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
-const ACT={read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
+const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000],read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
  pair:['/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)',70000],update:['/api/update','pull latest code + restart',90000]};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight;
  clearTimeout(show._t);show._t=setTimeout(()=>o.style.display='none',9000)}
@@ -2411,6 +2412,69 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-1500:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/car-brief":
+            # One-tap spoken car brief for the dash: compose a SHORT sentence
+            # from the LIVE obd cache (values MBUX does not show - exact 12V,
+            # coolant, precise hybrid %, fault codes) and speak it through the
+            # car's A2DP audio. Self-contained on purpose (QCD-demo lesson,
+            # Aug 6): the on-camera trigger is petrus's tap, never an agent's
+            # attention loop. Only real cached values are spoken; a missing
+            # value is skipped, never invented.
+            import subprocess as _sp, os as _os, time as _time
+            try:
+                cache = _os.path.expanduser("~/.carwatch/obd-all.json")
+                with open(cache) as f:
+                    d = json.load(f)
+                age = _time.time() - d.get("ts", 0)
+                g = d.get("groups", {})
+                def val(group, key):
+                    try:
+                        return g[group][key]["value"]
+                    except Exception:
+                        return None
+                parts = []
+                v = val("electrical", "module_voltage")
+                if v is not None:
+                    parts.append(f"Your 12 volt system reads {v} volts")
+                v = val("temperatures", "coolant_c")
+                if v is not None:
+                    parts.append(f"coolant is at {round(v)} degrees")
+                v = val("hybrid", "hybrid_battery_pct") or val("electrical", "hybrid_battery_pct")
+                if v is not None:
+                    parts.append(f"hybrid battery at {round(v)} percent")
+                codes = d.get("dtcs")   # top-level list, elm327.run_all() shape
+                if isinstance(codes, list):
+                    parts.append("no fault codes stored" if not codes
+                                 else f"{len(codes)} fault codes stored: {', '.join(str(c) for c in codes[:3])}")
+                if not parts:
+                    return self._send(200, json.dumps(
+                        {"ok": False, "error": "no live values in the cache to speak"}),
+                        "application/json")
+                text = ". ".join(parts) + "."
+                if age > 180:
+                    text = f"From my last read {int(age // 60)} minutes ago: " + text
+                r = _sp.run(
+                    ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
+                     "say", text[:300]],
+                    capture_output=True, text=True, timeout=120,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "HOME": _os.path.expanduser("~")})
+                out = (r.stdout + r.stderr).strip()[-800:]
+                spoke = r.returncode == 0 and "failed" not in out.lower() \
+                    and "missing" not in out.lower()
+                return self._send(200, json.dumps(
+                    {"ok": True, "text": text, "spoke": spoke,
+                     "output": text + ("\n(spoken through the car)" if spoke
+                                       else "\n(car audio not connected - text only)"),
+                     "speak_output": out}),
+                    "application/json")
+            except FileNotFoundError:
+                return self._send(200, json.dumps(
+                    {"ok": False, "error": "no OBD cache yet - car not read"}),
+                    "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
