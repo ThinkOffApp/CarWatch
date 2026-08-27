@@ -326,7 +326,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
  <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
  <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
- <div class=links><a href=# id=trustlink>trust wifi</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
+ <div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 </div>
 <div id=out></div><div id=answer></div>
 <script>
@@ -739,6 +739,7 @@ def manual_context(question: str) -> str:
 def answer(question: str, use_manual: bool = True) -> str:
     from carwatch.grounding import build_system_prompt, default_state
     from carwatch.selfstate import live_facts
+    from carwatch.agent import car_identity
 
     ctx = manual_context(question) if use_manual else ""
     # LIVE state, not default_state()'s "nothing sensed": petrus asked about
@@ -780,10 +781,18 @@ def answer(question: str, use_manual: bool = True) -> str:
         _clage = int(_time.time() - float(_cl.get("fetched_at", 0) or 0))
         _bits = []
         _fuel_bits = []
+        try:
+            _own_plate = (car_identity().get("plate") or "").upper()
+        except Exception:
+            _own_plate = ""
         for _slug, _car in (_cl.get("cars") or {}).items():
             if not isinstance(_car, dict):
                 continue
             _label = _car.get("label", _slug)
+            if _own_plate and _own_plate in str(_label).upper():
+                _label = f"{_label} (THIS car - you; answer about it unless asked otherwise)"
+            elif _own_plate:
+                _label = f"{_label} (the household's OTHER car, not you)"
             _t = _car.get("tires_kpa")
             if _t:
                 _bits.append(f"{_label}: tyres {_t} kPa")
@@ -810,7 +819,13 @@ def answer(question: str, use_manual: bool = True) -> str:
             cannot = [c for c in cannot if "fuel" not in c.lower()]
     except Exception:
         pass
-    system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
+    try:
+        _me = car_identity()
+        system = build_system_prompt(facts, cannot, manual_excerpts=ctx,
+                                     identity=_me.get("identity"),
+                                     brain=_me.get("brain"))
+    except Exception:
+        system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
 
     req = urllib.request.Request(
         MODEL_URL,
@@ -832,7 +847,7 @@ def answer(question: str, use_manual: bool = True) -> str:
 # hides browser chrome AND the status bar once launched from the home-screen
 # icon; the in-page Full button uses the Fullscreen API for the same effect
 # without installing.
-MANIFEST_JSON = '{"name": "CarWatch", "short_name": "CarWatch", "description": "Live OBD + Mercedes me dashboard for the car", "start_url": "/dash", "scope": "/", "display": "fullscreen", "background_color": "#091016", "theme_color": "#091016", "icons": [{"src": "/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any"}, {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}, {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}'
+MANIFEST_JSON = '{"name": "CarWatch", "short_name": "CarWatch", "description": "Live OBD + Mercedes me dashboard for the car", "start_url": "/", "scope": "/", "display": "fullscreen", "background_color": "#091016", "theme_color": "#091016", "icons": [{"src": "/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any"}, {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}, {"src": "/icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}'
 
 DASH_ICON_PNG_B64 = (
     'iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAQAElEQVR4nOz9C7Ru2XUWBn7r3PerqlR1b1WpqiSXLcmWLBNw29jQsbGwDX4G2zwaSEMaevRI'

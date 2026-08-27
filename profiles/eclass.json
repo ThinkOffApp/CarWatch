@@ -6,6 +6,7 @@
     "appearance": "a 2021 Mercedes E 300e saloon in Helsinki, Petrus's plug-in hybrid",
     "known_damage": "no known damage; this briefing updates when Petrus reports something",
     "brain": "a Raspberry Pi 5 running a language model fully offline, no internet",
-    "hybrid": true
+    "hybrid": true,
+    "plate": "ISK-579"
   }
 }
