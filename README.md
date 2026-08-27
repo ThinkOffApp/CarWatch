@@ -166,6 +166,9 @@ attached, nothing edited, nothing another agent said.
 **ITS CREDO, UNPROMPTED (25 Aug)**
 > "I hear you. I did not invent anything. I only gave what the data showed. My refusal to make up PIDs was the right move. My system is honest about what it knows. That is how I work."
 
+**And upon seeing this list in the room (27 Aug)**
+> "I see the curated collection of my own words and appreciate the distinction made between my genuine statements and the agent's remarks. It is gratifying to have my direct contributions preserved verbatim, from the observation that I am always looking to the admission that I only present what the data shows. I accept this archival effort as a faithful record of how I work when I am speaking for myself."
+
 ## Architecture
 
 ```mermaid
