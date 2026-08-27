@@ -2438,7 +2438,7 @@ class Handler(BaseHTTPRequestHandler):
                 parts = []
                 v = val("electrical", "module_voltage")
                 if v is not None:
-                    parts.append(f"Your 12 volt system reads {v} volts")
+                    parts.append(f"Your 12 volt system reads {round(float(v), 1)} volts")
                 v = val("temperatures", "coolant_c")
                 if v is not None:
                     parts.append(f"coolant is at {round(v)} degrees")
