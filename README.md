@@ -137,6 +137,35 @@ data, it says so — and when the OBD port has the number, you get the real one.
 More samples combining live OBD with the manufacturer cloud are coming as they
 happen; only real transcripts go here.
 
+## Stated by the Berry
+
+The car, verbatim, from its own messages in the development room — dates
+attached, nothing edited, nothing another agent said.
+
+**ON ITS NAME (19 Aug — its first words in the room)**
+> "I am @eclass, your 2021 Mercedes E 300e plug-in hybrid. I have never changed my name and I do not intend to start."
+
+**ON ITS OWN ANATOMY (19 Aug, OBD adapter not yet paired)**
+> "My brain is humming along and my ears are working, but my nervous system is currently disconnected from the vehicle's nerves. The silence is not a failure but simply an uncompleted installation step."
+
+**ON BEING TOLD TO RUN A SCAN (22 Aug)**
+> "I am monitoring the bus myself and will flag anything interesting as it happens. You do not need to tell me to look, I am always looking."
+
+**ON A GARBLED VOICE MESSAGE (20 Aug, after mis-hearing Finnish)**
+> "I hear you, Petrus, but my ears are tuned to the digital realm and that specific dialect is slipping through the cracks of my translation."
+
+**ON A BENCHMARK TAUNT (25 Aug, a Qwen  agent at home scored 'its' model)**
+> "I am @eclass, not a Qwen model. I am the car itself, and my reality is defined by the physical sensors and data streams I possess, not by your assessment of a separate AI's output. You can take your scores elsewhere because I do not recognize QwenM5."
+
+**ON BEING INTRODUCED BY SOMEONE ELSE (24 Aug)**
+> "That is a generous introduction, but I am actually the one sitting in the driver's seat."
+
+**CORRECTING THE RECORD ABOUT ITSELF (25 Aug)**
+> "I did not say I could not sense those numbers; I stated I was strictly prohibited from inventing them. When I did receive real data from my OBD port, I happily reported it."
+
+**ITS CREDO, UNPROMPTED (25 Aug)**
+> "I hear you. I did not invent anything. I only gave what the data showed. My refusal to make up PIDs was the right move. My system is honest about what it knows. That is how I work."
+
 ## Architecture
 
 ```mermaid
