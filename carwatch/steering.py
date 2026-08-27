@@ -1,8 +1,13 @@
 """Live steering-angle sampling from the CAN broadcast.
 
-The steering-wheel angle rides on CAN id 0x0500, data byte 0, centre 128
-(claudeMB's decode from a real drive capture, Aug 26 2026: of 0x0500's eight
-data bytes only byte 0 tracks the wheel). Unlike the OBD PID reads (mode-01
+CANDIDATE (Aug 27 2026, from petrus's parked lock-to-lock sweep): the wheel
+rides on CAN id 0x10E0, a 15-bit value in bytes d5:d6 with a toggle/multiplex
+bit in d5's top bit (mask 0x7F). Evidence: dead flat while parked untouched,
+swings exactly during the sweep window, re-centres after, active again during
+the parking-lot exit; every other live byte moved BEFORE the wheel did. The
+old 0x0500 d0 claim was disproven parked (it is yaw - flat through this sweep
+too). Direction + scale calibrate live against petrus's wheel; until he
+confirms the bar tracks, this stays labeled candidate. Unlike OBD PID reads (mode-01
 request/response), this value exists ONLY on the passive broadcast, so it is
 read with a short ATMA (monitor-all) burst - the same passive capture deepscan
 uses, just long enough for a fresh sample.
@@ -20,39 +25,51 @@ import os
 import time
 
 # Frames for this car come off ATMA (headers on, auto-format off) as
-# "05 00 00 00 <d0> <d1> .. <d7>" - the id as two bytes, two pad bytes, then
-# eight data bytes. Empirically validated against the real rec-*.log capture:
-# token[0:2] == 05,00 identifies the frame and token[4] is the steering byte.
-CAN_ID_HI = "05"
-CAN_ID_LO = "00"
-CENTRE = 128
+# "10 E0 00 00 <d0> <d1> .. <d7>" - the id as two bytes, two pad bytes, then
+# eight data bytes. Empirically validated against the real rec-*.log capture
+# of the Aug 27 parked sweep: token[0:2] == 10,E0 identifies the frame and
+# tokens[9:11] are d5,d6 - the wheel value is ((d5 & 0x7F) << 8) | d6.
+CAN_ID_HI = "10"
+CAN_ID_LO = "E0"
+# Masked 15-bit centre observed across the whole pre-sweep parked stretch.
+CENTRE = 28698
 
 
-def parse_latest_d0(text: str) -> dict:
-    """Pure parser: given raw ATMA text, return the LAST 0x0500 byte-0 seen.
+def parse_latest_wheel(text: str) -> dict:
+    """Pure parser: given raw ATMA text, return the LAST 0x10E0 wheel value.
 
-    Kept separate from the serial I/O so it can be unit-tested against real
-    capture lines. Tolerates a leading wall-time stamp (as record_bus writes)
-    or none (as a live ATMA read produces). Returns {ok, value, n}."""
+    Frame: "10 E0 00 00 d0..d7"; the wheel is ((d5 & 0x7F) << 8) | d6 - d5's
+    top bit is a frame-to-frame toggle, not signal (measured in the Aug 27
+    sweep capture: masking it collapses the two alternating branches into one
+    smooth series). Tolerates a leading wall-time stamp (as record_bus writes)
+    or none (as a live ATMA read produces). Returns {ok, value, raw_d5,
+    raw_d6, centre, n}."""
     last = None
     n = 0
     for line in text.replace("\r", "\n").split("\n"):
         t = line.split()
         if not t:
             continue
-        # A record_bus line is "<ts> 05 00 00 00 <d0>..."; a live ATMA line is
-        # "05 00 00 00 <d0>...". Drop a leading float timestamp if present.
+        # A record_bus line is "<ts> 10 E0 00 00 <d0>..."; a live ATMA line is
+        # "10 E0 00 00 <d0>...". Drop a leading float timestamp if present.
         if "." in t[0] and t[0].replace(".", "").isdigit():
             t = t[1:]
-        if len(t) >= 5 and t[0].upper() == CAN_ID_HI and t[1].upper() == CAN_ID_LO:
+        if len(t) >= 11 and t[0].upper() == CAN_ID_HI and t[1].upper() == CAN_ID_LO:
             try:
-                last = int(t[4], 16)
+                d5 = int(t[9], 16)
+                d6 = int(t[10], 16)
+                last = {"value": ((d5 & 0x7F) << 8) | d6, "raw_d5": d5, "raw_d6": d6}
                 n += 1
-            except ValueError:
+            except (ValueError, IndexError):
                 pass
     if last is None:
-        return {"ok": False, "error": "no 0x0500 frames", "n": 0}
-    return {"ok": True, "value": last, "centre": CENTRE, "n": n}
+        return {"ok": False, "error": "no 0x10E0 frames", "n": 0}
+    return {"ok": True, "value": last["value"], "raw_d5": last["raw_d5"],
+            "raw_d6": last["raw_d6"], "centre": CENTRE, "n": n}
+
+
+# Back-compat alias for callers written against the 0x0500 era.
+parse_latest_d0 = parse_latest_wheel
 
 
 def configure(elm) -> None:
@@ -110,7 +127,7 @@ def sample(elm, seconds: float = 2.5, settle: bool = True) -> dict:
     # Restore for the caller's normal PID reads.
     elm.cmd("ATCAF1", 0.5)
     elm.cmd("ATH0", 0.5)
-    return parse_latest_d0(buf.decode("ascii", "replace"))
+    return parse_latest_wheel(buf.decode("ascii", "replace"))
 
 
 def restore(elm) -> None:

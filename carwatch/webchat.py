@@ -305,7 +305,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  <div class=zone>
   <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
   <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
-  <div class=steer id=steerwrap style="display:none"><div class=steerrow><span class=steerlab id=steerlab>steering wheel</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
+  <div class=steer id=steerwrap><div class=steerrow><span class=steerlab id=steerlab>wheel (candidate)</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
@@ -403,17 +403,17 @@ async function poll(){
  }catch(e){}
 }
 // Steering: petrus turns the wheel to see that the feed is alive, and a
-// number alone does not show that - the bar does. Source is /api/can/summary
-// (steering.last), CAN 0x0500 byte 0, 128 = straight (claudeMB's decode).
-// It is a RAW byte, not degrees, and it is labelled that way until calibrated.
-const STEER_CENTRE=128, STEER_SPAN=64;
-// HIDDEN 2026-08-26. This read CAN 0x0500 byte 0, believed to be the steering
-// angle. It is not. With petrus holding full left lock for 75 seconds the value
-// stayed 127-128 across 29 samples - a spread of one. The 125-131 wobble I had
-// earlier called "his turns" was noise around centre, and the 83-137 range seen
-// during a drive is something that correlates with driving, not with steering
-// input. The dial stays hidden until a signal is shown to track the wheel:
-// hold full lock, watch for a large excursion, and only then label it.
+// number alone does not show that - the bar does. Source is /api/steering
+// (the obdwatch sampler cache): CAN 0x10E0, ((d5&0x7F)<<8)|d6, centre from
+// the writer. It is a RAW value, not degrees, labelled that way until
+// calibrated against the wheel.
+const STEER_CENTRE=28698, STEER_SPAN=150;
+// UNHIDDEN 2026-08-27 as a CANDIDATE: petrus's parked lock-to-lock sweep
+// isolated 0x10E0 d5:d6 (flat before the wheel moved, swings exactly in the
+// sweep window, re-centres after). The 0x0500 byte this dial once read was
+// disproven parked (yaw) and stays out. The label says candidate until
+// petrus watches this bar track his wheel live - that test is the point of
+// unhiding it.
 async function pollSteer(){
  try{
   const d=await(await F('/api/steering')).json();
@@ -435,9 +435,9 @@ async function pollSteer(){
   // sampler stopped, and that must look different rather than sit there
   // pretending. Centre comes from the writer so one decode serves both ends.
   const age=(d&&d.age_s!=null)?d.age_s:null, stale=(age===null||age>15);
-  $('steerlab').textContent = age===null ? 'steering wheel'
-    : (stale ? 'steering wheel \u00b7 ' + Math.round(age) + 's old'
-             : 'steering wheel \u00b7 live');
+  $('steerlab').textContent = age===null ? 'wheel (candidate)'
+    : (stale ? 'wheel (candidate) \u00b7 ' + Math.round(age) + 's old'
+             : 'wheel (candidate) \u00b7 live');
   w.className = stale ? 'steer replay' : 'steer';
  }catch(e){ $('steerval').textContent='-'; $('steerwrap').className='steer stale'; }
 }
