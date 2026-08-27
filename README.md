@@ -18,7 +18,7 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
 - 🧠 **Qwen3.6-35B-A3B** (Unsloth UD-Q3_K_S dynamic quant, 14.3 GB) at
   **3.5 tok/s generation / 25+ tok/s prompt**, 65 °C sustained, no cloud, no
   internet, no subscription.
-- 📖 Answers from the car's **own 745-page owner's manual** with page
+- 📖 Answers from the car's **own 489-page owner's manual** with page
   citations (lexical RAG, ships on the SD card) — and *refuses* to answer
   what the manual doesn't say.
 - 🔬 **Grounded self-knowledge**: temperature, throttling, fan, memory, disk,
@@ -144,7 +144,7 @@ flowchart LR
     subgraph car [In the car - Raspberry Pi 5]
         MIC[USB mic] --> LISTEN[carwatch-listen<br/>VAD + whisper.cpp]
         LISTEN --> BRAIN[llama.cpp server<br/>Qwen3.6-35B-A3B]
-        MANUAL[(Owner manual RAG<br/>745 pages, on SD)] --> BRAIN
+        MANUAL[(Owner manual RAG<br/>489 pages, on SD)] --> BRAIN
         STATE[selfstate<br/>temp / fan / net / model] --> BRAIN
         OBD[carwatch-obd<br/>watches the OBD cable] --> AGENT
         BRAIN --> AGENT[carwatch-agent<br/>the @gle room agent]
