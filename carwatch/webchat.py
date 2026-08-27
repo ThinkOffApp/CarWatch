@@ -779,16 +779,35 @@ def answer(question: str, use_manual: bool = True) -> str:
             _cl = json.load(_f)
         _clage = int(_time.time() - float(_cl.get("fetched_at", 0) or 0))
         _bits = []
+        _fuel_bits = []
         for _slug, _car in (_cl.get("cars") or {}).items():
             if not isinstance(_car, dict):
                 continue
+            _label = _car.get("label", _slug)
             _t = _car.get("tires_kpa")
             if _t:
-                _bits.append(f"{_car.get('label', _slug)}: tyres {_t} kPa")
+                _bits.append(f"{_label}: tyres {_t} kPa")
+            _fu = _car.get("fuel") or {}
+            _ev = _car.get("ev") or {}
+            _fparts = []
+            if _fu.get("level_pct") is not None:
+                _fparts.append(f"fuel {_fu['level_pct']}%"
+                               + (f" ({_fu['range_km']} km range)"
+                                  if _fu.get("range_km") is not None else ""))
+            if _ev.get("soc_pct") is not None:
+                _fparts.append(f"hybrid battery {_ev['soc_pct']}%"
+                               + (f" ({_ev['range_km']} km electric)"
+                                  if _ev.get("range_km") is not None else ""))
+            if _fparts:
+                _fuel_bits.append(f"{_label}: " + ", ".join(_fparts))
         if _bits:
             facts["tyre pressures (manufacturer cloud)"] = (
                 "; ".join(_bits) + f" (cloud data, {_clage}s old)")
             cannot = [c for c in cannot if "tyre" not in c.lower()]
+        if _fuel_bits:
+            facts["fuel and charge (manufacturer cloud)"] = (
+                "; ".join(_fuel_bits) + f" (cloud data, {_clage}s old)")
+            cannot = [c for c in cannot if "fuel" not in c.lower()]
     except Exception:
         pass
     system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
