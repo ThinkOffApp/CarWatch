@@ -2254,9 +2254,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(blob)
                 return
             except FileNotFoundError:
+                try:
+                    with open("/tmp/carwatch-bench.log") as lf:
+                        _log = lf.read()[-400:]
+                except Exception:
+                    _log = "(no bench log)"
                 return self._send(404, json.dumps(
-                    {"ok": False, "error": "no bench recording yet"}),
-                    "application/json")
+                    {"ok": False, "error": "no bench recording yet",
+                     "bench_log": _log}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")
@@ -2538,11 +2543,19 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(self.rfile.read(
                     int(self.headers.get("Content-Length", 0))) or b"{}")
                 secs = min(180, max(2, int(body.get("seconds", 20))))
+                # Locate the USB mic the same way the listener does - a bare
+                # arecord has no default capture device on this Pi (first
+                # bench run produced nothing, silently).
+                from carwatch.listen import _usb_audio_device
+                dev = _usb_audio_device("capture")
+                cmd = ["arecord", "-q", "-d", str(secs), "-f", "S16_LE",
+                       "-r", "16000", "-c", "1"]
+                if dev:
+                    cmd += ["-D", dev]
+                cmd.append("/tmp/carwatch-bench.wav")
                 log = open("/tmp/carwatch-bench.log", "w")
-                _sp.Popen(
-                    ["arecord", "-q", "-d", str(secs), "-f", "S16_LE",
-                     "-r", "16000", "-c", "1", "/tmp/carwatch-bench.wav"],
-                    stdout=log, stderr=log)
+                log.write(f"cmd: {' '.join(cmd)}\n"); log.flush()
+                _sp.Popen(cmd, stdout=log, stderr=log)
                 return self._send(200, json.dumps(
                     {"ok": True, "recording_s": secs,
                      "fetch": "/api/audio-bench/file when done"}),
