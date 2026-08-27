@@ -819,6 +819,13 @@ def answer(question: str, use_manual: bool = True) -> str:
             cannot = [c for c in cannot if "fuel" not in c.lower()]
     except Exception:
         pass
+    # Having the value is not enough - the model must USE it. petrus's tyre
+    # question got a pure manual recital while his exact kPa sat in the fact
+    # sheet ("she is supposed to know what the pressures are", 27 Aug).
+    facts["rule: ground answers in your live values"] = (
+        "when the question touches anything you hold a live number for "
+        "(tyres, voltage, coolant, charge, fuel), state YOUR reading and "
+        "verdict for THIS car first, then add manual context if useful")
     try:
         _me = car_identity()
         system = build_system_prompt(facts, cannot, manual_excerpts=ctx,

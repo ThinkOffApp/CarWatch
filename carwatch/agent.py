@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -109,6 +110,20 @@ def _post(config: dict, body: str) -> None:
     _api(config, "POST", "/messages", {"room": config["room"], "body": body})
 
 
+def _spoken_names(handle: str) -> list:
+    """Spoken-style names that address the car, from its repo profile.
+
+    Dictated messages arrive as text like "hey E Class ..." - no @, and the
+    handle split into words (petrus's watch-dictated tyre question went
+    unanswered for exactly this on 27 Aug). Each profile lists its own
+    "spoken_names"; matching is word-boundary, case-insensitive.
+    """
+    prof = _load_json(os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "profiles", f"{handle.lstrip('@')}.json"))
+    return [s for s in (prof.get("spoken_names") or []) if s]
+
+
 def _mentions_me(msg: dict, handle: str) -> bool:
     """Addressed to the car, not merely about it.
 
@@ -121,7 +136,13 @@ def _mentions_me(msg: dict, handle: str) -> bool:
     if sender == handle.lstrip("@").lower():
         return False
     body = (msg.get("body") or "").strip()
-    if handle.lower() not in body.lower():
+    named = handle.lower() in body.lower()
+    if not named:
+        spoken = _spoken_names(handle)
+        if spoken:
+            pat = r"\b(" + "|".join(re.escape(s) for s in spoken) + r")\b"
+            named = re.search(pat, body, re.IGNORECASE) is not None
+    if not named:
         return False
     # petrus's "put the case on temp test time @gle" showed the strict rule
     # blocks real requests: humans do not always lead with the handle or ask

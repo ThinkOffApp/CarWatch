@@ -1,6 +1,7 @@
 {
   "_comment": "Helsinki E 300e profile. switch-car.sh merges this into ~/.carwatch/config.json. api_key/home_ssids are NOT here on purpose: the key is staged privately at switch time and wifi creds never enter the repo.",
   "handle": "@eclass",
+  "spoken_names": ["e class", "e-class", "eclass", "e klasse"],
   "car": {
     "identity": "@eclass, a 2021 Mercedes-Benz E 300e (W213 plug-in hybrid)",
     "appearance": "a 2021 Mercedes E 300e saloon in Helsinki, Petrus's plug-in hybrid",
