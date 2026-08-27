@@ -2158,6 +2158,16 @@ class Handler(BaseHTTPRequestHandler):
                 payload = {"ok": False, "error": str(e), "latest": None, "car": None}
             self.__class__._room_latest_cache = (now, payload)
             return self._send(200, json.dumps(payload), "application/json")
+        elif self.path.split("?", 1)[0] == "/api/play/status":
+            # Result of the last /api/play - so background playback is never
+            # invisible (the async-blindness lesson, 27 Aug).
+            try:
+                with open("/tmp/carwatch-play.log") as f:
+                    out = f.read()[-500:]
+            except Exception:
+                out = "(no play attempted since boot)"
+            return self._send(200, json.dumps({"ok": True, "log": out}),
+                              "application/json")
         elif self.path.split("?", 1)[0] == "/api/can/raw":
             # Serve the latest raw CAN capture so the byte-hunt can run at
             # home base over the mesh instead of "decode happens at home"
@@ -2412,6 +2422,37 @@ class Handler(BaseHTTPRequestHandler):
                 out = (r.stdout + r.stderr).strip()[-1500:]
                 return self._send(200, json.dumps({"ok": r.returncode == 0, "output": out}),
                                   "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/play":
+            # Play a READY wav through the car's A2DP audio. The Pi cannot run
+            # piper while the 35B model holds RAM (27 Aug: two words hung
+            # >120s), so synthesis happens off-board and this plays the bytes.
+            # Runs in the background; output lands in /tmp/carwatch-play.log,
+            # served by GET /api/play/status so the result is never invisible
+            # (the async-blindness lesson from the same afternoon).
+            import subprocess as _sp, os as _os
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                if n <= 44 or n > 12 * 1024 * 1024:
+                    return self._send(400, json.dumps(
+                        {"ok": False, "error": f"wav size out of range ({n} bytes)"}),
+                        "application/json")
+                blob = self.rfile.read(n)
+                wav = "/tmp/carwatch-play.wav"
+                with open(wav, "wb") as f:
+                    f.write(blob)
+                log = open("/tmp/carwatch-play.log", "w")
+                _sp.Popen(
+                    ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),
+                     "play", wav],
+                    stdout=log, stderr=log,
+                    cwd=_os.path.expanduser("~/CarWatch"),
+                    env={**_os.environ, "HOME": _os.path.expanduser("~")})
+                return self._send(200, json.dumps(
+                    {"ok": True, "bytes": n, "status": "playing in background",
+                     "check": "/api/play/status"}), "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
                                   "application/json")

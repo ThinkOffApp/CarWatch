@@ -165,6 +165,27 @@ case "$CMD" in
     test)
         speak "Hello Petrus. This is your car speaking through its own speakers. The audio path works."
         ;;
+    play)
+        # Play a READY wav through the car - no piper. Exists because the Pi
+        # cannot synthesize while the 35B model holds the RAM (measured 27 Aug:
+        # even a two-word piper run hung >120s). Synthesis happens elsewhere
+        # (the Mac), this just pushes bytes into the A2DP link.
+        WAV="${2:?usage: car-speak.sh play <file.wav>}"
+        [ -f "$WAV" ] || { echo "no such wav: $WAV"; exit 1; }
+        ensure_bluealsa >/dev/null 2>&1 || true
+        MAC="$(car_mac)"
+        if [ -z "$MAC" ]; then echo "no car bonded"; exit 1; fi
+        bluetoothctl connect "$MAC" >/dev/null 2>&1 || true
+        sleep 1
+        if bluealsa-aplay --profile-a2dp "$MAC" < "$WAV" 2>/dev/null; then
+            echo "played via bluealsa-aplay"
+        elif aplay -D "bluealsa:DEV=$MAC,PROFILE=a2dp" "$WAV" 2>/dev/null; then
+            echo "played via aplay"
+        else
+            echo "playback failed - is the car connected?"
+            exit 1
+        fi
+        ;;
     status)
         # Report the audio chain WITHOUT synthesizing or touching the bond, so
         # it is fast and safe to call remotely (the /api/car-speak probe).
