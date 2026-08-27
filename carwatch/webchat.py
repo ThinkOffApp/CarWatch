@@ -2512,6 +2512,13 @@ class Handler(BaseHTTPRequestHandler):
                 wav = "/tmp/carwatch-play.wav"
                 with open(wav, "wb") as f:
                     f.write(blob)
+                # Radio quiet window: hold OBD polling off the shared BT radio
+                # for the playback duration + margin, so the speech comes out
+                # CONTINUOUS (the 1-2s holes were obdwatch's polls).
+                import time as _t
+                _dur = n / 176400.0  # PCM s16/44.1k stereo bytes per second
+                with open("/tmp/carwatch-audio-quiet-until", "w") as _qf:
+                    _qf.write(str(_t.time() + _dur + 20))
                 log = open("/tmp/carwatch-play.log", "w")
                 _sp.Popen(
                     ["bash", _os.path.expanduser("~/CarWatch/scripts/car-speak.sh"),

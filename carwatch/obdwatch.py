@@ -274,6 +274,19 @@ def run() -> None:
     # "one-time" scan re-ran mid-drive at 28 km/h (claudemm, Aug 19).
     deep_ran_this_process = False
     while True:
+        # AUDIO QUIET WINDOW: the BT OBD adapter and the car's BT speakers
+        # share the Pi's one radio. OBD polls mid-playback punch 1-2s holes
+        # into the speech (petrus, 27 Aug: "NONE OF THE ANSWERS WERE RIGHT
+        # AND CONTINUOUS"). /api/play writes an until-epoch here; while it is
+        # in the future, this loop touches NOTHING on the radio.
+        try:
+            with open("/tmp/carwatch-audio-quiet-until") as _qf:
+                _quiet_until = float(_qf.read().strip() or 0)
+        except Exception:
+            _quiet_until = 0.0
+        if time.time() < _quiet_until:
+            time.sleep(1)
+            continue
         port = elm_port_present()
         up = carrier_up()
         if port and port != was_present:
