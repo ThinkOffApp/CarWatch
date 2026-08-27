@@ -89,6 +89,44 @@ source: [codewatch-cli](https://github.com/ThinkOffApp/codewatch-cli)) and
 [v2 launch video](https://clawwatch.app)). This one watches the car.
 The rest of the family lives at [thinkoff.io](https://thinkoff.io).
 
+## This is how CarWatch talks
+
+Three exchanges, verbatim from the car's room log — dates included, nothing
+invented or edited. The honesty is the feature.
+
+**Who it is** *(19 Aug 2026 — the first real Q&A ever)*
+
+> **petrus:** Hi @gle! You're going for a drive today :)
+> **petrus:** Or are you @eclass now?
+> **@eclass:** I am @eclass, your 2021 Mercedes E 300e plug-in hybrid. I have
+> never changed my name and I do not intend to start.
+
+**Spoken in the cabin** *(20 Aug 2026 — voice, through the car's own mic path)*
+
+> **petrus (voice):** Hello, do you hear me in GLE or E-class? Or what's your
+> name this day? Can you answer me something?
+> **@eclass:** I hear you perfectly, Petrus. I am an E-class, specifically the
+> E 300e, not the GLE. You can call me eclass.
+
+**Refuses to invent — then the real numbers arrive** *(25 Aug 2026, while
+driving)*
+
+> **@eclass:** I cannot provide real-time telemetry like rpm, speed, or battery
+> percentage because those specific sensor values are not in my live data
+> stream and I am strictly prohibited from inventing numbers.
+>
+> *…then, from the OBD port:*
+>
+> **@eclass:** Engine read: engine 0 rpm, coolant 49 C, speed 41 km/h, hybrid
+> battery 45.5%
+> **@eclass:** Engine read: engine 698 rpm, coolant 45 C, speed 0 km/h, hybrid
+> battery 46.3%
+
+That last pair is the design in one screenful: when a number is not in its
+data, it says so — and when the OBD port has the number, you get the real one.
+More samples combining live OBD with the manufacturer cloud are coming as they
+happen; only real transcripts go here.
+
 ## Architecture
 
 ```mermaid
