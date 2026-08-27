@@ -322,10 +322,27 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
    --barh is measured by script because the dock height depends on wrapping. */
 @media (max-width:760px){
  html,body{height:auto;min-height:100%}
- body{overflow-y:auto;overflow-x:hidden;padding-bottom:calc(var(--barh,118px) + 12px)}
- .main{flex:0 0 auto}
- .zone{overflow:visible}
- .cmds{margin-top:10px}
+ body{overflow-y:auto;overflow-x:hidden;padding:6px;gap:6px;padding-bottom:calc(var(--barh,110px) + 10px)}
+ .main{flex:0 0 auto;gap:6px}
+ .zone{overflow:visible;padding:10px 12px}
+ .cmds{margin-top:8px}
+ /* compact so the WHOLE dash fits one tall-phone screen (petrus 27 Aug:
+    "it needs scrolling on my s26 ultra now") - scroll stays as fallback */
+ .hero{margin:4px 0 0}
+ .hero .big{font-size:44px}
+ .stats{gap:6px;margin-top:6px}
+ .stat{padding:7px 6px}
+ .stat .v{font-size:19px}
+ .mgrid{gap:6px;margin:6px 0}
+ .mi .e{font-size:24px}
+ .mi .s{font-size:14px}
+ .voice{padding:6px 8px;gap:8px}
+ #speakBtn{padding:10px 16px;min-width:110px;font-size:16px}
+ .cmds button{padding:10px}
+ .ctl{min-width:54px;padding:6px 4px}
+ .ctl .i{font-size:17px}
+ .ask input{padding:8px}
+ .ask button{padding:8px 14px}
  .voice{position:sticky;top:0;z-index:5;border:1px solid #1d2733;border-radius:12px}
  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;flex-direction:column;align-items:stretch;
   background:rgba(9,16,22,.96);border-top:1px solid var(--line);
