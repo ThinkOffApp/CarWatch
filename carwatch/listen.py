@@ -96,6 +96,7 @@ def handle_utterance(frames: bytes, on_text):
     on_text returns (the voice handler returns the answer TEXT so listen()
     can speak it after releasing the mic)."""
     from carwatch import lights  # local import: keeps lights fully optional
+    was_armed = voicestate.armed()
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         path = f.name
     _write_wav(path, frames)
@@ -111,12 +112,12 @@ def handle_utterance(frames: bytes, on_text):
         if by_button:
             voicestate.consume_arm()
         if not by_button and wake and not _addressed(text, wake):
-            # Not addressed to the car: log a stub locally, never post -
-            # but SHOW it on the dash, so "it heard you, you just did not
-            # address it" is visible instead of indistinguishable from deaf.
+            # Not addressed to the car: journal only, dash stays QUIET.
+            # (Was a visible "heard you" note; petrus 28 Aug wants unarmed
+            # hearing invisible - the strip reacting to room chatter read
+            # as always-on surveillance.)
             print(f"(ignored, no wake word): {text[:60]}", flush=True)
-            voicestate.set_state("idle",
-                                 note=f'heard (not addressed to me): "{text[:80]}"')
+            voicestate.set_state("idle")
             lights.signal("idle")
             return None
         print(f"HEARD: {text}", flush=True)
@@ -129,8 +130,13 @@ def handle_utterance(frames: bytes, on_text):
         secs = len(frames) / (RATE * 2)
         print(f"(captured sound but no clear speech: {secs:.1f}s, rms {rms(frames):.0f})",
               flush=True)
-        voicestate.set_state("idle",
-                             note=f"caught sound but no clear speech ({secs:.1f}s)")
+        # Visible only when the button asked us to listen; ambient noise
+        # otherwise ends silently (same petrus rule as above).
+        if was_armed:
+            voicestate.set_state("idle",
+                                 note=f"caught sound but no clear speech ({secs:.1f}s)")
+        else:
+            voicestate.set_state("idle")
     lights.signal("idle")       # back to calm when done
     return result
 
@@ -291,7 +297,12 @@ def listen(threshold: float, on_text) -> None:
             if level >= threshold:
                 if not in_speech:
                     in_speech = True
-                    voicestate.set_state("listening")
+                    # The strip shows "listening" ONLY when the button armed
+                    # it (petrus 28 Aug: "why is it listening already? i
+                    # didn't press or wake"). Unarmed capture stays visually
+                    # silent; the wake-word check still runs underneath.
+                    if voicestate.armed():
+                        voicestate.set_state("listening")
                     speech = []
                     quiet = 0
                 speech.append(chunk)
