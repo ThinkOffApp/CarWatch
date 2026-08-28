@@ -13,7 +13,7 @@ and E10 fuel from the manual. The last one with the internet switched off.
 [download the video](https://github.com/ThinkOffApp/CarWatch/releases/download/v0.4.0/carwatch-v04-web.mp4) ·
 [v0.4.0 release notes](https://github.com/ThinkOffApp/CarWatch/releases/tag/v0.4.0)
 
-![The CarWatch single-screen dashboard: OBD live from the car on the left, Mercedes me cloud data on the right, each labelled](docs/img/dash-screen.jpg)
+![The CarWatch dashboard in v0.4: the Speak strip on top, live OBD tiles, Mercedes me cloud data, and the full control dock](docs/img/dash-screen.jpg)
 
 ![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
 
