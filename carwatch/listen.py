@@ -75,6 +75,46 @@ WAKE_WORDS = ("hello car", "helo car", "hello kar", "helo kar", "hey car",
 FOLLOWUP_S = 30.0
 _followup_until = 0.0
 
+# The car's own last answer, for echo suppression (petrus mid-shoot 28 Aug:
+# the mic reopened while the cabin speakers were still playing the answer's
+# tail, the tail transcribed, and the FOLLOW-UP window - any utterance counts
+# as addressed - made the car answer itself in a loop). Two guards: _speak
+# holds the mic closed until the wav's computed duration has really elapsed
+# in the cabin, and transcripts that are token-copies of the last answer are
+# dropped before the follow-up/wake logic ever sees them.
+_last_spoken = {"tokens": frozenset(), "start": 0.0, "end": 0.0}
+ECHO_TAIL_SEC = 3.0           # BT + MBUX keep playing after aplay exits;
+                              # 3.0 measured good live (claudemm, 28 Aug)
+ECHO_MATCH_WINDOW_SEC = 30.0  # straggling buffered echo can arrive this late
+
+
+def _echo_tail_sec() -> float:
+    try:
+        import json
+        cfg = json.load(open(os.path.expanduser("~/.carwatch/config.json")))
+        return float((cfg.get("voice") or {}).get("echo_tail_sec"))
+    except Exception:
+        return ECHO_TAIL_SEC
+
+
+def _tokens(text: str) -> list:
+    return [t for t in re.sub(r"[^\wäöå]+", " ", text.lower()).split() if t]
+
+
+def _is_self_echo(text: str) -> bool:
+    """True when a transcript is (a fragment of) the answer the car just
+    spoke. Token containment, not equality: the mic hears the tail of the
+    answer mid-sentence and whisper is not verbatim. Needs >=4 tokens so a
+    short real follow-up ("yes", "thanks") is never swallowed - the
+    mic-closed hold in _speak covers the short tails physically."""
+    heard = _tokens(text)
+    if len(heard) < 4 or not _last_spoken["tokens"]:
+        return False
+    if time.time() > _last_spoken["end"] + ECHO_MATCH_WINDOW_SEC:
+        return False
+    hit = sum(1 for t in heard if t in _last_spoken["tokens"])
+    return hit / len(heard) >= 0.8
+
 
 def _wake_words():
     try:
@@ -125,6 +165,15 @@ def handle_utterance(frames: bytes, on_text):
     text = transcribe(path)
     os.unlink(path)
     result = None
+    if text and _is_self_echo(text):
+        # The mic caught the car's own answer coming out of the cabin
+        # speakers. This must be dropped BEFORE the armed/follow-up logic:
+        # inside the follow-up window every utterance counts as addressed,
+        # which is exactly how the car ended up answering itself (28 Aug).
+        print(f"(ignored self-echo): {text[:60]}", flush=True)
+        voicestate.set_state("idle")
+        lights.signal("idle")
+        return None
     if text:
         wake = _wake_words()
         # The Speak button arms the mic: an armed utterance is for the car
@@ -250,39 +299,82 @@ def _open_mic():
                             stderr=subprocess.DEVNULL)
 
 
+def _car_a2dp_mac():
+    """The paired car head unit's BT MAC (written by car-speak.sh). Speaking
+    through THIS sink is the proven music channel the brief uses. The generic
+    hfpag/a2dpsrc scans stay as fallbacks only: with no call up, MBUX keeps
+    the HFP call channel CLOSED and audio sent there exits 0 into silence
+    (claudemm's live find, 28 Aug - answers were text-only in the cabin)."""
+    try:
+        mac = open(os.path.expanduser("~/.carwatch/car-bt-mac")).read().strip()
+        return mac or None
+    except Exception:
+        return None
+
+
 def _speak(text: str) -> bool:
-    """Voice a reply through the connected BT sink over A2DP. Call ONLY with
+    """Voice a reply through the car's A2DP sink (the brief's music channel),
+    falling back to USB playback, then the headset channels. Call ONLY with
     the mic closed: while SCO capture is live the headset sits in HFP mode
     and the A2DP sink it would play through does not exist (the 20.8.
-    aplay-exit-0-but-silence bug)."""
+    aplay-exit-0-but-silence bug). Does not return until the audio has
+    actually FINISHED in the cabin (wav duration + tail): the player exiting
+    only means the BT/MBUX buffer was written, and reopening the mic into
+    the still-playing tail is how the car answered itself (28 Aug)."""
     from carwatch import voiceroom  # language-aware voice pick (fi/en)
-    target = _usb_audio_device("playback")
-    bt = target is None
-    if bt:
-        # Prefer the HFP/SCO channel: during a conversation the headset
-        # already sits in call mode, and the A2DP slot may belong to the
-        # PHONE on a multipoint headset - answers played there exit 0 into
-        # silence (petrus heard nothing, 28 Aug, while the state said
-        # spoken). Call quality, but guaranteed audible.
-        mac = _bt_pcm_mac("hfpag/sink")
-        if mac:
-            target = f"bluealsa:DEV={mac},PROFILE=sco"
-        else:
-            mac = _bt_pcm_mac("a2dpsrc/sink")
-            if not mac:
-                print("speak: no USB or BT audio output connected", flush=True)
-                return False
-            target = f"bluealsa:DEV={mac},PROFILE=a2dp"
     wav = voiceroom.tts_wav(text)
     if not wav:
         print("speak: TTS failed (piper/voice missing?)", flush=True)
         return False
     try:
+        try:
+            with wave.open(wav, "rb") as w:
+                dur = w.getnframes() / float(w.getframerate() or RATE)
+        except Exception:
+            dur = 3.0 + len(text) / 12.0   # rough speech-rate estimate
+        play_timeout = max(60, int(dur * 2) + 15)  # 30s truncated a 44s answer
+        car = _car_a2dp_mac()
+        target = None
+        bt = False
+        if car:
+            # Bond can exist while the A2DP link is down; connect is cheap
+            # when already connected (car-speak.sh does the same).
+            if _bt_pcm_mac("a2dpsrc/sink") != car:
+                subprocess.run(["bluetoothctl", "connect", car],
+                               capture_output=True, timeout=10)
+                time.sleep(2)
+            target = f"bluealsa:DEV={car},PROFILE=a2dp"
+            bt = True
+        if not target:
+            target = _usb_audio_device("playback")
+        if not target:
+            # Headset-only (bench / walking): prefer the HFP call channel -
+            # on a multipoint headset the A2DP slot may belong to the PHONE
+            # and audio played there exits 0 into silence (28 Aug, XM5).
+            bt = True
+            mac = _bt_pcm_mac("hfpag/sink")
+            if mac:
+                target = f"bluealsa:DEV={mac},PROFILE=sco"
+            else:
+                mac = _bt_pcm_mac("a2dpsrc/sink")
+                if not mac:
+                    print("speak: no car, USB or BT audio output connected",
+                          flush=True)
+                    return False
+                target = f"bluealsa:DEV={mac},PROFILE=a2dp"
+        start = time.time()
+        _last_spoken.update(tokens=frozenset(_tokens(text)),
+                            start=start, end=start + dur)
         if bt:
-            time.sleep(1.5)   # let the headset fall back from HFP to A2DP
+            time.sleep(1.5)   # let a shared headset fall back from HFP mode
         rc = subprocess.run(
-            ["aplay", "-D", target, wav],
-            capture_output=True, timeout=180).returncode
+            ["aplay", "--buffer-time=1000000", "-D", target, wav],
+            capture_output=True, timeout=play_timeout).returncode
+        if rc == 0:
+            # Hold until the cabin is actually quiet before the caller
+            # reopens the mic: computed end of the audio plus a tail for
+            # the BT/MBUX buffers (voice.echo_tail_sec overrides).
+            time.sleep(max(0.0, start + dur + _echo_tail_sec() - time.time()))
         return rc == 0
     except Exception as e:
         print(f"speak failed: {e}", flush=True)
