@@ -1,5 +1,0 @@
-
-/* FAQ */
-.faq-item{border-bottom:1px solid var(--line);padding:10px 0}
-.faq-item summary{cursor:pointer;font-weight:600;padding:4px 0}
-.faq-item p{color:var(--muted,inherit);margin:8px 0 4px}
