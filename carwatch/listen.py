@@ -365,6 +365,17 @@ def _speak(text: str) -> bool:
         start = time.time()
         _last_spoken.update(tokens=frozenset(_tokens(text)),
                             start=start, end=start + dur)
+        # Radio quiet window: hold OBD polling off the shared BT radio for
+        # the playback (same file webchat's play path writes and obdwatch
+        # honors). Voice answers never set this, so obdwatch polled the BT
+        # dongle every ~20s straight through them - measured mid-answer on
+        # the 28 Aug shoot (poll at 14:30:51 inside the stuttering answer);
+        # the brief was smooth because ITS path sets the window.
+        try:
+            with open("/tmp/carwatch-audio-quiet-until", "w") as qf:
+                qf.write(str(start + dur + 20))
+        except Exception:
+            pass
         if bt:
             time.sleep(1.5)   # let a shared headset fall back from HFP mode
         rc = subprocess.run(
