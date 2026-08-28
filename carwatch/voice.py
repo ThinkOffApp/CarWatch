@@ -52,13 +52,13 @@ def transcribe(wav_path: str) -> str:
     try:
         cmd = [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt"]
         if WHISPER_MODEL == _MODEL_MULTI:
-            # -l fi, NOT auto: auto GUESSES per clip, and one mushy capture
-            # flipped a whole exchange to Italian (20.8., claudemm's catch -
-            # Finnish confuses with Italian/Estonian rhythm). The live mic
-            # lives in a Finnish home/car; English through this path degrades
-            # to an ignored garble, and room voice notes keep auto detection
-            # (whisper-small there is a far better language detector).
-            cmd += ["-l", "fi"]
+            # Language is a CONFIG decision, not a constant. The 20.8 pin to
+            # fi (auto once flipped a clip to Italian) Finnishes accented
+            # ENGLISH into wake misses and garble ("Helo, Kar" - petrus's
+            # live test, 28 Aug). CARWATCH_STT_LANG picks the mode: en for
+            # the English video script, fi for Finnish-first days, auto to
+            # let whisper guess per clip. Default stays fi.
+            cmd += ["-l", os.environ.get("CARWATCH_STT_LANG", "fi")]
         out = subprocess.run(
             cmd, capture_output=True, text=True, timeout=120).stdout
         # -nt strips timestamps; join the spoken lines, drop blanks.

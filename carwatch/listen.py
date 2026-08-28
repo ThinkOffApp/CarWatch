@@ -65,8 +65,11 @@ def _write_wav(path: str, frames: bytes) -> None:
 # or wake word, not randomly"): the old bare "car" fired word-boundary on
 # ordinary sentences, which felt exactly like always-on. The Speak button
 # always works regardless of these.
-WAKE_WORDS = ("hello car", "hey car", "hei auto", "moi auto", "hyvä auto",
-              "hello gle", "vadelma")
+# Spelling variants included: whisper in Finnish mode writes "Kar"/"Helo"
+# for accented English ("Hello, Kar, how are you today?" was a real wake
+# MISS in petrus's live test, 28 Aug).
+WAKE_WORDS = ("hello car", "helo car", "hello kar", "helo kar", "hey car",
+              "hei auto", "moi auto", "hyvä auto", "hello gle", "vadelma")
 
 
 def _wake_words():
@@ -84,11 +87,13 @@ def _wake_words():
 
 
 def _addressed(text: str, wake) -> bool:
-    """Word-boundary wake match. Substring matching let 'car' hide inside
-    'caramelli' in an Italian mistranscription and the car answered ambient
-    chatter into the room (20.8.) - a wake word must be a whole WORD."""
+    """Word-boundary wake match on NORMALIZED text. Substring matching let
+    'car' hide inside 'caramelli' (20.8.) so words stay whole - but the raw
+    transcript carries punctuation ("Hello, Kar, ...") that broke phrase
+    matching, so punctuation collapses to spaces before the search."""
+    norm = re.sub(r"[^\wäöå]+", " ", text.lower()).strip()
     pat = re.compile(r"\b(" + "|".join(re.escape(w) for w in wake) + r")\b")
-    return bool(pat.search(text.lower()))
+    return bool(pat.search(norm))
 
 
 def handle_utterance(frames: bytes, on_text):
