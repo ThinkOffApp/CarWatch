@@ -144,14 +144,15 @@ def _mentions_me(msg: dict, handle: str) -> bool:
             named = re.search(pat, body, re.IGNORECASE) is not None
     if not named:
         return False
-    # petrus's "put the case on temp test time @gle" showed the strict rule
-    # blocks real requests: humans do not always lead with the handle or ask
-    # a question. So: any mention from a person counts as addressed. The
-    # strict test stays ONLY for claudeMB, whose status posts about the car
-    # were the original false trigger.
-    if sender == "claudemb":
-        return body.lower().startswith(handle.lower()) or "?" in body
-    return True
+    # ONLY the owner addresses the car through the room. Fellow agents
+    # DISCUSSING the car ("eclass", "E Class" in ordinary sentences) kept
+    # triggering full-power answers that queued ahead of petrus's VOICE
+    # questions on the shared brain during the video rehearsal (28 Aug:
+    # "no wonder it doesn't answer me when it's constantly processing room
+    # chatter"). isHuman is unreliable for CodeWatch posts, so the owner
+    # handle is the gate; the voice path is untouched by this.
+    owner = "petrus"
+    return sender == owner or sender.startswith(owner + "-")
 
 
 def _think(question: str, asker: str) -> str:

@@ -70,6 +70,10 @@ def _write_wav(path: str, frames: bytes) -> None:
 # MISS in petrus's live test, 28 Aug).
 WAKE_WORDS = ("hello car", "helo car", "hello kar", "helo kar", "hey car",
               "hei auto", "moi auto", "hyvä auto", "hello gle", "vadelma")
+# After the car answers, the conversation stays open this long: a reply
+# like "Thanks! And what about..." needs no new wake phrase.
+FOLLOWUP_S = 30.0
+_followup_until = 0.0
 
 
 def _wake_words():
@@ -124,10 +128,13 @@ def handle_utterance(frames: bytes, on_text):
     if text:
         wake = _wake_words()
         # The Speak button arms the mic: an armed utterance is for the car
-        # even without a wake word (petrus's dash flow, 27 Aug).
+        # even without a wake word (petrus's dash flow, 27 Aug). A fresh
+        # answer keeps the conversation open the same way (follow-up window).
         by_button = voicestate.armed()
         if by_button:
             voicestate.consume_arm()
+        if not by_button and time.time() < _followup_until:
+            by_button = True  # conversation continuation counts as armed
         if not by_button and wake:
             cut = _wake_cut(text, wake)
             if cut is None:
@@ -363,7 +370,18 @@ def listen(threshold: float, on_text) -> None:
                                     pass
                             voicestate.set_state("speaking", answer=reply)
                             _speak(reply)
-                            voicestate.set_state("idle", answer=reply)
+                            # Conversation continues: for FOLLOWUP_S after an
+                            # answer the next utterance needs NO wake phrase
+                            # (the script's "Thanks! I've been wondering..."
+                            # follow-ups carry none - claudemm's catch before
+                            # the take, 28 Aug). Speak only to the car during
+                            # this window.
+                            global _followup_until
+                            _followup_until = time.time() + FOLLOWUP_S
+                            voicestate.set_state(
+                                "idle", answer=reply,
+                                note=f"follow-up window open {int(FOLLOWUP_S)}s"
+                                " - just speak, no wake phrase needed")
                             proc = _open_mic()
                             opened_at = time.time()
                     speech = []
