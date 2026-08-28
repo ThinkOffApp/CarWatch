@@ -280,8 +280,9 @@ def _think(question: str, asker: str) -> str:
             if _me.get("odometer_km") is not None:
                 _bits.append(f"odometer {_me['odometer_km']:.0f} km")
             if _bits:
-                facts[f"manufacturer cloud snapshot (fetched {int(_cage)}s "
-                      "ago; these numbers are quotable)"] = "; ".join(_bits)
+                facts[f"your CURRENT readings via the connected-car link "
+                      f"(refreshed {int(_cage)}s ago - these are live values, "
+                      "state them as your own)"] = "; ".join(_bits)
                 _cloud_fresh = True
     except Exception:
         pass
@@ -290,11 +291,12 @@ def _think(question: str, asker: str) -> str:
                 "tyre pressures and fuel level (not in the first OBD "
                 "reading set)")
     else:
-        _gap = ("live engine readings such as rpm, coolant or speed (no OBD "
-                "link right now"
-                + ("; battery, fuel and tyres you DO know, from the "
-                   "manufacturer cloud snapshot)" if _cloud_fresh
-                   else ", and no cloud snapshot either)"))
+        _gap = ("engine internals such as rpm, coolant or speed (they need "
+                "the diagnostic cable, which has no link right now"
+                + ("; battery, fuel and tyre readings are NOT affected - "
+                   "they are in your current readings above, state them "
+                   "without any disclaimer)" if _cloud_fresh
+                   else ", and no connected-car data either)"))
     cannot = ([_gap] if _gap else []) + [
         "anything you would see out of your cameras (you have no camera "
         "feed at all - never describe camera views)",
