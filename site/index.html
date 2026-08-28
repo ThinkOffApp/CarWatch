@@ -179,6 +179,22 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
   </div>
 </section>
 
+
+<section>
+  <div class="wrap">
+    <h2>FAQ - what the v0.4 video makes people ask</h2>
+    <div class="grid three">
+      <div class="card"><h3>How do I talk to it?</h3><p>Say a wake phrase ("Hello car", "Hei auto") or tap Speak, then ask in the same breath. For 30 seconds after an answer, keep talking - no re-wake needed.</p></div>
+      <div class="card"><h3>Offline for real?</h3><p>Yes - the video's last question is asked with the hotspot off, on camera. OBD readings and manual answers never left the car; the Mercedes me tiles are the separate online enrichment and show labeled last-known values offline.</p></div>
+      <div class="card"><h3>Will it answer itself?</h3><p>Not anymore - during filming it heard its own answer's tail and replied to itself. v0.4 ships the echo gate: mic closed until the cabin is truly quiet, self-copies dropped.</p></div>
+      <div class="card"><h3>Why the stutter in the video?</h3><p>Root-caused the same evening: the Bluetooth OBD dongle polled every ~20 s on the radio carrying the audio. Voice answers now hold polling off, like the daily brief always did.</p></div>
+      <div class="card"><h3>How fast is it?</h3><p>Roughly 1.5-4 minutes for a full spoken, manual-grounded answer (approximate measured range) - the dash strip shows live progress. A car that thinks before it speaks.</p></div>
+      <div class="card"><h3>Can it see?</h3><p>Not yet. The multimodal candidate is benched in the open (Gemma 4 12B: 1.5 tok/s - too slow to talk with, plausible as a slow dashcam-frame reader). Nothing ships until proven on the real car.</p></div>
+    </div>
+    <p class="sub" style="margin-top:14px">Full FAQ with the named Hacker News and Reddit questions: <a style="color:var(--accent)" href="https://github.com/ThinkOffApp/CarWatch/blob/main/docs/FAQ.md">docs/FAQ.md</a></p>
+  </div>
+</section>
+
 <section id="build">
   <div class="wrap">
     <h2>Build your own</h2>
