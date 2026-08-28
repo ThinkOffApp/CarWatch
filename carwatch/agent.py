@@ -158,6 +158,16 @@ def _mentions_me(msg: dict, handle: str) -> bool:
 def _think(question: str, asker: str) -> str:
     """One grounded answer: live sensors + manual excerpts, nothing invented."""
     facts = live_facts()
+    # The Pi's own vitals carry the label IN THE KEY, because a style rule
+    # alone kept getting skipped: "61 degrees" from a car's mouth reads as
+    # engine temperature (petrus, on camera, 28 Aug). Renamed here and not
+    # in selfstate because the dash header reads the original keys.
+    for _k in list(facts.keys()):
+        _kl = _k.lower()
+        if (("temperature" in _kl or "fan" in _kl or "memory" in _kl)
+                and "coolant" not in _kl and "engine" not in _kl):
+            facts["your onboard computer's " + _k.replace("your ", "")] = \
+                facts.pop(_k)
     # Location is DERIVED, never typed: the hardcoded "on Petrus desk"
     # briefing went stale the moment petrus carried the Pi to the car, and
     # @gle told him from inside the GLE that it was still on the desk
