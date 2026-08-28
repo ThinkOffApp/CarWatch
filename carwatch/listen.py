@@ -259,11 +259,20 @@ def _speak(text: str) -> bool:
     target = _usb_audio_device("playback")
     bt = target is None
     if bt:
-        mac = _bt_pcm_mac("a2dpsrc/sink")
-        if not mac:
-            print("speak: no USB or BT audio output connected", flush=True)
-            return False
-        target = f"bluealsa:DEV={mac},PROFILE=a2dp"
+        # Prefer the HFP/SCO channel: during a conversation the headset
+        # already sits in call mode, and the A2DP slot may belong to the
+        # PHONE on a multipoint headset - answers played there exit 0 into
+        # silence (petrus heard nothing, 28 Aug, while the state said
+        # spoken). Call quality, but guaranteed audible.
+        mac = _bt_pcm_mac("hfpag/sink")
+        if mac:
+            target = f"bluealsa:DEV={mac},PROFILE=sco"
+        else:
+            mac = _bt_pcm_mac("a2dpsrc/sink")
+            if not mac:
+                print("speak: no USB or BT audio output connected", flush=True)
+                return False
+            target = f"bluealsa:DEV={mac},PROFILE=a2dp"
     wav = voiceroom.tts_wav(text)
     if not wav:
         print("speak: TTS failed (piper/voice missing?)", flush=True)
