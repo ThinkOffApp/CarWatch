@@ -268,7 +268,10 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .tab.on{border-color:var(--blue);color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,var(--tile))}
 #status{margin-left:auto;font:11.5px var(--mono);color:var(--dim);text-align:right;line-height:1.3}
 #status b{color:var(--ok)}
-.main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
+/* zones hug their content instead of stretching to the viewport - on tall
+   unfolded screens the stretch shoved the safety buttons to the far bottom
+   (petrus 28 Aug: "obd and Merc me buttons not aligned") */
+.main{flex:0 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0;align-items:start}
 /* 600, not 760: the Fold 8 UNFOLDED is ~690 css px wide and deserves the
    airy two-column layout, not the phone column (petrus's fold views, 28 Aug) */
 @media (max-width:600px){.main{grid-template-columns:1fr;grid-auto-rows:auto}}
@@ -295,8 +298,12 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 /* parked mode: ignition off means the arc is empty anyway - shrink and dim
    it so the parked view (the usual one) is the tightest */
 .gauge{transition:max-width .4s ease,opacity .4s ease}
-.gauge.idle{max-width:170px;opacity:.7}
-.gauge.idle .gcenter .big{font-size:32px}
+/* parked: the arc disappears entirely - just a quiet "0 km/h" line. It
+   grows back the moment the OBD feed goes live. */
+.gauge.idle svg{display:none}
+.gauge.idle{max-width:none;opacity:.8}
+.gauge.idle .gcenter{position:static;flex-direction:row;align-items:baseline;justify-content:center;gap:8px;padding:2px 0 4px}
+.gauge.idle .gcenter .big{font-size:30px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:8px;margin-top:10px}
 /* margin-top:auto used to shove these to the bottom of the zone, leaving a
    dead gap under the speed. petrus: 'why is there empty space after speed'.
@@ -325,13 +332,13 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 #merc .stat .v{font-size:17px}
 #merc .stat .v.long{font-size:13.5px}
 #mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
-.cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
+.cmds{display:flex;gap:8px;margin-top:10px}
 .cmds button{flex:1;background:color-mix(in srgb,var(--ok) 8%,var(--tile));color:var(--ink);
  border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));border-radius:var(--r2);
  padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font)}
 .cmds button:active{transform:scale(.98)} .cmds button:disabled{opacity:.6}
 .cmds button.ok{border-color:var(--ok);color:var(--ok)} .cmds button.bad{border-color:var(--bad);color:var(--bad)}
-.bar{flex:0 0 auto;display:flex;align-items:center;gap:6px}
+.bar{flex:0 0 auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ctlrow{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .ctlrow::-webkit-scrollbar{display:none}
 .ctl{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px;
@@ -342,6 +349,7 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .ask input{flex:1;padding:10px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:inherit;font-size:14px}
 .ask button{padding:10px 16px;border:0;border-radius:var(--r2);background:var(--blue);color:var(--bg1);font-weight:800;box-shadow:var(--glow)}
 .links{flex:0 0 auto;font:11px var(--mono);color:var(--dim);display:flex;gap:12px;padding-left:4px}
+@media (min-width:601px){.links{margin-top:auto}}
 .links a{color:var(--blue);text-decoration:none}
 #out{position:fixed;left:8px;right:8px;bottom:8px;background:var(--tile);border:1px solid var(--blue);border-radius:var(--r2);
  padding:10px 12px;font:12px var(--mono);color:var(--ok);white-space:pre-wrap;max-height:40vh;overflow:auto;display:none;z-index:5}
