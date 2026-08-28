@@ -308,11 +308,8 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .steer.replay .steerlab{color:#ffb020}
 .steer.replay .steerfill{background:#8a94a0}
 .nodev{margin:auto;text-align:center;color:var(--dim);font-size:14px}
-.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 8px;margin:8px 0}
-.mi{text-align:center}
-.mi .e{font-size:30px;line-height:1.1;display:block}
-.mi .s{font:800 15px var(--mono)} .mi .s.ok{color:var(--ok)} .mi .s.warn{color:var(--warn)} .mi .s.bad{color:var(--bad)} .mi .s.dim{color:var(--ink)}
-.mi .l{font-size:10.5px;color:var(--dim);margin-top:1px}
+.stat .v.dim{color:var(--ink)}
+.stat .v.long{font-size:14px;line-height:1.25;word-break:break-word}
 #mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
 .cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
 .cmds button{flex:1;background:color-mix(in srgb,var(--ok) 8%,var(--tile));color:var(--ink);
@@ -372,9 +369,6 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
  .stats{gap:6px;margin-top:6px}
  .stat{padding:7px 6px}
  .stat .v{font-size:19px}
- .mgrid{gap:6px;margin:6px 0}
- .mi .e{font-size:24px}
- .mi .s{font-size:14px}
  .voice{padding:6px 8px;gap:8px}
  #speakBtn{padding:10px 16px;min-width:110px;font-size:16px}
  .cmds button{padding:10px}
@@ -399,8 +393,6 @@ html.dense .zone{padding:8px 10px}
 html.dense .stats{gap:5px;margin-top:5px}
 html.dense .stat{padding:6px 5px}
 html.dense .stat .v{font-size:17px}
-html.dense .mgrid{gap:5px;margin:5px 0}
-html.dense .mi .e{font-size:21px}
 html.dense .voice{padding:5px 8px}
 html.dense #speakBtn{padding:8px 14px;font-size:15px}
 html.dense .cmds button{padding:8px}
@@ -430,8 +422,8 @@ html.dense .cmds button{padding:8px}
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
  <div class=zone>
-  <h2>&#9729;&#65039; Mercedes me <span class=src>manufacturer cloud</span> <span class="badge cloud">read-only</span></h2>
-  <div class=mgrid id=merc></div>
+  <h2>&#9729;&#65039; Mercedes me <span class=src>cloud</span> <span class="badge cloud">read-only</span></h2>
+  <div class=stats id=merc></div>
   <div id=mnote>loading&#8230;</div>
   <div class=cmds id=cmds></div>
  </div>
@@ -631,7 +623,11 @@ async function pollSteer(){
 let CARS={},SEL=null;
 function agg(o){if(!o)return null;if(o.all_closed!==undefined)return o.all_closed==='on'?['closed','ok']:['open','warn'];
  const v=Object.values(o);if(!v.length)return null;const n=v.filter(x=>x==='on'||x==='open').length;return n?[n+' open','warn']:['closed','ok']}
-function mi(e,s,l,cls){return '<div class=mi><span class=e>'+e+'</span><div class="s '+(cls||'dim')+'">'+s+'</div><div class=l>'+l+'</div></div>'}
+// Mercedes items render as the SAME tile component as the OBD stats - one
+// tile system on the whole page (petrus 28 Aug: "unify the design", the Merc
+// section had emojis and text jumping around while OBD sat in neat tiles).
+function mi(e,s,l,cls){const long=String(s).replace(/&[^;]+;/g,'x').length>8?' long':'';
+ return '<div class=stat><div class="v '+(cls||'')+long+'">'+s+'</div><div class=k><span class=ic>'+e+'</span>'+l+'</div></div>'}
 function renderTabs(){const t=$('tabs');const slugs=Object.keys(CARS);
  t.innerHTML=slugs.map(sl=>'<div class="tab'+(sl===SEL?' on':'')+'" data-car="'+sl+'">'+(CARS[sl].label||sl)+'</div>').join('');
  t.querySelectorAll('[data-car]').forEach(el=>el.addEventListener('click',()=>{SEL=el.getAttribute('data-car');renderTabs();renderCar()}))}
