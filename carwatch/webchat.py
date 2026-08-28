@@ -269,7 +269,9 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 #status{margin-left:auto;font:11.5px var(--mono);color:var(--dim);text-align:right;line-height:1.3}
 #status b{color:var(--ok)}
 .main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
-@media (max-width:760px){.main{grid-template-columns:1fr;grid-auto-rows:auto}}
+/* 600, not 760: the Fold 8 UNFOLDED is ~690 css px wide and deserves the
+   airy two-column layout, not the phone column (petrus's fold views, 28 Aug) */
+@media (max-width:600px){.main{grid-template-columns:1fr;grid-auto-rows:auto}}
 .zone{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);
  border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .zone > h2{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);
@@ -282,7 +284,7 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .badge.cloud{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}
 /* Speed gauge (codex's layout, 27 Aug: one dominant value in an arc with a
    status pill under it). The arc is pure SVG driven by stroke-dashoffset. */
-.gauge{position:relative;width:100%;max-width:280px;margin:4px auto 0}
+.gauge{position:relative;width:100%;max-width:250px;margin:0 auto}
 .gauge svg{width:100%;display:block}
 .gtrack{fill:none;stroke:var(--tile);stroke-width:11;stroke-linecap:round}
 .gfill{fill:none;stroke:var(--blue);stroke-width:11;stroke-linecap:round;stroke-dasharray:271;stroke-dashoffset:271;
@@ -318,6 +320,10 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .stat .v.dim{color:var(--ink)}
 /* numbers never wrap mid-value: long values shrink and break only at <br> */
 .stat .v.long{font-size:13.5px;line-height:1.3;white-space:nowrap}
+/* Mercedes values are words and compounds, not single readings - a smaller
+   size reads calm where OBD's short numbers carry 23px fine */
+#merc .stat .v{font-size:17px}
+#merc .stat .v.long{font-size:13.5px}
 #mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
 .cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
 .cmds button{flex:1;background:color-mix(in srgb,var(--ok) 8%,var(--tile));color:var(--ink);
@@ -366,7 +372,7 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
    more), the voice strip stays stuck to the top, and the control bar is a
    fixed dock so lock doors / Ask stay reachable with or without fullscreen.
    --barh is measured by script because the dock height depends on wrapping. */
-@media (max-width:760px){
+@media (max-width:600px){
  html,body{height:auto;min-height:100%}
  body{overflow-y:auto;overflow-x:hidden;padding:6px;gap:6px;padding-bottom:calc(var(--barh,110px) + 10px)}
  .main{flex:0 0 auto;gap:6px}
@@ -374,8 +380,9 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
  .cmds{margin-top:8px}
  /* compact so the WHOLE dash fits one tall-phone screen (petrus 27 Aug:
     "it needs scrolling on my s26 ultra now") - scroll stays as fallback */
- .gauge{max-width:250px}
- .gcenter .big{font-size:44px}
+ .gauge{max-width:225px}
+ .gcenter .big{font-size:42px}
+ #merc .stat .v{font-size:16px}
  .stats{gap:6px;margin-top:6px}
  .stat{padding:7px 6px}
  .stat .v{font-size:19px}
@@ -512,7 +519,7 @@ function sizeBar(){const b=document.querySelector('.bar');if(!b)return;
 // one-screen guarantee: if the phone layout overflows the viewport, add the
 // dense class (see html.dense rules) and re-measure once it applies
 function densify(){const d=document.documentElement;d.classList.remove('dense');
- if(window.matchMedia('(max-width:760px)').matches&&d.scrollHeight>window.innerHeight+2)d.classList.add('dense')}
+ if(window.matchMedia('(max-width:600px)').matches&&d.scrollHeight>window.innerHeight+2)d.classList.add('dense')}
 // SKINS: one token block per look; cycle with the dock's Skin button
 const SKINS=['carbon','gamer','hippy','minimal'];
 let curSkin='carbon';try{curSkin=localStorage.getItem('cwSkin')||'carbon'}catch(e){}
