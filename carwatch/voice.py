@@ -96,7 +96,13 @@ def ask_gle(question: str) -> str:
             capture_output=True, text=True, timeout=420,
             cwd=os.path.expanduser("~/CarWatch"),
             env={**os.environ, "CARWATCH_STATE": os.path.expanduser("~/.carwatch")})
-        return r.stdout.strip()
+        # The subprocess streams "  ... chunk" progress lines for the journal
+        # and THEN prints the final answer - keeping both duplicated every
+        # answer in the room echo (petrus 28 Aug: "we only want the non
+        # breaks complete version"). Drop the stream lines.
+        lines = [l for l in r.stdout.splitlines()
+                 if not l.lstrip().startswith("...")]
+        return "\n".join(lines).strip()
     except Exception as e:
         return f"(could not reach the brain: {e})"
 
