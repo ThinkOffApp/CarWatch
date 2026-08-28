@@ -61,7 +61,12 @@ def _write_wav(path: str, frames: bytes) -> None:
 # politely answers each fragment, posting overheard speech into the room.
 # The car now only engages when addressed. Overridable per config:
 # voice.wake_words = [] restores always-on; a custom list replaces these.
-WAKE_WORDS = ("gle", "glee", "e-class", "e class", "eclass", "car", "vadelma")
+# PHRASES, not bare nouns (petrus 28 Aug: "I want it to listen with button
+# or wake word, not randomly"): the old bare "car" fired word-boundary on
+# ordinary sentences, which felt exactly like always-on. The Speak button
+# always works regardless of these.
+WAKE_WORDS = ("hello car", "hey car", "hei auto", "moi auto", "hyvä auto",
+              "hello gle", "vadelma")
 
 
 def _wake_words():
