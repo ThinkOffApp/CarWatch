@@ -1,6 +1,5 @@
 # CarWatch
 
-![CarWatch on the phone in the car: OBD live from the car beside Mercedes me cloud data, parked at a Helsinki harbour](docs/img/hero.jpg)
 
 ## 🎬 v0.4: talk to your car — watch the release video
 
