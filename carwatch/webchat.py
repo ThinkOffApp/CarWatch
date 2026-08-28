@@ -275,6 +275,7 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .zone > h2{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);
  display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .zone > h2 .src{color:var(--dim);font-weight:400;letter-spacing:.04em}
+.zone > h2 .src.ok{color:var(--ok)} .zone > h2 .src.warn{color:var(--warn)}
 .badge{margin-left:auto;font:700 10px var(--mono);padding:2px 8px;border-radius:999px;letter-spacing:.06em}
 .badge.live{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .badge.stale{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
@@ -289,11 +290,17 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .gcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding-bottom:2px}
 .gcenter .big{font:800 52px/0.95 var(--mono);color:var(--ink)}
 .gcenter .unit{font:600 13px var(--mono);color:var(--dim)}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+/* parked mode: ignition off means the arc is empty anyway - shrink and dim
+   it so the parked view (the usual one) is the tightest */
+.gauge{transition:max-width .4s ease,opacity .4s ease}
+.gauge.idle{max-width:170px;opacity:.7}
+.gauge.idle .gcenter .big{font-size:32px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:8px;margin-top:10px}
 /* margin-top:auto used to shove these to the bottom of the zone, leaving a
    dead gap under the speed. petrus: 'why is there empty space after speed'.
    Readings now sit directly under the number they belong with. */
-.stat{background:var(--tile);border:1px solid var(--line);border-radius:var(--r2);padding:10px 8px;text-align:center}
+.stat{background:var(--tile);border:1px solid var(--line);border-radius:var(--r2);padding:10px 8px;text-align:center;
+ display:flex;flex-direction:column;justify-content:center;gap:4px}
 .stat .v{font:800 23px/1 var(--mono);color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.bad{color:var(--bad)}
 .stat .k{font-size:10.5px;color:var(--dim);margin-top:4px}
 .stat .k .ic{margin-right:3px}
@@ -309,7 +316,8 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .steer.replay .steerfill{background:#8a94a0}
 .nodev{margin:auto;text-align:center;color:var(--dim);font-size:14px}
 .stat .v.dim{color:var(--ink)}
-.stat .v.long{font-size:14px;line-height:1.25;word-break:break-word}
+/* numbers never wrap mid-value: long values shrink and break only at <br> */
+.stat .v.long{font-size:13.5px;line-height:1.3;white-space:nowrap}
 #mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
 .cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
 .cmds button{flex:1;background:color-mix(in srgb,var(--ok) 8%,var(--tile));color:var(--ink);
@@ -340,8 +348,10 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 #speakBtn.busy{background:var(--warn)}
 @keyframes vpulse{50%{opacity:.55}}
 .vstate{flex:1;min-width:0}
-#vstatus{font-size:14px;font-weight:600}
-#vdetail{font-size:12px;color:var(--dim);white-space:normal;max-height:52px;overflow:auto;margin-top:2px}
+/* one-line voice status; tap the strip to expand the full text */
+#vstatus{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#vdetail{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.vstate.open #vstatus,.vstate.open #vdetail{white-space:normal;overflow:visible;max-height:80px;overflow-y:auto}
 .vbar{height:6px;background:var(--tile);border-radius:3px;margin-top:5px;overflow:hidden}
 .vbar span{display:block;height:100%;width:0;background:var(--blue);border-radius:3px;transition:width .8s}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10;display:none;align-items:center;justify-content:center;padding:20px}
@@ -412,17 +422,17 @@ html.dense .cmds button{padding:8px}
 </div>
 <div class=main>
  <div class=zone>
-  <h2>&#128202; OBD <span class=src>live from the car</span></h2>
+  <h2>&#128202; OBD <span class=src id=obdsrc>live from the car</span></h2>
   <div class=gauge id=herowrap>
    <svg viewBox="0 0 200 108"><path class=gtrack d="M14 102 A 86 86 0 0 1 186 102"/><path class=gfill id=gfill d="M14 102 A 86 86 0 0 1 186 102"/></svg>
-   <div class=gcenter><span class=big id=spd>-</span><span class=unit>km/h</span><span class="badge live" id=obdbadge>live</span></div>
+   <div class=gcenter><span class=big id=spd>-</span><span class=unit>km/h</span></div>
   </div>
   <div class=steer id=steerwrap style="display:none"><div class=steerrow><span class=steerlab id=steerlab>wheel (candidate)</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
  </div>
  <div class=zone>
-  <h2>&#9729;&#65039; Mercedes me <span class=src>cloud</span> <span class="badge cloud">read-only</span></h2>
+  <h2>&#9729;&#65039; Mercedes me <span class=src id=mercsrc>cloud</span> <span class="badge cloud">read-only</span></h2>
   <div class=stats id=merc></div>
   <div id=mnote>loading&#8230;</div>
   <div class=cmds id=cmds></div>
@@ -468,6 +478,7 @@ function renderVoice(s){
 }
 async function pollVoice(){try{const r=await fetch(_q('/api/voice/state'));renderVoice(await r.json());}catch(e){}}
 $('speakBtn').onclick=async()=>{try{await fetch(_q('/api/voice/start'),{method:'POST'});pollVoice();}catch(e){}};
+document.querySelector('.vstate').addEventListener('click',e=>e.currentTarget.classList.toggle('open'));
 setInterval(pollVoice,1500);pollVoice();
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
@@ -568,14 +579,18 @@ async function poll(){
     const fr=Math.min(1,Math.max(0,(isFinite(sv)?sv:0)/240));
     gf.style.strokeDashoffset=String(Math.round(271*(1-fr)))}
    const stale=d.age_s!==undefined&&d.age_s>180;
-   $('obdbadge').className='badge '+(stale?'stale':'live');
-   $('obdbadge').textContent=stale?'stale · ign off':'live · '+(d.age_s!==undefined?Math.round(d.age_s)+'s':'now');
+   const os=$('obdsrc');
+   os.textContent=stale?'car disconnected: ign off':'live from the car · '+(d.age_s!==undefined?Math.round(d.age_s)+'s':'now');
+   os.className='src '+(stale?'warn':'ok');
+   $('herowrap').classList.toggle('idle',stale);
    const dt=Array.isArray(d.dtcs)?d.dtcs.length:0;
    let cells=STAT.map(([k,l,ic])=>{const r=m[k]||{};const n=Number(r.value);
     return '<div class=stat><div class="v '+sev(r.unit||'',k,n)+'">'+(r.value==null?'-':r.value)+(k==='module_voltage'?'<span style=font-size:13px>V</span>':k.includes('pct')?'%':k==='coolant_c'?'&deg;':'')+'</div><div class=k><span class=ic>'+ic+'</span>'+l+'</div></div>';});
    cells.push('<div class=stat><div class="v '+(dt?'warn':'')+'">'+dt+'</div><div class=k><span class=ic>&#9888;</span>fault codes</div></div>');
    $('stats').innerHTML=cells.join('');
   }else{$('spd').textContent='-';const gf=$('gfill');if(gf)gf.style.strokeDashoffset='271';
+   const os=$('obdsrc');os.textContent='car disconnected';os.className='src warn';
+   $('herowrap').classList.add('idle');
    $('stats').innerHTML='<div class=nodev style="grid-column:1/-1">'+((d&&d.error)||'no engine data - ignition off?')+'</div>';}
  }catch(e){}
 }
@@ -626,7 +641,7 @@ function agg(o){if(!o)return null;if(o.all_closed!==undefined)return o.all_close
 // Mercedes items render as the SAME tile component as the OBD stats - one
 // tile system on the whole page (petrus 28 Aug: "unify the design", the Merc
 // section had emojis and text jumping around while OBD sat in neat tiles).
-function mi(e,s,l,cls){const long=String(s).replace(/&[^;]+;/g,'x').length>8?' long':'';
+function mi(e,s,l,cls){const long=String(s).replace(/&[^;]+;|<[^>]+>/g,'x').length>8?' long':'';
  return '<div class=stat><div class="v '+(cls||'')+long+'">'+s+'</div><div class=k><span class=ic>'+e+'</span>'+l+'</div></div>'}
 function renderTabs(){const t=$('tabs');const slugs=Object.keys(CARS);
  t.innerHTML=slugs.map(sl=>'<div class="tab'+(sl===SEL?' on':'')+'" data-car="'+sl+'">'+(CARS[sl].label||sl)+'</div>').join('');
@@ -638,7 +653,10 @@ function renderCar(){const c=CARS[SEL];const g=$('merc');if(!c){g.innerHTML='';r
  const w=agg(c.windows);if(w)p.push(mi('&#129695;',w[0],'windows',w[1]));
  const dr=agg(c.doors);if(dr)p.push(mi('&#128682;',dr[0],'doors',dr[1]));
  if(c.tires_kpa){const tv=Object.values(c.tires_kpa);const sp=Math.max(...tv)-Math.min(...tv);
-  p.push(mi('&#128663;',tv.join('/'),'tyres kPa',sp>20?'warn':'ok'))}
+  // front axle over rear axle - a mid-number wrap (260/255/2|65/255) is
+  // misreadable, petrus 28 Aug
+  const tval=tv.length===4?tv[0]+'/'+tv[1]+'<br>'+tv[2]+'/'+tv[3]:tv.join('/');
+  p.push(mi('&#128663;',tval,tv.length===4?'tyres kPa front/rear':'tyres kPa',sp>20?'warn':'ok'))}
  if(c.ev&&c.ev.soc_pct!==undefined){const pc=c.ev.soc_pct;
   p.push(mi('&#128267;',pc+'%'+(c.ev.range_km?' &middot; '+c.ev.range_km+'km':''),'charge',pc>50?'ok':(pc>20?'warn':'bad')))}
  if(c.fuel&&(c.fuel.level_pct!==undefined||c.fuel.range_km!==undefined))
@@ -662,7 +680,11 @@ async function pollCloud(){
   CARS=s.cars||{};if(!SEL||!CARS[SEL])SEL=Object.keys(CARS)[0]||null;
   renderTabs();renderCar();
   $('mnote').innerHTML=s.stale?('&#9888;&#65039; '+(s.note||'last known, not live')):('from Mercedes cloud '+Math.round((Date.now()/1000)-s.fetched_at)+'s ago &middot; only lock / close-windows can be sent');
- }catch(e){$('mnote').textContent='mercedes cloud unreachable: '+e}
+  const ms=$('mercsrc');
+  if(s.stale){ms.textContent='cloud: last known, not live';ms.className='src warn'}
+  else{ms.textContent='cloud connected';ms.className='src ok'}
+ }catch(e){$('mnote').textContent='mercedes cloud unreachable: '+e;
+  const ms=$('mercsrc');ms.textContent='cloud disconnected';ms.className='src warn'}
 }
 poll();setInterval(poll,2000);
 pollCloud();setInterval(pollCloud,30000);
