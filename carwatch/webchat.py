@@ -302,8 +302,9 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
    grows back the moment the OBD feed goes live. */
 .gauge.idle svg{display:none}
 .gauge.idle{max-width:none;opacity:.8}
-.gauge.idle .gcenter{position:static;flex-direction:row;align-items:baseline;justify-content:center;gap:8px;padding:2px 0 4px}
-.gauge.idle .gcenter .big{font-size:30px}
+.gauge.idle .gcenter{position:static;flex-direction:row;align-items:baseline;justify-content:center;gap:8px;padding:8px 0 12px}
+.gauge.idle .gcenter .big{font-size:28px;color:var(--dim)}
+.gauge.idle .gcenter .unit{color:var(--dim)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:8px;margin-top:10px}
 /* margin-top:auto used to shove these to the bottom of the zone, leaving a
    dead gap under the speed. petrus: 'why is there empty space after speed'.
@@ -407,6 +408,11 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
   padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
  /* .ask's 150px flex-basis is VERTICAL inside the column dock - pin it */
  .bar .ask{flex:0 0 auto}
+ /* every control visible, always: tiles wrap into rows instead of hiding
+    behind an invisible horizontal scroll (petrus 28 Aug: "full screen
+    button disappeared" - Full was the last tile off-screen right) */
+ .ctlrow{flex-wrap:wrap;overflow-x:visible}
+ .ctlrow .ctl{flex:1 1 60px;min-width:54px}
  .links{justify-content:space-between;flex-wrap:wrap;padding:2px 2px 0}
  #out,#answer{bottom:calc(var(--barh,118px) + 12px)}
 }
