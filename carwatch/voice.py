@@ -50,7 +50,13 @@ def transcribe(wav_path: str) -> str:
         print("whisper cli/model missing", file=sys.stderr)
         return ""
     try:
-        cmd = [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt"]
+        cmd = [WHISPER_CLI, "-m", WHISPER_MODEL, "-f", wav_path, "-nt",
+               # Domain vocabulary bias: without it "E10" transcribes as
+               # "eating" (petrus's fuel question, on camera, 28 Aug).
+               "--prompt",
+               "In-car voice assistant, car talk: E10 petrol, E5, gasoline, "
+               "fuel tank, tyre pressure, kPa, hybrid battery, OBD, coolant, "
+               "rpm, AdBlue, Mercedes E-Class, hello car."]
         if WHISPER_MODEL == _MODEL_MULTI:
             # Language is a CONFIG decision, not a constant. The 20.8 pin to
             # fi (auto once flipped a clip to Italian) Finnishes accented
@@ -76,6 +82,11 @@ def transcribe(wav_path: str) -> str:
         # car are practically never under three words.
         if len(words) < 3 or len(stripped) < 10:
             return ""
+        # Deterministic fixes for known mishears the prompt bias alone
+        # does not always catch.
+        stripped = _re.sub(r"\be[- ]?ten\b", "E10", stripped, flags=_re.I)
+        stripped = _re.sub(r"\beating\b(?=\s+(gas|gasoline|petrol|fuel))",
+                           "E10", stripped, flags=_re.I)
         return stripped
     except Exception as e:
         print(f"transcribe failed: {e}", file=sys.stderr)
