@@ -283,3 +283,43 @@ dashcam-firmware endpoint patterns and prints what answers, which fills in
 ## License
 
 AGPL-3.0, like ClawWatch. Copyright (C) 2026 ThinkOff / Petrus Pennanen.
+
+## FAQ - the questions the v0.4 video raises
+
+**Q: How do I actually talk to the car? (v0.4)**
+A: Say a wake phrase ("Hello car", "Hey car", "Hei auto") or tap Speak on the
+phone dashboard, then ask in the same breath. For 30 seconds after an answer
+you can keep talking with no new wake phrase. Everything before the wake
+phrase is discarded, so talking NEAR the car does not summon it.
+
+**Q: Does it really work with no internet? (v0.4)**
+A: Yes - the last question in the release video is asked after switching the
+phone hotspot off on camera. Speech-to-text (whisper.cpp), the model, and the
+voice (piper) all run on the Pi. To be precise about the split: OBD readings and
+owner's-manual answers work fully offline - they never left the car. The
+Mercedes me fuel/tyre/charge tiles are the separate ONLINE enrichment; offline
+they show last-known values, labeled as such. Room transcript posts also
+resume when the connection returns.
+
+**Q: Will it answer its own voice, or the radio? (v0.4)**
+A: Not anymore, and the release video is why we can say that: during filming
+the car heard the tail of its own answer and replied to itself. v0.4 ships the
+echo gate - the mic stays closed until the cabin audio has actually finished,
+and anything that transcribes as a copy of the car's last answer is dropped.
+Ambient speech without a wake phrase is ignored and never posted.
+
+**Q: The answers in the video stutter. Known? (v0.4)**
+A: Known, root-caused after the shoot, fixed the same evening: the Bluetooth
+OBD dongle was polled every ~20 s on the same radio that carries the answer
+audio, and voice answers never set the radio-quiet window the daily brief
+already used (commit b6904bf closes exactly that). The journal-forensics
+write-up is in the commit message; the next filmed answer is the proof run.
+
+**Q: Can it see - dashcam, camera, "look at this light"? (v0.4)**
+A: Not yet. The candidate is benched: Gemma 4 12B (multimodal, vision
+projector already on the SD card) runs at 1.5 tokens/s generation on the Pi -
+too slow to talk with, plausible as a slow background frame-reader. It stays
+a candidate until something is proven on the real car.
+
+
+The full FAQ, including the Hacker News and Reddit questions with named askers, is in [docs/FAQ.md](docs/FAQ.md).
