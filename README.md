@@ -2,6 +2,17 @@
 
 ![CarWatch on the phone in the car: OBD live from the car beside Mercedes me cloud data, parked at a Helsinki harbour](docs/img/hero.jpg)
 
+## 🎬 v0.4: talk to your car — watch the release video
+
+[![The v0.4 release video: three spoken questions answered by the car itself, the last one fully offline](https://github.com/ThinkOffApp/CarWatch/releases/download/v0.4.0/carwatch-v04-poster.jpg)](https://x.com/petruspennanen/status/2093404279000141869)
+
+Three questions asked by voice in the driver's seat and answered out of the
+car's own speakers — status brief, the yellow tyre light with real pressures,
+and E10 fuel from the manual. The last one with the internet switched off.
+[Watch on X](https://x.com/petruspennanen/status/2093404279000141869) ·
+[download the video](https://github.com/ThinkOffApp/CarWatch/releases/download/v0.4.0/carwatch-v04-web.mp4) ·
+[v0.4.0 release notes](https://github.com/ThinkOffApp/CarWatch/releases/tag/v0.4.0)
+
 ![The CarWatch single-screen dashboard: OBD live from the car on the left, Mercedes me cloud data on the right, each labelled](docs/img/dash-screen.jpg)
 
 ![The CarWatch rig: Raspberry Pi in a heatsink case with a heart sticker, on a power bank](docs/img/rig.jpg)
