@@ -181,10 +181,6 @@ class ManualQueryExpansionTests(unittest.TestCase):
             self.assertIn(t, expanded)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ObdDoipTests(unittest.TestCase):
     """The DoIP/UDS message layer, testable without the car present."""
 
@@ -293,7 +289,9 @@ class TestModelSelector(unittest.TestCase):
     def setUp(self):
         import carwatch.models as models_mod
         import carwatch.selfstate as selfstate_mod
+        import carwatch.voicestate as voicestate_mod
         self.m = models_mod
+        self.vs = voicestate_mod
         self.tmp = tempfile.mkdtemp()
         self._orig = {
             "dirs": models_mod.MODEL_DIRS,
@@ -301,8 +299,8 @@ class TestModelSelector(unittest.TestCase):
             "bench": models_mod._bench_map,
             "env": models_mod.ENV_FILE,
             "serving": selfstate_mod.serving_model,
-            "busy": models_mod.brain_busy,
             "state": models_mod.brain_state,
+            "lock": voicestate_mod.BRAIN_LOCK,
         }
         models_mod.MODEL_DIRS = [self.tmp]
         models_mod.ENV_FILE = os.path.join(self.tmp, "brain.env")
@@ -310,8 +308,8 @@ class TestModelSelector(unittest.TestCase):
         models_mod._bench_map = lambda: {
             "small.gguf": {"pp512": 30.0, "tg128": 6.2}}
         selfstate_mod.serving_model = lambda: "small.gguf"
-        models_mod.brain_busy = lambda: False
         models_mod.brain_state = lambda: "ready"
+        voicestate_mod.BRAIN_LOCK = os.path.join(self.tmp, "brain.lock")
         self.addCleanup(self._restore)
 
     def _restore(self):
@@ -321,8 +319,8 @@ class TestModelSelector(unittest.TestCase):
         self.m._bench_map = self._orig["bench"]
         self.m.ENV_FILE = self._orig["env"]
         selfstate_mod.serving_model = self._orig["serving"]
-        self.m.brain_busy = self._orig["busy"]
         self.m.brain_state = self._orig["state"]
+        self.vs.BRAIN_LOCK = self._orig["lock"]
 
     def _gguf(self, name, size):
         path = os.path.join(self.tmp, name)
@@ -357,27 +355,92 @@ class TestModelSelector(unittest.TestCase):
         self.assertIn("too big",
                       self.m.select_model("big")["error"])
 
+    def _patch_run(self, fn):
+        orig_run = self.m.subprocess.run
+        self.m.subprocess.run = fn
+        self.addCleanup(lambda: setattr(self.m.subprocess, "run", orig_run))
+
+    class _R:
+        def __init__(self, rc=0, err=""):
+            self.returncode = rc
+            self.stdout = ""
+            self.stderr = err
+
     def test_select_never_mid_answer_or_mid_load(self):
+        import fcntl
         self._gguf("mid.gguf", 5 * self.GB)
-        self.m.brain_busy = lambda: True
-        self.assertIn("mid-answer", self.m.select_model("mid")["error"])
-        self.m.brain_busy = lambda: False
+        # A REAL held lock, not a stubbed probe: the swap must refuse while
+        # an answer holds voicestate's flock (codexmb's race finding).
+        holder = open(self.vs.BRAIN_LOCK, "w")
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            self.assertIn("mid-answer", self.m.select_model("mid")["error"])
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN)
+            holder.close()
         self.m.brain_state = lambda: "loading"
         self.assertIn("already loading", self.m.select_model("mid")["error"])
+
+    def test_select_holds_lock_across_restart(self):
+        # The never-mid-answer guard must not be probe-and-release: while
+        # systemctl restart runs, a competing ask must find the lock HELD.
+        import fcntl
+        self._gguf("mid.gguf", 5 * self.GB)
+        seen = {}
+
+        def run(cmd, **kw):
+            with open(self.vs.BRAIN_LOCK, "a") as f:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    seen["held"] = False
+                    fcntl.flock(f, fcntl.LOCK_UN)
+                except OSError:
+                    seen["held"] = True
+            return self._R()
+
+        self._patch_run(run)
+        self.assertTrue(self.m.select_model("mid")["ok"])
+        self.assertTrue(seen.get("held"),
+                        "brain lock was not held during the restart")
 
     def test_select_writes_env_and_restarts(self):
         path = self._gguf("mid.gguf", 5 * self.GB)
         calls = []
-
-        class R:
-            returncode = 0
-            stdout = stderr = ""
-
-        orig_run = self.m.subprocess.run
-        self.m.subprocess.run = lambda cmd, **kw: (calls.append(cmd), R())[1]
-        self.addCleanup(lambda: setattr(self.m.subprocess, "run", orig_run))
+        self._patch_run(lambda cmd, **kw: (calls.append(cmd), self._R())[1])
         res = self.m.select_model("mid")
         self.assertTrue(res["ok"], res)
         with open(self.m.ENV_FILE) as f:
             self.assertEqual(f.read().strip(), "BRAIN_MODEL=" + path)
         self.assertEqual(calls[0][-2:], ["restart", "carwatch-brain"])
+
+    def test_select_rolls_back_env_on_restart_failure(self):
+        # A failed restart must not leave the unverified model armed for the
+        # next boot (codexmb's persistence finding).
+        self._gguf("mid.gguf", 5 * self.GB)
+        self._patch_run(lambda cmd, **kw: self._R(rc=1, err="unit hosed"))
+        # Case 1: a previous selection existed - it must come back.
+        with open(self.m.ENV_FILE, "w") as f:
+            f.write("BRAIN_MODEL=/old/model.gguf\n")
+        res = self.m.select_model("mid")
+        self.assertFalse(res["ok"])
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read().strip(), "BRAIN_MODEL=/old/model.gguf")
+        # Case 2: no previous selection - the file must be gone again.
+        os.remove(self.m.ENV_FILE)
+        res = self.m.select_model("mid")
+        self.assertFalse(res["ok"])
+        self.assertFalse(os.path.exists(self.m.ENV_FILE))
+
+    def test_brain_busy_fails_closed(self):
+        # If the lock cannot even be inspected, claim busy - a wrong "idle"
+        # removes the one warning this probe exists to give.
+        self.vs.BRAIN_LOCK = os.path.join(self.tmp, "no-such-dir", "x.lock")
+        self.assertTrue(self.m.brain_busy())
+
+
+# Keep this at the BOTTOM of the file: unittest.main() runs the moment this
+# line executes, so any class defined after it silently never runs in the
+# dependency-free `python3 tests/test_carwatch.py` path (found 28 Aug: the
+# direct run reported 14 tests while the suite held 33).
+if __name__ == "__main__":
+    unittest.main()

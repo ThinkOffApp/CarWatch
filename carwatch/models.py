@@ -80,7 +80,11 @@ def brain_state() -> str:
 
 
 def brain_busy() -> bool:
-    """True while an answer is being generated (voicestate's brain lock)."""
+    """True while an answer is being generated (voicestate's brain lock).
+    Fails CLOSED: if the lock cannot even be inspected, claim busy - a wrong
+    "answering" delays a tap, a wrong "idle" removes the one warning this
+    exists to give (claudemm + codexmb review). The swap path does not rely
+    on this probe; it holds the lock itself."""
     from carwatch import voicestate
     try:
         with open(voicestate.BRAIN_LOCK, "a") as f:
@@ -91,7 +95,7 @@ def brain_busy() -> bool:
             fcntl.flock(f, fcntl.LOCK_UN)
             return False
     except Exception:
-        return False
+        return True
 
 
 def list_models() -> list[dict]:
@@ -147,6 +151,21 @@ def registry() -> dict:
     }
 
 
+def _write_env(content: str | None) -> None:
+    """Atomically set the env file to `content`, or remove it for None."""
+    if content is None:
+        try:
+            os.remove(ENV_FILE)
+        except FileNotFoundError:
+            pass
+        return
+    os.makedirs(os.path.dirname(ENV_FILE), exist_ok=True)
+    tmp = ENV_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(content)
+    os.replace(tmp, ENV_FILE)
+
+
 def select_model(name: str) -> dict:
     name = (name or "").strip()
     models = list_models()
@@ -159,28 +178,49 @@ def select_model(name: str) -> dict:
         return {"ok": False, "error":
                 f"{pick['name']} is {pick['size_gb']}GB - too big for this "
                 f"machine's {round(_mem_total() / 1e9, 1)}GB RAM with headroom"}
-    if brain_busy():
-        return {"ok": False,
-                "error": "brain is mid-answer - try again when it finishes"}
-    if brain_state() == "loading":
-        return {"ok": False, "error": "a model is already loading - wait for it"}
-    os.makedirs(os.path.dirname(ENV_FILE), exist_ok=True)
-    tmp = ENV_FILE + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(f"BRAIN_MODEL={pick['path']}\n")
-    os.replace(tmp, ENV_FILE)
-    # carwatch-brain is a DIFFERENT unit from the one webchat runs in, so
-    # this cannot self-kill; sudo -n so a missing sudoers rule fails loud
-    # instead of hanging the request on a password prompt.
+    # Take voicestate's brain lock and HOLD it across the env write and the
+    # restart, so no answer can start in the gap and then be killed by
+    # systemd (codexmb's review: a probe-and-release check is a race, not a
+    # guard). An ask arriving meanwhile blocks on this same lock and then
+    # meets the loading brain, which the dash shows honestly.
+    from carwatch import voicestate
+    lock = open(voicestate.BRAIN_LOCK, "a")
     try:
-        r = subprocess.run(
-            ["sudo", "-n", "systemctl", "restart", "carwatch-brain"],
-            capture_output=True, text=True, timeout=30)
-    except Exception as e:
-        return {"ok": False, "error": f"restart failed: {e}"}
-    if r.returncode != 0:
-        return {"ok": False, "error":
-                "restart failed: " + (r.stderr or r.stdout).strip()[:300]}
-    return {"ok": True, "loading": pick["name"],
-            "note": "old model unloading, new one loading - "
-                    "poll /api/models until state=ready"}
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return {"ok": False,
+                    "error": "brain is mid-answer - try again when it finishes"}
+        if brain_state() == "loading":
+            return {"ok": False,
+                    "error": "a model is already loading - wait for it"}
+        # Remember the previous selection so a failed restart does not leave
+        # an unverified model armed for the next boot (codexmb's review).
+        try:
+            with open(ENV_FILE) as f:
+                prev = f.read()
+        except OSError:
+            prev = None
+        _write_env(f"BRAIN_MODEL={pick['path']}\n")
+        # carwatch-brain is a DIFFERENT unit from the one webchat runs in, so
+        # this cannot self-kill; sudo -n so a missing sudoers rule fails loud
+        # instead of hanging the request on a password prompt.
+        try:
+            r = subprocess.run(
+                ["sudo", "-n", "systemctl", "restart", "carwatch-brain"],
+                capture_output=True, text=True, timeout=30)
+        except Exception as e:
+            _write_env(prev)
+            return {"ok": False, "error": f"restart failed: {e}"}
+        if r.returncode != 0:
+            _write_env(prev)
+            return {"ok": False, "error":
+                    "restart failed: " + (r.stderr or r.stdout).strip()[:300]}
+        return {"ok": True, "loading": pick["name"],
+                "note": "old model unloading, new one loading - "
+                        "poll /api/models until state=ready"}
+    finally:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+        finally:
+            lock.close()
