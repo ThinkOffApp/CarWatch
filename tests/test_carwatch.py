@@ -331,7 +331,7 @@ class TestModelSelector(unittest.TestCase):
 
     def test_registry_filters_mmprojs_and_sizes_honestly(self):
         self._gguf("small.gguf", 1 * self.GB)
-        self._gguf("big.gguf", 15 * self.GB)
+        self._gguf("big.gguf", 16 * self.GB)
         self._gguf("vision-mmproj.gguf", 1 * self.GB)
         with open(os.path.join(self.tmp, "note.txt"), "w") as f:
             f.write("not a model")
@@ -347,7 +347,7 @@ class TestModelSelector(unittest.TestCase):
 
     def test_select_refusals(self):
         self._gguf("small.gguf", 1 * self.GB)
-        self._gguf("big.gguf", 15 * self.GB)
+        self._gguf("big.gguf", 16 * self.GB)
         self.assertIn("no such model",
                       self.m.select_model("ghost")["error"])
         self.assertIn("already the running brain",

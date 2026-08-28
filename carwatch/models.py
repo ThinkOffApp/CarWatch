@@ -28,9 +28,12 @@ ENV_FILE = os.path.expanduser("~/.config/carwatch/brain.env")
 # machine instead of quoting someone else's numbers.
 BENCH_FILE = os.path.expanduser("~/.config/carwatch/model-bench.json")
 BRAIN_HEALTH = "http://127.0.0.1:8081/health"
-# The whole file must be resident to generate at full speed; leave room for
-# the OS, whisper, and every other service on the box.
-RAM_HEADROOM = int(2.5 * 1024 ** 3)
+# Headroom calibrated against ground truth, not a guessed margin: the 14.3GB
+# (15.34e9 byte) Qwen 35B demonstrably runs as the brain on the 16GB Pi with
+# every CarWatch service up, so the fit-check must pass it - 2.5GB headroom
+# refused the car's own working model. 1GB still refuses anything bigger
+# than what this box has ever loaded.
+RAM_HEADROOM = 1024 ** 3
 
 
 def _mem_total() -> int:
