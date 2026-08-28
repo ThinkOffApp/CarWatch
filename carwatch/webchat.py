@@ -222,50 +222,88 @@ UNIFIED_PAGE = """<!doctype html><html><head><meta charset=utf-8>
 <link rel=manifest href=/manifest.webmanifest>
 <link rel=apple-touch-icon href=/icon.png>
 <title>CarWatch</title><style>
+/* SKIN TOKENS. Every surface, accent, radius and font on this page comes
+   from these variables, so a skin is ONE override block on html[data-skin].
+   petrus 28 Aug: "make it skinnable - gamers version, hippy version, minimal
+   version to start with". Add a skin: copy a block, change values, append
+   its name to SKINS in the script. */
 :root{color-scheme:dark;
+ --bg0:#16303c; --bg1:#091016;
+ --card:#13232c; --card2:#0d161d; --tile:#0e171e;
  --line:#20313c; --ink:#e8f1f5; --dim:#8ca1ad;
  --ok:#40d98b; --warn:#ffc857; --bad:#ff667d; --blue:#62c7ff;
+ --r:16px; --r2:12px; --glow:none;
+ --font:-apple-system,system-ui,sans-serif;
  --mono:ui-monospace,'SF Mono',Menlo,monospace}
+html[data-skin=gamer]{color-scheme:dark;
+ --bg0:#1b0330; --bg1:#06000c;
+ --card:#150a26; --card2:#0b0415; --tile:#140926;
+ --line:#41246b; --ink:#efe6ff; --dim:#9583c2;
+ --ok:#39ff9c; --warn:#ffe14d; --bad:#ff3d81; --blue:#d24dff;
+ --r:8px; --r2:6px; --glow:0 0 16px rgba(210,77,255,.5);
+ --font:'Segoe UI',system-ui,sans-serif}
+html[data-skin=hippy]{color-scheme:dark;
+ --bg0:#59331d; --bg1:#26120a;
+ --card:#41281a; --card2:#2e1a0e; --tile:#372112;
+ --line:#7a4c2a; --ink:#ffefd6; --dim:#cfa87f;
+ --ok:#a4d977; --warn:#ffbb55; --bad:#ff8272; --blue:#ffab57;
+ --r:28px; --r2:20px; --glow:none;
+ --font:Georgia,'Times New Roman',serif}
+html[data-skin=minimal]{color-scheme:light;
+ --bg0:#ffffff; --bg1:#f3f5f7;
+ --card:#ffffff; --card2:#ffffff; --tile:#f5f7f9;
+ --line:#dbe1e7; --ink:#1d2833; --dim:#78848f;
+ --ok:#0c8a4c; --warn:#a86400; --bad:#c22f3e; --blue:#0b6bcb;
+ --r:10px; --r2:8px; --glow:none;
+ --font:-apple-system,system-ui,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:var(--ink);
- font:15px/1.35 -apple-system,system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;padding:8px;gap:8px}
+body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);color:var(--ink);
+ font:15px/1.35 var(--font);overflow:hidden;display:flex;flex-direction:column;padding:8px;gap:8px}
 .top{display:flex;align-items:center;gap:10px;flex:0 0 auto}
 .brand{font-size:17px;font-weight:800;letter-spacing:.02em;white-space:nowrap}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab{padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:#0e171e;
+.tab{padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--tile);
  color:var(--dim);font-weight:700;font-size:14px;cursor:pointer;user-select:none}
-.tab.on{border-color:var(--blue);color:var(--blue);background:#12222c}
+.tab.on{border-color:var(--blue);color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,var(--tile))}
 #status{margin-left:auto;font:11.5px var(--mono);color:var(--dim);text-align:right;line-height:1.3}
 #status b{color:var(--ok)}
 .main{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
 @media (max-width:760px){.main{grid-template-columns:1fr;grid-auto-rows:auto}}
-.zone{background:linear-gradient(160deg,#13232c,#0d161d);border:1px solid var(--line);
- border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.zone{background:linear-gradient(160deg,var(--card),var(--card2));border:1px solid var(--line);
+ border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .zone > h2{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--blue);
  display:flex;align-items:center;gap:8px;margin-bottom:2px}
 .zone > h2 .src{color:var(--dim);font-weight:400;letter-spacing:.04em}
 .badge{margin-left:auto;font:700 10px var(--mono);padding:2px 8px;border-radius:999px;letter-spacing:.06em}
-.badge.live{background:#123024;color:var(--ok)} .badge.stale{background:#2c2410;color:var(--warn)}
-.badge.cloud{background:#102431;color:var(--blue)}
-.hero{display:flex;align-items:baseline;gap:10px;margin:8px 0 2px}
-.hero .big{font:800 64px/0.9 var(--mono);color:var(--ok)}
-.hero .unit{font:600 18px var(--mono);color:var(--dim)}
-.hero .lbl{font-size:12px;color:var(--dim);margin-left:auto;align-self:flex-end}
+.badge.live{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.badge.stale{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.badge.cloud{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}
+/* Speed gauge (codex's layout, 27 Aug: one dominant value in an arc with a
+   status pill under it). The arc is pure SVG driven by stroke-dashoffset. */
+.gauge{position:relative;width:100%;max-width:280px;margin:4px auto 0}
+.gauge svg{width:100%;display:block}
+.gtrack{fill:none;stroke:var(--tile);stroke-width:11;stroke-linecap:round}
+.gfill{fill:none;stroke:var(--blue);stroke-width:11;stroke-linecap:round;stroke-dasharray:271;stroke-dashoffset:271;
+ transition:stroke-dashoffset .6s ease;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--blue) 45%,transparent))}
+.gcenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;padding-bottom:2px}
+.gcenter .big{font:800 52px/0.95 var(--mono);color:var(--ink)}
+.gcenter .unit{font:600 13px var(--mono);color:var(--dim)}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 /* margin-top:auto used to shove these to the bottom of the zone, leaving a
    dead gap under the speed. petrus: 'why is there empty space after speed'.
    Readings now sit directly under the number they belong with. */
-.stat{background:#0e171e;border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+.stat{background:var(--tile);border:1px solid var(--line);border-radius:var(--r2);padding:10px 8px;text-align:center}
 .stat .v{font:800 23px/1 var(--mono);color:var(--ok)} .stat .v.warn{color:var(--warn)} .stat .v.bad{color:var(--bad)}
 .stat .k{font-size:10.5px;color:var(--dim);margin-top:4px}
+.stat .k .ic{margin-right:3px}
 .steer{margin:6px 0 10px}
 .steerrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
 .steerlab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
 .steerval{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
-.steerbar{position:relative;height:12px;border-radius:7px;background:#0d1217;border:1px solid #223}
-.steerfill{position:absolute;top:0;bottom:0;width:0;background:#5ab0ff;opacity:.9;transition:left .12s linear,width .12s linear}
-.steerzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#fff;opacity:.35}
+.steerbar{position:relative;height:12px;border-radius:7px;background:var(--tile);border:1px solid var(--line)}
+.steerfill{position:absolute;top:0;bottom:0;width:0;background:var(--blue);opacity:.9;transition:left .12s linear,width .12s linear}
+.steerzero{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--ink);opacity:.35}
 .steer.stale .steerval,.steer.stale .steerfill{opacity:.3}
 .steer.replay .steerlab{color:#ffb020}
 .steer.replay .steerfill{background:#8a94a0}
@@ -277,45 +315,46 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 .mi .l{font-size:10.5px;color:var(--dim);margin-top:1px}
 #mnote{font:11px var(--mono);color:var(--dim);margin-top:2px}
 .cmds{display:flex;gap:8px;margin-top:auto;padding-top:10px}
-.cmds button{flex:1;background:#12222c;color:var(--ink);border:1px solid #2a4a3a;border-radius:12px;
- padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+.cmds button{flex:1;background:color-mix(in srgb,var(--ok) 8%,var(--tile));color:var(--ink);
+ border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));border-radius:var(--r2);
+ padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font)}
 .cmds button:active{transform:scale(.98)} .cmds button:disabled{opacity:.6}
 .cmds button.ok{border-color:var(--ok);color:var(--ok)} .cmds button.bad{border-color:var(--bad);color:var(--bad)}
 .bar{flex:0 0 auto;display:flex;align-items:center;gap:6px}
 .ctlrow{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .ctlrow::-webkit-scrollbar{display:none}
 .ctl{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:60px;
- padding:8px 6px;background:#0e171e;border:1px solid var(--line);border-radius:12px;cursor:pointer;user-select:none}
+ padding:8px 6px;background:var(--tile);border:1px solid var(--line);border-radius:var(--r2);cursor:pointer;user-select:none}
 .ctl:active{transform:scale(.96)} .ctl.on{border-color:var(--ok)} .ctl.on .t{color:var(--ok)} .ctl.busy{border-color:var(--warn);opacity:.7}
 .ctl .i{font-size:19px} .ctl .t{font-size:10.5px;color:var(--dim);font-weight:700}
 .ask{flex:1 1 150px;display:flex;gap:6px;min-width:140px}
-.ask input{flex:1;padding:10px;border-radius:12px;border:1px solid #2a3039;background:#0e171e;color:inherit;font-size:14px}
-.ask button{padding:10px 16px;border:0;border-radius:12px;background:var(--blue);color:#03121b;font-weight:800}
+.ask input{flex:1;padding:10px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:inherit;font-size:14px}
+.ask button{padding:10px 16px;border:0;border-radius:var(--r2);background:var(--blue);color:var(--bg1);font-weight:800;box-shadow:var(--glow)}
 .links{flex:0 0 auto;font:11px var(--mono);color:var(--dim);display:flex;gap:12px;padding-left:4px}
 .links a{color:var(--blue);text-decoration:none}
-#out{position:fixed;left:8px;right:8px;bottom:8px;background:#0e171e;border:1px solid var(--blue);border-radius:12px;
- padding:10px 12px;font:12px var(--mono);color:#9fe8bd;white-space:pre-wrap;max-height:40vh;overflow:auto;display:none;z-index:5}
-#answer{position:fixed;left:8px;right:8px;bottom:8px;background:#181c22;border:1px solid var(--blue);border-radius:12px;
+#out{position:fixed;left:8px;right:8px;bottom:8px;background:var(--tile);border:1px solid var(--blue);border-radius:var(--r2);
+ padding:10px 12px;font:12px var(--mono);color:var(--ok);white-space:pre-wrap;max-height:40vh;overflow:auto;display:none;z-index:5}
+#answer{position:fixed;left:8px;right:8px;bottom:8px;background:var(--card);border:1px solid var(--blue);border-radius:var(--r2);
  padding:10px 12px;font-size:13px;max-height:40vh;overflow:auto;display:none;z-index:5}
-.voice{display:flex;gap:12px;align-items:center;padding:8px 10px;background:#0d141c;border-bottom:1px solid #1d2733}
-#speakBtn{font-size:17px;padding:13px 20px;border-radius:14px;border:none;font-weight:700;color:#fff;
- background:#1c6dd0;min-width:132px;flex:none}
-#speakBtn.armed{background:#0d8a4d;animation:vpulse 1.2s infinite}
-#speakBtn.busy{background:#8a5a0d}
+.voice{display:flex;gap:12px;align-items:center;padding:8px 10px;background:var(--card2);border-bottom:1px solid var(--line)}
+#speakBtn{font-size:17px;padding:13px 20px;border-radius:var(--r2);border:none;font-weight:700;color:var(--bg1);
+ background:var(--blue);min-width:132px;flex:none;box-shadow:var(--glow)}
+#speakBtn.armed{background:var(--ok);animation:vpulse 1.2s infinite}
+#speakBtn.busy{background:var(--warn)}
 @keyframes vpulse{50%{opacity:.55}}
 .vstate{flex:1;min-width:0}
 #vstatus{font-size:14px;font-weight:600}
-#vdetail{font-size:12px;color:#9ab;white-space:normal;max-height:52px;overflow:auto;margin-top:2px}
-.vbar{height:6px;background:#1d2733;border-radius:3px;margin-top:5px;overflow:hidden}
-.vbar span{display:block;height:100%;width:0;background:#1c6dd0;border-radius:3px;transition:width .8s}
+#vdetail{font-size:12px;color:var(--dim);white-space:normal;max-height:52px;overflow:auto;margin-top:2px}
+.vbar{height:6px;background:var(--tile);border-radius:3px;margin-top:5px;overflow:hidden}
+.vbar span{display:block;height:100%;width:0;background:var(--blue);border-radius:3px;transition:width .8s}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10;display:none;align-items:center;justify-content:center;padding:20px}
 #modal.on{display:flex}
-.mbox{background:#101b24;border:1px solid var(--blue);border-radius:16px;padding:18px;max-width:420px;width:100%}
+.mbox{background:var(--card);border:1px solid var(--blue);border-radius:var(--r);padding:18px;max-width:420px;width:100%}
 .mbox p{white-space:pre-wrap;font-size:14px;margin-bottom:12px}
-.mbox input{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3039;background:#0e171e;color:var(--ink);font-size:14px;margin-bottom:12px;display:none}
+.mbox input{width:100%;padding:10px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:var(--ink);font-size:14px;margin-bottom:12px;display:none}
 .mrow{display:flex;gap:8px;justify-content:flex-end}
-.mrow button{padding:10px 18px;border-radius:10px;border:1px solid var(--line);background:#0e171e;color:var(--ink);font-weight:700;font-size:14px}
-.mrow button.pri{background:var(--blue);border-color:var(--blue);color:#03121b}
+.mrow button{padding:10px 18px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:var(--ink);font-weight:700;font-size:14px;font-family:var(--font)}
+.mrow button.pri{background:var(--blue);border-color:var(--blue);color:var(--bg1)}
 /* Phone layout: the page SCROLLS (nothing is clipped off the bottom any
    more), the voice strip stays stuck to the top, and the control bar is a
    fixed dock so lock doors / Ask stay reachable with or without fullscreen.
@@ -328,8 +367,8 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  .cmds{margin-top:8px}
  /* compact so the WHOLE dash fits one tall-phone screen (petrus 27 Aug:
     "it needs scrolling on my s26 ultra now") - scroll stays as fallback */
- .hero{margin:4px 0 0}
- .hero .big{font-size:44px}
+ .gauge{max-width:250px}
+ .gcenter .big{font-size:44px}
  .stats{gap:6px;margin-top:6px}
  .stat{padding:7px 6px}
  .stat .v{font-size:19px}
@@ -345,13 +384,26 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
  .ask button{padding:8px 14px}
  .voice{position:sticky;top:0;z-index:5;border:1px solid #1d2733;border-radius:12px}
  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;flex-direction:column;align-items:stretch;
-  background:rgba(9,16,22,.96);border-top:1px solid var(--line);
+  background:color-mix(in srgb,var(--bg1) 96%,transparent);border-top:1px solid var(--line);
   padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
  /* .ask's 150px flex-basis is VERTICAL inside the column dock - pin it */
  .bar .ask{flex:0 0 auto}
  .links{justify-content:space-between;flex-wrap:wrap;padding:2px 2px 0}
  #out,#answer{bottom:calc(var(--barh,118px) + 12px)}
 }
+/* auto-compact: script adds html.dense only when the phone layout would
+   overflow one screen, so the no-scroll guarantee holds on any device/skin */
+html.dense .gauge{max-width:225px}
+html.dense .gcenter .big{font-size:38px}
+html.dense .zone{padding:8px 10px}
+html.dense .stats{gap:5px;margin-top:5px}
+html.dense .stat{padding:6px 5px}
+html.dense .stat .v{font-size:17px}
+html.dense .mgrid{gap:5px;margin:5px 0}
+html.dense .mi .e{font-size:21px}
+html.dense .voice{padding:5px 8px}
+html.dense #speakBtn{padding:8px 14px;font-size:15px}
+html.dense .cmds button{padding:8px}
 </style></head><body>
 <div class=top>
  <div class=brand>&#128663; CarWatch</div>
@@ -368,8 +420,11 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
 </div>
 <div class=main>
  <div class=zone>
-  <h2>&#128202; OBD <span class=src>live from the car</span> <span class="badge live" id=obdbadge>live</span></h2>
-  <div class=hero id=herowrap><span class=big id=spd>-</span><span class=unit>km/h</span><span class=lbl>vehicle speed</span></div>
+  <h2>&#128202; OBD <span class=src>live from the car</span></h2>
+  <div class=gauge id=herowrap>
+   <svg viewBox="0 0 200 108"><path class=gtrack d="M14 102 A 86 86 0 0 1 186 102"/><path class=gfill id=gfill d="M14 102 A 86 86 0 0 1 186 102"/></svg>
+   <div class=gcenter><span class=big id=spd>-</span><span class=unit>km/h</span><span class="badge live" id=obdbadge>live</span></div>
+  </div>
   <div class=steer id=steerwrap style="display:none"><div class=steerrow><span class=steerlab id=steerlab>wheel (candidate)</span><span class=steerval id=steerval>-</span></div><div class=steerbar><i class=steerzero></i><span class=steerfill id=steerfill></span></div></div>
   <div class=stats id=stats></div>
   <div class=nodev id=nodev style="display:none">This car has no on&#8209;board CarWatch device.<br>OBD is only for the car the Raspberry Pi rides in.</div>
@@ -391,6 +446,7 @@ body{background:radial-gradient(circle at 30% -10%,#16303c 0,#091016 55%);color:
   <div class=ctl data-act=brief><span class=i>&#128483;&#65039;</span><span class=t>Brief</span></div>
   <div class=ctl data-act=pair><span class=i>&#128279;</span><span class=t>Pair</span></div>
   <div class=ctl data-act=update><span class=i>&#11014;&#65039;</span><span class=t>Update</span></div>
+  <div class=ctl data-act=skin><span class=i>&#127912;</span><span class=t id=skinT>Skin</span></div>
   <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
  </div>
  <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
@@ -450,9 +506,25 @@ document.addEventListener('fullscreenchange',()=>$('fullCtl').classList.toggle('
 document.addEventListener('click',()=>{if(wantFull&&!document.fullscreenElement)enterFull()},true);
 function sizeBar(){const b=document.querySelector('.bar');if(!b)return;
  document.documentElement.style.setProperty('--barh',(getComputedStyle(b).position==='fixed'?b.offsetHeight:0)+'px')}
-window.addEventListener('resize',sizeBar);sizeBar();
+// one-screen guarantee: if the phone layout overflows the viewport, add the
+// dense class (see html.dense rules) and re-measure once it applies
+function densify(){const d=document.documentElement;d.classList.remove('dense');
+ if(window.matchMedia('(max-width:760px)').matches&&d.scrollHeight>window.innerHeight+2)d.classList.add('dense')}
+// SKINS: one token block per look; cycle with the dock's Skin button
+const SKINS=['carbon','gamer','hippy','minimal'];
+let curSkin='carbon';try{curSkin=localStorage.getItem('cwSkin')||'carbon'}catch(e){}
+if(!SKINS.includes(curSkin))curSkin='carbon';
+function applySkin(s){curSkin=s;document.documentElement.setAttribute('data-skin',s);
+ try{localStorage.setItem('cwSkin',s)}catch(e){}
+ const t=$('skinT');if(t)t.textContent=s.charAt(0).toUpperCase()+s.slice(1);
+ setTimeout(()=>{sizeBar();densify()},60)}
+function cycleSkin(){applySkin(SKINS[(SKINS.indexOf(curSkin)+1)%SKINS.length])}
+applySkin(curSkin);
+window.addEventListener('resize',()=>{sizeBar();densify()});sizeBar();
+setTimeout(densify,400);setTimeout(densify,1600);
 async function doAct(act){
  if(act==='full')return toggleFull();
+ if(act==='skin')return cycleSkin();
  if(act==='listen')return toggleListen();
  if(act==='speak')return speak();
  const a=ACT[act];if(!a)return;const el=document.querySelector('[data-act='+act+']');
@@ -488,8 +560,8 @@ function sev(u,k,n){if(!isFinite(n))return'';if(u&&u.indexOf('C')>=0&&k==='coola
  if(k.includes('battery'))return n<10?'bad':n<20?'warn':'';return''}
 function flat(d){const o={};if(!d||!d.groups)return o;
  Object.values(d.groups).forEach(v=>Object.values(v).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
-const STAT=[['engine_rpm','engine rpm'],['hybrid_battery_pct','hybrid battery'],['module_voltage','12V system'],
- ['coolant_c','coolant'],['engine_load_pct','engine load']];
+const STAT=[['engine_rpm','engine rpm','&#9881;'],['hybrid_battery_pct','hybrid battery','&#128267;'],
+ ['module_voltage','12V system','&#9889;'],['coolant_c','coolant','&#127777;'],['engine_load_pct','engine load','&#128200;']];
 async function poll(){
  try{const s=await(await F('/api/status')).json();
   if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>open from the app link or Tailscale</span>';}
@@ -500,15 +572,19 @@ async function poll(){
   if(d&&d.groups&&Object.keys(d.groups).length){
    const m=flat(d);const spd=m.speed_kmh;
    $('spd').textContent=spd&&spd.value!=null?spd.value:'-';
+   const gf=$('gfill');if(gf){const sv=Number(spd&&spd.value);
+    const fr=Math.min(1,Math.max(0,(isFinite(sv)?sv:0)/240));
+    gf.style.strokeDashoffset=String(Math.round(271*(1-fr)))}
    const stale=d.age_s!==undefined&&d.age_s>180;
    $('obdbadge').className='badge '+(stale?'stale':'live');
    $('obdbadge').textContent=stale?'stale · ign off':'live · '+(d.age_s!==undefined?Math.round(d.age_s)+'s':'now');
    const dt=Array.isArray(d.dtcs)?d.dtcs.length:0;
-   let cells=STAT.map(([k,l])=>{const r=m[k]||{};const n=Number(r.value);
-    return '<div class=stat><div class="v '+sev(r.unit||'',k,n)+'">'+(r.value==null?'-':r.value)+(k==='module_voltage'?'<span style=font-size:13px>V</span>':k.includes('pct')?'%':k==='coolant_c'?'&deg;':'')+'</div><div class=k>'+l+'</div></div>';});
-   cells.push('<div class=stat><div class="v '+(dt?'warn':'')+'">'+dt+'</div><div class=k>fault codes</div></div>');
+   let cells=STAT.map(([k,l,ic])=>{const r=m[k]||{};const n=Number(r.value);
+    return '<div class=stat><div class="v '+sev(r.unit||'',k,n)+'">'+(r.value==null?'-':r.value)+(k==='module_voltage'?'<span style=font-size:13px>V</span>':k.includes('pct')?'%':k==='coolant_c'?'&deg;':'')+'</div><div class=k><span class=ic>'+ic+'</span>'+l+'</div></div>';});
+   cells.push('<div class=stat><div class="v '+(dt?'warn':'')+'">'+dt+'</div><div class=k><span class=ic>&#9888;</span>fault codes</div></div>');
    $('stats').innerHTML=cells.join('');
-  }else{$('spd').textContent='-';$('stats').innerHTML='<div class=nodev style="grid-column:1/-1">'+((d&&d.error)||'no engine data - ignition off?')+'</div>';}
+  }else{$('spd').textContent='-';const gf=$('gfill');if(gf)gf.style.strokeDashoffset='271';
+   $('stats').innerHTML='<div class=nodev style="grid-column:1/-1">'+((d&&d.error)||'no engine data - ignition off?')+'</div>';}
  }catch(e){}
 }
 // Steering: petrus turns the wheel to see that the feed is alive, and a
