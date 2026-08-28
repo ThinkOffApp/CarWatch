@@ -177,8 +177,19 @@ def _open_mic():
            "-t", "raw"]
     # Priority: USB speakerphone, then BT headset SCO (the headset is both
     # directions since 20.8., petrus removed the old USB mic), then default.
+    # CARWATCH_MIC overrides: "bt" prefers the headset SCO even with a USB
+    # mic attached (video config, 28 Aug: XM5 is THE mic, the SF-558 stays
+    # plugged purely as the bench recorder), "usb" forces USB, unset/auto
+    # keeps the priority above.
+    pref = (os.environ.get("CARWATCH_MIC") or "auto").lower()
     usb = _usb_audio_device("capture")
-    mac = None if usb else _bt_pcm_mac("hfpag/source")
+    mac = _bt_pcm_mac("hfpag/source")
+    if pref == "bt" and mac:
+        usb = None
+    elif pref == "usb":
+        mac = None
+    elif usb:
+        mac = None
     if usb:
         cmd[1:1] = ["-D", usb]
         print(f"mic: USB audio {usb}", flush=True)
