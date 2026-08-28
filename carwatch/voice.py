@@ -93,7 +93,7 @@ def ask_gle(question: str) -> str:
     try:
         r = subprocess.run(
             ["python3", "-m", "carwatch.ask", question],
-            capture_output=True, text=True, timeout=1200,
+            capture_output=True, text=True, timeout=420,
             cwd=os.path.expanduser("~/CarWatch"),
             env={**os.environ, "CARWATCH_STATE": os.path.expanduser("~/.carwatch")})
         return r.stdout.strip()

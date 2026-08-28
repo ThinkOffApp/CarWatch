@@ -91,9 +91,21 @@ def _addressed(text: str, wake) -> bool:
     'car' hide inside 'caramelli' (20.8.) so words stay whole - but the raw
     transcript carries punctuation ("Hello, Kar, ...") that broke phrase
     matching, so punctuation collapses to spaces before the search."""
+    return _wake_cut(text, wake) is not None
+
+
+def _wake_cut(text: str, wake):
+    """Find the wake phrase and return only what comes AFTER it - that is
+    the question. Everything spoken before the wake phrase is preamble
+    (petrus 28 Aug: rehearsing the pitch put the whole intro into one VAD
+    utterance and the full ramble went to the brain as the question).
+    Returns None when no wake phrase is present."""
     norm = re.sub(r"[^\wäöå]+", " ", text.lower()).strip()
     pat = re.compile(r"\b(" + "|".join(re.escape(w) for w in wake) + r")\b")
-    return bool(pat.search(norm))
+    m = pat.search(norm)
+    if not m:
+        return None
+    return norm[m.end():].strip()
 
 
 def handle_utterance(frames: bytes, on_text):
@@ -116,15 +128,25 @@ def handle_utterance(frames: bytes, on_text):
         by_button = voicestate.armed()
         if by_button:
             voicestate.consume_arm()
-        if not by_button and wake and not _addressed(text, wake):
-            # Not addressed to the car: journal only, dash stays QUIET.
-            # (Was a visible "heard you" note; petrus 28 Aug wants unarmed
-            # hearing invisible - the strip reacting to room chatter read
-            # as always-on surveillance.)
-            print(f"(ignored, no wake word): {text[:60]}", flush=True)
-            voicestate.set_state("idle")
-            lights.signal("idle")
-            return None
+        if not by_button and wake:
+            cut = _wake_cut(text, wake)
+            if cut is None:
+                # Not addressed to the car: journal only, dash stays QUIET.
+                # (petrus 28 Aug wants unarmed hearing invisible - the strip
+                # reacting to room chatter read as always-on surveillance.)
+                print(f"(ignored, no wake word): {text[:60]}", flush=True)
+                voicestate.set_state("idle")
+                lights.signal("idle")
+                return None
+            if len(cut.split()) < 2:
+                # Wake phrase alone, no question in the same breath.
+                print(f"(wake heard, no question): {text[:60]}", flush=True)
+                voicestate.set_state(
+                    "idle", note="heard the wake phrase - ask the question "
+                    "in the same breath")
+                lights.signal("idle")
+                return None
+            text = cut  # the question starts AFTER the wake phrase
         print(f"HEARD: {text}", flush=True)
         voicestate.set_state("heard", text=text)
         result = on_text(text)
@@ -254,6 +276,9 @@ def _speak(text: str) -> bool:
 
 
 def listen(threshold: float, on_text) -> None:
+    # A restart mid-exchange must not leave a zombie "answering" on the
+    # dash (petrus 28 Aug: 'why is it "answering"? I did not ask anything')
+    voicestate.set_state("idle")
     """Stream the mic forever; emit each detected utterance to on_text.
 
     Resilient to transient arecord failures (EINTR, brief device hiccups):

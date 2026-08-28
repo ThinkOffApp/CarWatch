@@ -225,9 +225,19 @@ def _think(question: str, asker: str) -> str:
     except Exception:
         facts["live engine readings"] = ("none cached yet - say so instead "
                                          "of estimating")
-    facts["voice"] = ("you have working ears: a continuous on-board listener "
-                      "(whisper) hears speech near your microphone and routes "
-                      "it to you")
+    # State the REAL wake phrases from the listener itself: without this the
+    # model invented "Hey E Class" from room chatter (28 Aug) and told
+    # petrus a wake phrase that does not exist.
+    try:
+        from carwatch.listen import WAKE_WORDS as _WAKE
+        _wake_str = ", ".join(f'"{w}"' for w in _WAKE[:4])
+    except Exception:
+        _wake_str = '"hello car"'
+    facts["voice"] = ("you have working ears: an on-board listener hears "
+                      "speech near your microphone, but you act ONLY when "
+                      f"addressed with a wake phrase ({_wake_str} and "
+                      "variants) or when the dash Speak button arms you; "
+                      "the question is whatever follows the wake phrase")
     # Manufacturer-cloud snapshot: the SAME numbers the dash's Mercedes me
     # panel shows. Without this the voice path denied knowing battery, fuel
     # or tyres while the phone dash displayed them (petrus's live test,
