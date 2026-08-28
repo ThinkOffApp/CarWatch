@@ -51,7 +51,15 @@ def build_system_prompt(
 
     rules = RULES.format(identity=identity or DEFAULT_IDENTITY)
     lines = [rules, "", "KNOWN FACTS (the only current state you may assert):"]
-    for k, v in facts.items():
+    # Car state first, the Pi's own vitals last: models lead with whatever
+    # is listed first, and a status answer that opens with CPU fans instead
+    # of fuel and tyres flattens the whole point of a car that talks
+    # (petrus's video script, 28 Aug).
+    _computerish = ("your temperature", "fan", "memory", "uptime", "brain",
+                    "disk", "network", "cpu")
+    for k, v in sorted(facts.items(),
+                       key=lambda kv: any(t in kv[0].lower()
+                                          for t in _computerish)):
         lines.append(f"- {k}: {v}")
 
     if cannot_sense:
