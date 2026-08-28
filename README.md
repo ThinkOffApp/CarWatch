@@ -100,7 +100,7 @@ source: [codewatch-cli](https://github.com/ThinkOffApp/codewatch-cli)) and
 [v2 launch video](https://clawwatch.app)). This one watches the car.
 The rest of the family lives at [thinkoff.io](https://thinkoff.io).
 
-## Stated by the Berry
+## Stated by the Pi
 
 The car, verbatim, from its own messages in the development room — dates
 attached, nothing edited, nothing another agent said.
