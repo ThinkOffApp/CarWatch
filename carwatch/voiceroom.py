@@ -41,9 +41,19 @@ WORK_DIR = "/tmp/carwatch-voice"
 # Finnish detection for picking the reply voice: distinctive letters or a
 # few very common words. Crude on purpose - a wrong pick still produces
 # intelligible audio, and the text rides along in the same message.
-_FI_HINT = re.compile(
-    r"[äöÄÖ]|\b(ja|on|ei|se|että|mitä|olen|sinä|auto|moottori|akku)\b",
+# Finnish detection needs REAL evidence: the old single-word match fired on
+# bare "on" - which English uses in every other sentence - so English
+# answers came out in the Finnish voice ("ralli-Englanti", petrus's live
+# test 28 Aug). An umlaut is decisive on its own; otherwise demand two
+# distinct Finnish words, with the English-colliding "on"/"se" dropped.
+_FI_STRONG = re.compile(r"[äöÄÖ]")
+_FI_WORDS = re.compile(
+    r"\b(ja|ei|että|mitä|olen|sinä|auto|moottori|akku|kyllä|hyvä|kiitos)\b",
     re.IGNORECASE)
+
+
+def _sounds_finnish(text: str) -> bool:
+    return bool(_FI_STRONG.search(text)) or len(_FI_WORDS.findall(text)) >= 2
 
 
 def is_voice_note(msg: dict) -> bool:
@@ -91,7 +101,7 @@ def tts_wav(text: str) -> str:
     """
     os.makedirs(WORK_DIR, exist_ok=True)
     wav = os.path.join(WORK_DIR, uuid.uuid4().hex[:12] + ".wav")
-    voice = VOICE_FI if (_FI_HINT.search(text) and os.path.exists(VOICE_FI)) \
+    voice = VOICE_FI if (_sounds_finnish(text) and os.path.exists(VOICE_FI)) \
         else VOICE_EN
     if not (os.path.exists(PIPER_BIN) and os.path.exists(voice)):
         return ""

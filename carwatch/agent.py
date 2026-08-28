@@ -228,15 +228,68 @@ def _think(question: str, asker: str) -> str:
     facts["voice"] = ("you have working ears: a continuous on-board listener "
                       "(whisper) hears speech near your microphone and routes "
                       "it to you")
-    cannot = [
-        "live engine, battery, fuel or tyre readings (no OBD link is up "
-        "right now)" if not _carrier_up else
-        "tyre pressures and fuel level (not in the first OBD reading set)",
+    # Manufacturer-cloud snapshot: the SAME numbers the dash's Mercedes me
+    # panel shows. Without this the voice path denied knowing battery, fuel
+    # or tyres while the phone dash displayed them (petrus's live test,
+    # 28 Aug: "my battery and fuel levels are currently invisible").
+    _cloud_fresh = False
+    try:
+        import json as _json2, time as _time2
+        with open(os.path.expanduser("~/.carwatch/cloud-last.json")) as _f:
+            _cl = _json2.load(_f)
+        _cage = _time2.time() - float(_cl.get("fetched_at", 0))
+        _cars = _cl.get("cars") or {}
+        _me = None
+        for _c in _cars.values():
+            if str(_c.get("label", "")).lower() in car["identity"].lower():
+                _me = _c
+                break
+        if _me is None and _cars:
+            _me = next(iter(_cars.values()))
+        if _cl.get("ok") and _me and _cage < 3600:
+            _bits = []
+            _ev = _me.get("ev") or {}
+            if _ev.get("soc_pct") is not None:
+                _bits.append(f"hybrid battery {_ev['soc_pct']:.0f}% "
+                             f"({_ev.get('range_km', 0):.0f} km electric)")
+            _fu = _me.get("fuel") or {}
+            if _fu.get("level_pct") is not None:
+                _bits.append(f"fuel {_fu['level_pct']:.0f}% "
+                             f"({_fu.get('range_km', 0):.0f} km range)")
+            _ty = _me.get("tires_kpa") or {}
+            if _ty:
+                _bits.append("tyre pressures kPa " + ", ".join(
+                    f"{k.replace('_', ' ')} {v:.0f}"
+                    for k, v in _ty.items()))
+            _lk = (_me.get("lock") or {}).get("locked")
+            if _lk:
+                _bits.append(f"doors {_lk}")
+            if (_me.get("windows") or {}).get("all_closed") == "on":
+                _bits.append("windows closed")
+            if _me.get("odometer_km") is not None:
+                _bits.append(f"odometer {_me['odometer_km']:.0f} km")
+            if _bits:
+                facts[f"manufacturer cloud snapshot (fetched {int(_cage)}s "
+                      "ago; these numbers are quotable)"] = "; ".join(_bits)
+                _cloud_fresh = True
+    except Exception:
+        pass
+    if _carrier_up:
+        _gap = (None if _cloud_fresh else
+                "tyre pressures and fuel level (not in the first OBD "
+                "reading set)")
+    else:
+        _gap = ("live engine readings such as rpm, coolant or speed (no OBD "
+                "link right now"
+                + ("; battery, fuel and tyres you DO know, from the "
+                   "manufacturer cloud snapshot)" if _cloud_fresh
+                   else ", and no cloud snapshot either)"))
+    cannot = ([_gap] if _gap else []) + [
         "anything you would see out of your cameras (you have no camera "
         "feed at all - never describe camera views)",
-        "any sensor number that is not verbatim in your 'live engine "
-        "readings' fact - a number you cannot point to there does not "
-        "exist, and inventing one is the worst failure you can make",
+        "any sensor number that is not verbatim in your facts above - a "
+        "number you cannot point to there does not exist, and inventing "
+        "one is the worst failure you can make",
     ]
     system = build_system_prompt(
         facts, cannot, manual_excerpts=context_for(question),
