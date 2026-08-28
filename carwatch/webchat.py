@@ -458,6 +458,13 @@ html.dense .cmds button{padding:8px}
   <div id=mnote>loading&#8230;</div>
   <div class=cmds id=cmds></div>
  </div>
+ <div class=zone id=mdlzone>
+  <h2 id=mdlhead style="cursor:pointer">&#129504; Model <span class=src id=mdlsrc>&#8230;</span></h2>
+  <div id=mdlbody style="display:none">
+   <div id=mdllist></div>
+   <div id=mdlmsg style="color:#ffc857"></div>
+  </div>
+ </div>
 </div>
 <div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 <div class=bar>
@@ -578,6 +585,42 @@ const _tl=$('trustlink');if(_tl)_tl.addEventListener('click',async(e)=>{e.preven
  if(!await cwConfirm("Trust '"+ssid+"' as home?\\nEvery device on this wifi will open the dash WITHOUT a token. Do this only on your own home wifi or your own phone hotspot, never on cafe/public wifi."))return;
  try{const r=await F('/api/home-wifi/trust',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})},10000);
   const d=await r.json();show(d.ok?("Trusted '"+d.ssid+"'. Every phone on this wifi now opens the dash without a token."):("failed: "+(d.error||'')));}catch(e){show('trust failed: '+e)}});
+// --- Model selector (THI-38): the ggufs on disk with their measured
+// speeds, tap to swap the brain. The list stays collapsed so the
+// one-screen guarantee holds; the header always shows what is running.
+function benchTxt(b){return b?(' · '+(b.tg128!=null?b.tg128+' tok/s':'')+(b.pp512!=null?' (prompt '+b.pp512+')':'')):' · unbenched'}
+async function modelRefresh(){
+ try{const d=await(await F('/api/models',{},12000)).json();
+  const src=$('mdlsrc');src.textContent=(d.running||'no model')+' · '+d.state+(d.busy?' · answering':'');
+  src.className='src '+(d.state==='ready'?'ok':'warn');
+  const el=$('mdllist');el.innerHTML='';
+  (d.models||[]).forEach(m=>{const b=document.createElement('button');
+   b.textContent=(m.running?'● ':'')+m.name+' · '+m.size_gb+'GB'+benchTxt(m.bench)+(m.fits?'':' · too big for RAM');
+   b.style.cssText='display:block;width:100%;text-align:left;background:transparent;color:'+(m.running?'#6f6':(m.fits?'inherit':'#667'))+';border:1px solid var(--line,#345);border-radius:8px;padding:9px 10px;margin:4px 0;font:inherit';
+   b.onclick=()=>modelSwap(m);el.appendChild(b);});
+  return d;
+ }catch(e){$('mdlmsg').textContent='model list failed: '+e}}
+async function modelSwap(m){
+ const msg=$('mdlmsg');
+ if(m.running){msg.textContent=m.name+' is already the running brain';return}
+ if(!m.fits){msg.textContent=m.name+' does not fit in RAM on this machine';return}
+ if(!await cwConfirm('Swap the brain to '+m.name+'?\\nThe old model unloads NOW; loading the new one can take minutes and the car cannot answer meanwhile.'))return;
+ msg.textContent='swapping to '+m.name+' ...';
+ try{const r=await F('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:m.name})},20000);
+  const d=await r.json();
+  if(!d.ok){msg.textContent='refused: '+(d.error||'unknown');return}
+  const t0=Date.now();
+  const poll=setInterval(async()=>{try{
+    const s=await modelRefresh();
+    const secs=Math.round((Date.now()-t0)/1000);
+    if(s&&s.state==='ready'&&s.running===m.name){clearInterval(poll);msg.textContent=m.name+' loaded in '+secs+'s - the car answers with it now'}
+    else msg.textContent='loading '+m.name+' ... '+secs+'s (a 14GB model off the microSD takes ~3min)';
+   }catch(e){}},3000);
+ }catch(e){msg.textContent='swap failed: '+e}}
+$('mdlhead').addEventListener('click',()=>{const b=$('mdlbody');
+ const open=b.style.display==='none';b.style.display=open?'block':'none';
+ if(open)modelRefresh();});
+modelRefresh();
 // --- OBD (the car the Pi rides in) ---
 function sev(u,k,n){if(!isFinite(n))return'';if(u&&u.indexOf('C')>=0&&k==='coolant_c')return n>=110?'bad':n>=95?'warn':'';
  if(k.includes('voltage'))return n<11.8||n>15?'bad':n<12.2?'warn':'';
@@ -2436,6 +2479,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}),
                                   "application/json")
+        elif self.path.split("?", 1)[0] == "/api/models":
+            # THI-38 model selector: the ggufs on disk with their measured
+            # speeds, plus which one is actually loaded (from ps, never
+            # assumed) and whether the brain is busy or mid-load.
+            from carwatch import models as _mdl
+            try:
+                return self._send(200, json.dumps(_mdl.registry()),
+                                  "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}),
+                                  "application/json")
         elif self.path == "/api/wifi/status":
             import subprocess as _sp
             try:
@@ -2805,6 +2859,21 @@ class Handler(BaseHTTPRequestHandler):
                                   "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),
+                                  "application/json")
+        if path == "/api/model":
+            # THI-38: swap the brain on the fly. All refusals (missing file,
+            # too big for RAM, mid-answer, already loading) come back as
+            # ok:false with the reason - the dash shows it verbatim.
+            from carwatch import models as _mdl
+            try:
+                body = json.loads(self.rfile.read(
+                    int(self.headers.get("Content-Length", 0))) or b"{}")
+                res = _mdl.select_model(body.get("name") or "")
+                return self._send(200 if res.get("ok") else 409,
+                                  json.dumps(res), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"ok": False,
+                                                   "error": str(e)}),
                                   "application/json")
         if path == "/api/audio-bench":
             # Bench recorder (petrus's method, 27 Aug: "don't you record what

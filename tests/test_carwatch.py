@@ -281,3 +281,103 @@ class TestServedPages(unittest.TestCase):
         for name in ("PAGE", "DASH_PAGE"):
             page = getattr(webchat, name)
             self.assertNotIn("(/\n", page, f"{name}: newline inside JS regex")
+
+
+class TestModelSelector(unittest.TestCase):
+    """THI-38: the registry lists real ggufs (never an mmproj), the fit
+    check refuses what RAM cannot hold, and a swap never interrupts a
+    running answer or an in-flight load."""
+
+    GB = 1024 ** 3
+
+    def setUp(self):
+        import carwatch.models as models_mod
+        import carwatch.selfstate as selfstate_mod
+        self.m = models_mod
+        self.tmp = tempfile.mkdtemp()
+        self._orig = {
+            "dirs": models_mod.MODEL_DIRS,
+            "mem": models_mod._mem_total,
+            "bench": models_mod._bench_map,
+            "env": models_mod.ENV_FILE,
+            "serving": selfstate_mod.serving_model,
+            "busy": models_mod.brain_busy,
+            "state": models_mod.brain_state,
+        }
+        models_mod.MODEL_DIRS = [self.tmp]
+        models_mod.ENV_FILE = os.path.join(self.tmp, "brain.env")
+        models_mod._mem_total = lambda: 16 * self.GB
+        models_mod._bench_map = lambda: {
+            "small.gguf": {"pp512": 30.0, "tg128": 6.2}}
+        selfstate_mod.serving_model = lambda: "small.gguf"
+        models_mod.brain_busy = lambda: False
+        models_mod.brain_state = lambda: "ready"
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import carwatch.selfstate as selfstate_mod
+        self.m.MODEL_DIRS = self._orig["dirs"]
+        self.m._mem_total = self._orig["mem"]
+        self.m._bench_map = self._orig["bench"]
+        self.m.ENV_FILE = self._orig["env"]
+        selfstate_mod.serving_model = self._orig["serving"]
+        self.m.brain_busy = self._orig["busy"]
+        self.m.brain_state = self._orig["state"]
+
+    def _gguf(self, name, size):
+        path = os.path.join(self.tmp, name)
+        with open(path, "wb") as f:
+            f.seek(size - 1)
+            f.write(b"\0")
+        return path
+
+    def test_registry_filters_mmprojs_and_sizes_honestly(self):
+        self._gguf("small.gguf", 1 * self.GB)
+        self._gguf("big.gguf", 15 * self.GB)
+        self._gguf("vision-mmproj.gguf", 1 * self.GB)
+        with open(os.path.join(self.tmp, "note.txt"), "w") as f:
+            f.write("not a model")
+        models = self.m.list_models()
+        self.assertEqual([m["file"] for m in models],
+                         ["small.gguf", "big.gguf"])
+        small, big = models
+        self.assertTrue(small["fits"])
+        self.assertTrue(small["running"])
+        self.assertEqual(small["bench"]["tg128"], 6.2)
+        # 15GB into 16GB minus headroom must be refused, not attempted.
+        self.assertFalse(big["fits"])
+
+    def test_select_refusals(self):
+        self._gguf("small.gguf", 1 * self.GB)
+        self._gguf("big.gguf", 15 * self.GB)
+        self.assertIn("no such model",
+                      self.m.select_model("ghost")["error"])
+        self.assertIn("already the running brain",
+                      self.m.select_model("small")["error"])
+        self.assertIn("too big",
+                      self.m.select_model("big")["error"])
+
+    def test_select_never_mid_answer_or_mid_load(self):
+        self._gguf("mid.gguf", 5 * self.GB)
+        self.m.brain_busy = lambda: True
+        self.assertIn("mid-answer", self.m.select_model("mid")["error"])
+        self.m.brain_busy = lambda: False
+        self.m.brain_state = lambda: "loading"
+        self.assertIn("already loading", self.m.select_model("mid")["error"])
+
+    def test_select_writes_env_and_restarts(self):
+        path = self._gguf("mid.gguf", 5 * self.GB)
+        calls = []
+
+        class R:
+            returncode = 0
+            stdout = stderr = ""
+
+        orig_run = self.m.subprocess.run
+        self.m.subprocess.run = lambda cmd, **kw: (calls.append(cmd), R())[1]
+        self.addCleanup(lambda: setattr(self.m.subprocess, "run", orig_run))
+        res = self.m.select_model("mid")
+        self.assertTrue(res["ok"], res)
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read().strip(), "BRAIN_MODEL=" + path)
+        self.assertEqual(calls[0][-2:], ["restart", "carwatch-brain"])
