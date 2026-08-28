@@ -55,11 +55,16 @@ def build_system_prompt(
     # is listed first, and a status answer that opens with CPU fans instead
     # of fuel and tyres flattens the whole point of a car that talks
     # (petrus's video script, 28 Aug).
-    _computerish = ("your temperature", "fan", "memory", "uptime", "brain",
-                    "disk", "network", "cpu")
-    for k, v in sorted(facts.items(),
-                       key=lambda kv: any(t in kv[0].lower()
-                                          for t in _computerish)):
+    _computerish = ("temperature", "fan", "memory", "uptime", "brain",
+                    "disk", "network", "cpu", "throttl", "awake", "woke")
+    _carish = ("coolant", "engine", "tyre", "fuel", "battery", "charge")
+
+    def _is_computer(key):
+        k = key.lower()
+        return (any(t in k for t in _computerish)
+                and not any(c in k for c in _carish))
+
+    for k, v in sorted(facts.items(), key=lambda kv: _is_computer(kv[0])):
         lines.append(f"- {k}: {v}")
 
     if cannot_sense:
