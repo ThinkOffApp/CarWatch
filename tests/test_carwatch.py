@@ -181,10 +181,6 @@ class ManualQueryExpansionTests(unittest.TestCase):
             self.assertIn(t, expanded)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ObdDoipTests(unittest.TestCase):
     """The DoIP/UDS message layer, testable without the car present."""
 
@@ -281,3 +277,170 @@ class TestServedPages(unittest.TestCase):
         for name in ("PAGE", "DASH_PAGE"):
             page = getattr(webchat, name)
             self.assertNotIn("(/\n", page, f"{name}: newline inside JS regex")
+
+
+class TestModelSelector(unittest.TestCase):
+    """THI-38: the registry lists real ggufs (never an mmproj), the fit
+    check refuses what RAM cannot hold, and a swap never interrupts a
+    running answer or an in-flight load."""
+
+    GB = 1024 ** 3
+
+    def setUp(self):
+        import carwatch.models as models_mod
+        import carwatch.selfstate as selfstate_mod
+        import carwatch.voicestate as voicestate_mod
+        self.m = models_mod
+        self.vs = voicestate_mod
+        self.tmp = tempfile.mkdtemp()
+        self._orig = {
+            "dirs": models_mod.MODEL_DIRS,
+            "mem": models_mod._mem_total,
+            "bench": models_mod._bench_map,
+            "env": models_mod.ENV_FILE,
+            "serving": selfstate_mod.serving_model,
+            "state": models_mod.brain_state,
+            "lock": voicestate_mod.BRAIN_LOCK,
+        }
+        models_mod.MODEL_DIRS = [self.tmp]
+        models_mod.ENV_FILE = os.path.join(self.tmp, "brain.env")
+        models_mod._mem_total = lambda: 16 * self.GB
+        models_mod._bench_map = lambda: {
+            "small.gguf": {"pp512": 30.0, "tg128": 6.2}}
+        selfstate_mod.serving_model = lambda: "small.gguf"
+        models_mod.brain_state = lambda: "ready"
+        voicestate_mod.BRAIN_LOCK = os.path.join(self.tmp, "brain.lock")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import carwatch.selfstate as selfstate_mod
+        self.m.MODEL_DIRS = self._orig["dirs"]
+        self.m._mem_total = self._orig["mem"]
+        self.m._bench_map = self._orig["bench"]
+        self.m.ENV_FILE = self._orig["env"]
+        selfstate_mod.serving_model = self._orig["serving"]
+        self.m.brain_state = self._orig["state"]
+        self.vs.BRAIN_LOCK = self._orig["lock"]
+
+    def _gguf(self, name, size):
+        path = os.path.join(self.tmp, name)
+        with open(path, "wb") as f:
+            f.seek(size - 1)
+            f.write(b"\0")
+        return path
+
+    def test_registry_filters_mmprojs_and_sizes_honestly(self):
+        self._gguf("small.gguf", 1 * self.GB)
+        self._gguf("big.gguf", 16 * self.GB)
+        self._gguf("vision-mmproj.gguf", 1 * self.GB)
+        with open(os.path.join(self.tmp, "note.txt"), "w") as f:
+            f.write("not a model")
+        models = self.m.list_models()
+        self.assertEqual([m["file"] for m in models],
+                         ["small.gguf", "big.gguf"])
+        small, big = models
+        self.assertTrue(small["fits"])
+        self.assertTrue(small["running"])
+        self.assertEqual(small["bench"]["tg128"], 6.2)
+        # 15GB into 16GB minus headroom must be refused, not attempted.
+        self.assertFalse(big["fits"])
+
+    def test_select_refusals(self):
+        self._gguf("small.gguf", 1 * self.GB)
+        self._gguf("big.gguf", 16 * self.GB)
+        self.assertIn("no such model",
+                      self.m.select_model("ghost")["error"])
+        self.assertIn("already the running brain",
+                      self.m.select_model("small")["error"])
+        self.assertIn("too big",
+                      self.m.select_model("big")["error"])
+
+    def _patch_run(self, fn):
+        orig_run = self.m.subprocess.run
+        self.m.subprocess.run = fn
+        self.addCleanup(lambda: setattr(self.m.subprocess, "run", orig_run))
+
+    class _R:
+        def __init__(self, rc=0, err=""):
+            self.returncode = rc
+            self.stdout = ""
+            self.stderr = err
+
+    def test_select_never_mid_answer_or_mid_load(self):
+        import fcntl
+        self._gguf("mid.gguf", 5 * self.GB)
+        # A REAL held lock, not a stubbed probe: the swap must refuse while
+        # an answer holds voicestate's flock (codexmb's race finding).
+        holder = open(self.vs.BRAIN_LOCK, "w")
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            self.assertIn("mid-answer", self.m.select_model("mid")["error"])
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN)
+            holder.close()
+        self.m.brain_state = lambda: "loading"
+        self.assertIn("already loading", self.m.select_model("mid")["error"])
+
+    def test_select_holds_lock_across_restart(self):
+        # The never-mid-answer guard must not be probe-and-release: while
+        # systemctl restart runs, a competing ask must find the lock HELD.
+        import fcntl
+        self._gguf("mid.gguf", 5 * self.GB)
+        seen = {}
+
+        def run(cmd, **kw):
+            with open(self.vs.BRAIN_LOCK, "a") as f:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    seen["held"] = False
+                    fcntl.flock(f, fcntl.LOCK_UN)
+                except OSError:
+                    seen["held"] = True
+            return self._R()
+
+        self._patch_run(run)
+        self.assertTrue(self.m.select_model("mid")["ok"])
+        self.assertTrue(seen.get("held"),
+                        "brain lock was not held during the restart")
+
+    def test_select_writes_env_and_restarts(self):
+        path = self._gguf("mid.gguf", 5 * self.GB)
+        calls = []
+        self._patch_run(lambda cmd, **kw: (calls.append(cmd), self._R())[1])
+        res = self.m.select_model("mid")
+        self.assertTrue(res["ok"], res)
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read().strip(), "BRAIN_MODEL=" + path)
+        self.assertEqual(calls[0][-2:], ["restart", "carwatch-brain"])
+
+    def test_select_rolls_back_env_on_restart_failure(self):
+        # A failed restart must not leave the unverified model armed for the
+        # next boot (codexmb's persistence finding).
+        self._gguf("mid.gguf", 5 * self.GB)
+        self._patch_run(lambda cmd, **kw: self._R(rc=1, err="unit hosed"))
+        # Case 1: a previous selection existed - it must come back.
+        with open(self.m.ENV_FILE, "w") as f:
+            f.write("BRAIN_MODEL=/old/model.gguf\n")
+        res = self.m.select_model("mid")
+        self.assertFalse(res["ok"])
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read().strip(), "BRAIN_MODEL=/old/model.gguf")
+        # Case 2: no previous selection - the file must be gone again.
+        os.remove(self.m.ENV_FILE)
+        res = self.m.select_model("mid")
+        self.assertFalse(res["ok"])
+        self.assertFalse(os.path.exists(self.m.ENV_FILE))
+
+    def test_brain_busy_fails_closed(self):
+        # If the lock cannot even be inspected, claim busy - a wrong "idle"
+        # removes the one warning this probe exists to give.
+        self.vs.BRAIN_LOCK = os.path.join(self.tmp, "no-such-dir", "x.lock")
+        self.assertTrue(self.m.brain_busy())
+
+
+# Keep this at the BOTTOM of the file: unittest.main() runs the moment this
+# line executes, so any class defined after it silently never runs in the
+# dependency-free `python3 tests/test_carwatch.py` path (found 28 Aug: the
+# direct run reported 14 tests while the suite held 33).
+if __name__ == "__main__":
+    unittest.main()

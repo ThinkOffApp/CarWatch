@@ -4,10 +4,15 @@ After=network.target
 
 [Service]
 User=petrus
-# Model choice is the owner's call - never swap it silently.
+# Model choice is the owner's call - never swap it silently. The dash's
+# MODEL section (THI-38) makes that call a deliberate tap: it writes
+# ~/.config/carwatch/brain.env and restarts this unit. Without that file
+# the Environment= default below serves.
 # Build llama.cpp on the Pi first (see README "Install"); install.sh prints
 # the model download command if the .gguf is missing.
-ExecStart=/home/petrus/carwatch-stack/llama.cpp/build/bin/llama-server   -m /home/petrus/models/Qwen3.6-35B-A3B-UD-Q3_K_S.gguf   -t 4 -c 4096 --reasoning off --reasoning-budget 0   --host 127.0.0.1 --port 8081
+Environment=BRAIN_MODEL=/home/petrus/models/Qwen3.6-35B-A3B-UD-Q3_K_S.gguf
+EnvironmentFile=-/home/petrus/.config/carwatch/brain.env
+ExecStart=/home/petrus/carwatch-stack/llama.cpp/build/bin/llama-server   -m ${BRAIN_MODEL}   -t 4 -c 4096 --reasoning off --reasoning-budget 0   --host 127.0.0.1 --port 8081
 Restart=always
 RestartSec=10
 # 15GB model off the microSD: give it time to load before systemd judges it
