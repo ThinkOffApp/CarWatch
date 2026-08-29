@@ -513,6 +513,15 @@ function renderVoice(s){
   bar=true;$('vbar').style.width=Math.round((s.progress||0)*100)+'%';
   d.textContent=s.question?('Q: '+s.question):'';}
  else if(s.state==='speaking'){b.textContent='Speaking..';b.className='busy';st.textContent='playing the answer';d.textContent=s.answer||'';}
+ else if(window.BRAIN_STATE&&window.BRAIN_STATE!=='ready'){
+  // petrus 29 Aug: he found the dash "dead" and rebooted the Pi while a bench
+  // had the brain stopped. The state was known - it was only shown down in the
+  // Model zone, while this strip still said "voice ready - tap Speak".
+  const loading=window.BRAIN_STATE==='loading';
+  b.textContent=loading?'Loading..':'No brain';b.className='busy';
+  st.textContent=loading?'loading the model \u2013 answers resume when it finishes'
+                        :'brain not running \u2013 nothing can answer yet';
+  d.textContent='';}
  else{b.textContent='🎤 Speak';
   st.textContent=(s.listener_up===false)?'voice listener is OFF':(s.note||'voice ready – tap Speak or say the wake word');
   d.textContent=s.answer||'';}
@@ -641,6 +650,7 @@ let MDLREG=null;
 function benchTxt(b){return b?(' · '+(b.tg128!=null?b.tg128+' tok/s':'')+(b.pp512!=null?' (prompt '+b.pp512+')':'')):' · unbenched'}
 async function modelRefresh(){
  try{const d=await(await F('/api/models',{},12000)).json();MDLREG=d;
+  window.BRAIN_STATE=d.state;
   const src=$('mdlsrc');src.textContent=(d.running||'no model')+' · '+d.state+(d.busy?' · answering':'');
   src.className='src '+(d.state==='ready'?'ok':'warn');
   const el=$('mdllist');el.innerHTML='';
@@ -649,7 +659,7 @@ async function modelRefresh(){
    b.style.cssText='display:block;width:100%;text-align:left;background:transparent;color:'+(m.running?'#6f6':(m.fits?'inherit':'#667'))+';border:1px solid var(--line,#345);border-radius:8px;padding:9px 10px;margin:4px 0;font:inherit';
    b.onclick=()=>modelSwap(m);el.appendChild(b);});
   return d;
- }catch(e){$('mdlmsg').textContent='model list failed: '+e}}
+ }catch(e){window.BRAIN_STATE=null;$('mdlmsg').textContent='model list failed: '+e}}
 async function modelSwap(m){
  const msg=$('mdlmsg');
  if(m.running){msg.textContent=m.name+' is already the running brain';return}
