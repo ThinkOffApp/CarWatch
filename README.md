@@ -69,14 +69,15 @@ generation tg128 in tokens per second):
 
 | model | size | prompt | generation | call |
 |---|---|---|---|---|
-| Gemma 4 E2B Q4_K_M | 3.2 GB | 29.9 | 6.2 | speed pick |
-| Gemma 4 E4B QAT Q4_0 | 4.8 GB | 30.2 | 3.6 | best balance |
-| Ornith 1.5 9B (dense) | 5.4 GB | 9.1 | 2.0 | out — dense is slow here |
-| Qwen3.6 27B dense IQ2_M | 10.1 GB | 0.7 | 0.5 | out — IQ2 is compute-bound on Pi CPUs |
-| Ornith 1.5 35B MoE IQ3_XXS | 12.7 GB | 8.3 | 2.8 | quality untested |
-| Qwen3.6 35B MoE Q3_K_S | 14.3 GB | 9.1 | 2.9 | the quality pick, default brain |
+| Gemma 4 E2B Q4_K_M | 3.5 GB | 29.9 | 6.2 | speed pick |
+| Gemma 4 E4B QAT Q4_0 | 5.2 GB | 30.2 | 3.6 | best balance |
+| Ornith 1.5 9B (dense) | 5.8 GB | 9.1 | 2.0 | out — dense is slow here |
+| Qwen3.6 27B dense IQ2_M | 10.8 GB | 0.7 | 0.5 | out — IQ2 is compute-bound on Pi CPUs |
+| Ornith 1.5 35B MoE IQ3_XXS | 13.7 GB | 8.3 | 2.8 | quality untested |
+| Qwen3.6 35B MoE Q3_K_S | 15.4 GB | 9.1 | 2.9 | the quality pick, default brain |
 
-The table grows as models get benched on the device; the menu always shows
+Sizes are decimal GB — `size / 1e9`, the same number the dash shows you and
+the same number `ls` gives for the file. The table grows as models get benched on the device; the menu always shows
 whatever the box has measured for itself.
 
 Three guard rails, because this runs while you drive:

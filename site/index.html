@@ -39,6 +39,21 @@ h1{font-size:clamp(30px,5.5vw,46px);line-height:1.15;letter-spacing:-.5px;margin
 .btn-ghost{border:1px solid var(--line);color:var(--ink)}
 .btn-ghost:hover{border-color:var(--green);text-decoration:none}
 .hero-img{width:100%;border-radius:12px;margin-top:40px;border:1px solid var(--line);display:block}
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:26px 0 10px}
+.spec{border-collapse:collapse;width:100%;min-width:404px;font-family:var(--mono);font-size:13px}
+.spec th{text-align:left;color:var(--dim);font-weight:500;padding:0 14px 10px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+.spec td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.spec td.n,.spec th.n{white-space:nowrap}
+.spec .tag{display:block;margin-top:2px}
+.spec td.n,.spec th.n{text-align:right}
+.spec tr.now td{color:var(--green)}
+.spec tr.slow td{color:var(--dim)}
+.spec .tag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.spec tr.now .tag{color:var(--green-dim)}
+.spec .q{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+@media(max-width:560px){.spec{min-width:0;font-size:11px}.spec td,.spec th{padding-right:6px}.spec .tag,.spec .q{font-size:9px}}
+.phone{max-width:300px;width:100%;border-radius:12px;border:1px solid var(--line);display:block;margin:8px auto 0}
+code{overflow-wrap:anywhere}
 figcaption{font-size:13px;color:var(--dim);margin-top:8px;font-family:var(--mono)}
 section{padding:52px 0;border-bottom:1px solid var(--line)}
 h2{font-size:26px;margin-bottom:8px;letter-spacing:-.3px}
@@ -160,6 +175,49 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
     <code>7776&nbsp;rpm</code> and described a 360° camera view — while the actual cable
     read 0&nbsp;rpm and no camera exists. Now a number that is not in the reading
     does not exist, and the car says <i>"I don't have that"</i> instead of inventing it.</p>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap">
+    <h2>Swap the car's brain from your phone</h2>
+    <p class="sub">Different questions want different brains. A tyre-light question deserves
+    the 35B and its 489-page manual; "how fast am I going" does not, and the small model
+    answers it six times quicker. So the dash lists every model on the box with the speed it
+    actually reached <i>on this Pi</i>, and one tap makes it the running brain.</p>
+
+    <div class="tblwrap">
+      <table class="spec">
+        <thead><tr>
+          <th>model</th><th class="n">size GB</th><th class="n">prompt</th><th class="n">gen</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Gemma 4 E2B <span class="q">q4_k_m</span><span class="tag">fastest</span></td><td class="n">3.5</td><td class="n">29.9</td><td class="n">6.2</td></tr>
+          <tr><td>Gemma 4 E4B <span class="q">qat q4_0</span><span class="tag">best balance</span></td><td class="n">5.2</td><td class="n">30.2</td><td class="n">3.6</td></tr>
+          <tr><td>Ornith 1.5 9B <span class="q">dense</span></td><td class="n">5.8</td><td class="n">9.1</td><td class="n">2.0</td></tr>
+          <tr class="slow"><td>Qwen3.6 27B <span class="q">dense iq2_m</span><span class="tag">avoid</span></td><td class="n">10.8</td><td class="n">0.7</td><td class="n">0.5</td></tr>
+          <tr><td>Ornith 1.5 35B <span class="q">moe iq3</span></td><td class="n">13.7</td><td class="n">8.3</td><td class="n">2.8</td></tr>
+          <tr class="now"><td>Qwen3.6 35B-A3B <span class="q">moe q3_k_s</span><span class="tag">the default brain</span></td><td class="n">15.4</td><td class="n">9.1</td><td class="n">2.9</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>llama-bench on the reference Pi 5 16 GB, 4 threads, production binary, 29 Aug 2026.
+    pp512 / tg128. Sizes are decimal GB, the same number <code>ls</code> gives for the file.</figcaption>
+
+    <p style="margin-top:26px">Two things fall out of that table, and both are worth knowing before you
+    buy hardware. <b>A 35B mixture-of-experts generates six times faster than a 27B dense model</b>
+    despite being larger on disk, because only about 3B parameters are active per token. And
+    <b>two-bit quants are compute-bound on a Pi CPU</b> — the 27B row is slow not because it is big,
+    but because unpacking those weights costs more than the memory it saves.</p>
+
+    <p>Three guard rails, because this happens while you drive: a model that cannot fit in RAM is
+    refused with the reason rather than loading until something dies; a swap never interrupts an
+    answer being generated; and a failed restart rolls back to the model that was working. Loading
+    is honest about itself too — a 14 GB model off a microSD takes about three minutes, so the dash
+    says so and counts, instead of showing a spinner that means nothing.</p>
+
+    <img class="phone" src="model-chooser.jpg" alt="The CarWatch dashboard's Model zone on a phone: each local model listed with its measured tokens per second, the running one in green, and a swap in progress with a load estimate">
+    <figcaption style="text-align:center">The Model zone mid-swap, in the car.</figcaption>
   </div>
 </section>
 
