@@ -51,6 +51,42 @@ your phone or watch via [CodeWatch](https://codewatch.app). Open PRs land on the
   access point, so the phone can always reach it, even in a garage with
   zero signal.
 
+## 🧠 Swap the car's brain from your phone (v0.5)
+
+Different questions want different brains. "What does the tyre light mean?" is
+a 489-page-manual question that deserves the 35B. "How fast am I going?" is not
+— and on a Pi the small model answers it six times quicker. So the dash grew a
+**Model zone**: every `.gguf` on the box, listed with the speed it actually
+reached *on this Pi*, and one tap to make it the running brain.
+
+![The CarWatch dashboard's Model zone: seven local models listed with their measured tokens per second, the running one marked in green, and a swap in progress with an honest load estimate](docs/img/model-chooser.jpg)
+
+The numbers next to each model are `llama-bench` runs from the device itself,
+not figures from someone's blog. On the reference Pi 5 that means Gemma 4 E2B
+at 6.2 tok/s, Gemma 4 E4B at 3.6, and Qwen3.6-35B-A3B at 2.9 — the same
+hardware, the same quant, measured the same way, so the choice you are making
+is a real trade and not a guess.
+
+Three guard rails, because this runs while you drive:
+
+- **A model that cannot fit in RAM is refused**, with the reason, instead of
+  loading until the kernel kills something.
+- **A swap never interrupts an answer being generated.** Ask first, swap after.
+- **A failed restart rolls back** to the model that was working.
+
+Loading is honest about itself: a 14 GB model off a microSD card takes about
+three minutes, so the dash says so and counts, rather than showing a spinner
+that means nothing. The estimate is derived from the size of the model actually
+being loaded.
+
+Underneath it is two endpoints behind the same auth gate as every other route
+— `GET /api/models` for the registry and current state, `POST /api/model` for a
+guarded swap — and the service reads its model from an `EnvironmentFile`, so
+switching is a file write plus a restart rather than an edit to a unit file.
+That contract is deliberately small and device-agnostic: it is the first
+[CodeWatch Fleet](https://github.com/ThinkOffApp/ide-agent-kit/blob/main/fleet/SPEC.md)
+module, and the same two endpoints now answer on other machines in the fleet.
+
 ## Remote access (manufacturer cloud while driving)
 
 The manufacturer-cloud section reads your car's data through a Home Assistant
