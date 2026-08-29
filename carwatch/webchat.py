@@ -349,6 +349,19 @@ body{background:radial-gradient(circle at 30% -10%,var(--bg0) 0,var(--bg1) 55%);
 .ask{flex:1 1 150px;display:flex;gap:6px;min-width:140px}
 .ask input{flex:1;padding:10px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:inherit;font-size:14px}
 .ask button{padding:10px 16px;border:0;border-radius:var(--r2);background:var(--blue);color:var(--bg1);font-weight:800;box-shadow:var(--glow)}
+.ask button.sec{background:var(--tile);color:inherit;border:1px solid var(--line);box-shadow:none;font-weight:600}
+#chatview{display:none;position:fixed;inset:0;z-index:40;background:var(--bg1);flex-direction:column}
+#chatview.open{display:flex}
+.chead{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);font-weight:800}
+.chead button{background:none;border:0;color:inherit;font-size:20px;padding:4px 10px}
+#chatlog{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.cb{max-width:86%;padding:10px 12px;border-radius:var(--r2);white-space:pre-wrap;font-size:14px;line-height:1.45}
+.cb.q{align-self:flex-end;background:var(--blue);color:var(--bg1)}
+.cb.a{align-self:flex-start;background:var(--tile);border:1px solid var(--line)}
+.cb .meta{opacity:.6;font-size:11px;margin-top:6px}
+.cask{display:flex;gap:8px;padding:10px 10px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.cask input{flex:1;padding:10px;border-radius:var(--r2);border:1px solid var(--line);background:var(--tile);color:inherit;font-size:14px}
+.cask button{padding:10px 16px;border:0;border-radius:var(--r2);background:var(--blue);color:var(--bg1);font-weight:800}
 .links{flex:0 0 auto;font:11px var(--mono);color:var(--dim);display:flex;gap:12px;padding-left:4px}
 @media (min-width:601px){.links{margin-top:auto}}
 .links a{color:var(--blue);text-decoration:none}
@@ -479,9 +492,10 @@ html.dense .cmds button{padding:8px}
   <div class=ctl data-act=skin><span class=i>&#127912;</span><span class=t id=skinT>Skin</span></div>
   <div class=ctl id=fullCtl data-act=full><span class=i>&#9974;</span><span class=t>Full</span></div>
  </div>
- <div class=ask><input id=q placeholder="Ask your car"><button id=askbtn>Ask</button></div>
+ <div class=ask><input id=q placeholder="Ask your car"><button id=chatbtn class=sec>Chat</button><button id=askbtn>Ask</button></div>
 </div>
 <div id=out></div><div id=answer></div>
+<div id=chatview><div class=chead><span id=chatmodel>chat</span><button id=chatclose>&#10005;</button></div><div id=chatlog></div><div class=cask><input id=cq placeholder="Ask your car"><button id=caskbtn>Ask</button></div></div>
 <div id=modal><div class=mbox><p id=mTxt></p><input id=mIn><div class=mrow><button id=mNo>Cancel</button><button id=mOk class=pri>OK</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -570,19 +584,47 @@ function setListen(on){$('listenCtl').classList.toggle('on',!!on);$('listenT').t
 async function speak(){const t=await cwPrompt('Text for the car to speak:');if(!t)return;show('speaking ...');
  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
  .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed'))).catch(e=>show('speak failed: '+e))}
-async function ask(){const t=$('q').value.trim();if(!t)return;const a=$('answer');
+// --- Chat view (petrus, 29 Aug, live-testing v0.5: "Dash UI, difficult
+// to see full response, needs chat view"): the answer popup truncates and
+// vanishes; this keeps every Q&A in a scrollable full-screen conversation.
+// History is per-phone (localStorage, last 50) - a convenience, not a log.
+let CHAT=[];try{CHAT=JSON.parse(localStorage.getItem('cwChat')||'[]')}catch(e){}
+function chatSave(){try{localStorage.setItem('cwChat',JSON.stringify(CHAT.slice(-50)))}catch(e){}}
+function chatRender(){const l=$('chatlog');if(!l)return;l.innerHTML='';
+ CHAT.forEach(m=>{const q=document.createElement('div');q.className='cb q';q.textContent=m.q;l.appendChild(q);
+  const a=document.createElement('div');a.className='cb a';a.textContent=m.a||'thinking…';
+  if(m.model){const md=document.createElement('div');md.className='meta';
+   md.textContent=m.model+(m.s?' · '+m.s+'s':'');a.appendChild(md);}
+  l.appendChild(a);});
+ l.scrollTop=l.scrollHeight;}
+function chatOpen(){$('chatview').classList.add('open');
+ const m=(MDLREG&&MDLREG.models||[]).find(x=>x.running);
+ $('chatmodel').textContent=m?m.name.slice(0,28):'chat';chatRender();}
+$('chatbtn').addEventListener('click',chatOpen);
+$('chatclose').addEventListener('click',()=>$('chatview').classList.remove('open'));
+$('caskbtn').addEventListener('click',()=>{const t=$('cq').value.trim();if(!t)return;$('cq').value='';askQ(t);});
+$('cq').addEventListener('keydown',e=>{if(e.key==='Enter')$('caskbtn').click()});
+async function askQ(t){
+ const a=$('answer');
  // Estimate from the RUNNING brain's measured numbers, never a constant
  // (petrus, 29 Aug: "should use the measured number not fixed 3.5 tps").
- let est=0,lbl='thinking…';
- try{const m=(MDLREG&&MDLREG.models||[]).find(x=>x.running);
-  if(MDLREG&&MDLREG.expect_s){est=Math.round(MDLREG.expect_s);
-   lbl='thinking… (~'+est+'s'+(m&&m.bench&&m.bench.tg128?' at '+m.bench.tg128+' tok/s':'')+(m?' on '+m.name.slice(0,22):'')+')';}
- }catch(e){}
- a.style.display='block';a.textContent=lbl;$('q').value='';
- clearTimeout(ask._t);ask._t=setTimeout(()=>a.style.display='none',20000);
+ let est=0,lbl='thinking…';const m=(MDLREG&&MDLREG.models||[]).find(x=>x.running);
+ try{if(MDLREG&&MDLREG.expect_s){est=Math.round(MDLREG.expect_s);
+  lbl='thinking… (~'+est+'s'+(m&&m.bench&&m.bench.tg128?' at '+m.bench.tg128+' tok/s':'')+(m?' on '+m.name.slice(0,22):'')+')';}}catch(e){}
+ const entry={q:t,a:'',model:m?m.name.slice(0,28):'',ts:Date.now()};CHAT.push(entry);chatSave();
+ const inChat=$('chatview').classList.contains('open');
+ if(inChat)chatRender();
+ else{a.style.display='block';a.textContent=lbl;
+  clearTimeout(askQ._t);askQ._t=setTimeout(()=>a.style.display='none',20000);}
+ const t0=Date.now();
  try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},Math.max(120000,est*2500));
-  const d=await r.json();a.textContent=d.answer||'(no answer)';ask._t=setTimeout(()=>a.style.display='none',25000);}
- catch(e){a.textContent='could not reach the car brain'}}
+  const d=await r.json();entry.a=d.answer||'(no answer)';entry.s=Math.round((Date.now()-t0)/1000);chatSave();
+  if($('chatview').classList.contains('open'))chatRender();
+  else{a.textContent=entry.a;askQ._t=setTimeout(()=>a.style.display='none',25000);}}
+ catch(e){entry.a='could not reach the car brain';chatSave();
+  if($('chatview').classList.contains('open'))chatRender();
+  else a.textContent=entry.a;}}
+async function ask(){const t=$('q').value.trim();if(!t)return;$('q').value='';askQ(t);}
 document.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>doAct(el.getAttribute('data-act'))));
 $('askbtn').addEventListener('click',ask);$('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
 const _tl=$('trustlink');if(_tl)_tl.addEventListener('click',async(e)=>{e.preventDefault();
