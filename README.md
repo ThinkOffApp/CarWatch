@@ -62,10 +62,22 @@ reached *on this Pi*, and one tap to make it the running brain.
 ![The CarWatch dashboard's Model zone: seven local models listed with their measured tokens per second, the running one marked in green, and a swap in progress with an honest load estimate](docs/img/model-chooser.jpg)
 
 The numbers next to each model are `llama-bench` runs from the device itself,
-not figures from someone's blog. On the reference Pi 5 that means Gemma 4 E2B
-at 6.2 tok/s, Gemma 4 E4B at 3.6, and Qwen3.6-35B-A3B at 2.9 — the same
-hardware, the same quant, measured the same way, so the choice you are making
-is a real trade and not a guess.
+not figures from someone's blog — the same hardware, the same quant, measured
+the same way, so the choice you are making is a real trade and not a guess.
+The reference Pi 5 16GB table (29 Aug 2026, 4 threads, prompt pp512 /
+generation tg128 in tokens per second):
+
+| model | size | prompt | generation | call |
+|---|---|---|---|---|
+| Gemma 4 E2B Q4_K_M | 3.2 GB | 29.9 | 6.2 | speed pick |
+| Gemma 4 E4B QAT Q4_0 | 4.8 GB | 30.2 | 3.6 | best balance |
+| Ornith 1.5 9B (dense) | 5.4 GB | 9.1 | 2.0 | out — dense is slow here |
+| Qwen3.6 27B dense IQ2_M | 10.1 GB | 0.7 | 0.5 | out — IQ2 is compute-bound on Pi CPUs |
+| Ornith 1.5 35B MoE IQ3_XXS | 12.7 GB | 8.3 | 2.8 | quality untested |
+| Qwen3.6 35B MoE Q3_K_S | 14.3 GB | 9.1 | 2.9 | the quality pick, default brain |
+
+The table grows as models get benched on the device; the menu always shows
+whatever the box has measured for itself.
 
 Three guard rails, because this runs while you drive:
 
