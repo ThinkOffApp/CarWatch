@@ -48,6 +48,24 @@ _GLE_DEFAULTS = {
 }
 
 
+
+def _model_expect_s():
+    """Answer estimate for the RUNNING brain, not a model-blind median
+    (THI-38 swaps made the old number lie by the speed ratio)."""
+    try:
+        from carwatch.models import expected_answer_s
+        return expected_answer_s()
+    except Exception:
+        return voicestate.expect_s()
+
+
+def _serving_model_name():
+    try:
+        from carwatch.selfstate import serving_model
+        return serving_model()
+    except Exception:
+        return None
+
 def car_identity() -> dict:
     cfg = _load_json(CONFIG_PATH)
     car = dict(_GLE_DEFAULTS)
@@ -342,7 +360,7 @@ def _think(question: str, asker: str) -> str:
         t0 = time.time()
         voicestate.set_state("answering", question=question, started_at=t0,
                              tokens=0, max_tokens=MAX_TOKENS,
-                             expect_s=voicestate.expect_s())
+                             expect_s=_model_expect_s())
         last_prog = t0
         with urllib.request.urlopen(req, timeout=1200) as resp:
             for raw in resp:
@@ -361,12 +379,12 @@ def _think(question: str, asker: str) -> str:
                     voicestate.set_state("answering", question=question,
                                          started_at=t0, tokens=len(parts),
                                          max_tokens=MAX_TOKENS,
-                                         expect_s=voicestate.expect_s())
+                                         expect_s=_model_expect_s())
                     last_prog = time.time()
                 if len(line_buf) >= 60 or "\n" in delta:
                     print(f"  ... {line_buf.strip()}", flush=True)
                     line_buf = ""
-        voicestate.record_answer_s(time.time() - t0)
+        voicestate.record_answer_s(time.time() - t0, model=_serving_model_name())
     if line_buf.strip():
         print(f"  ... {line_buf.strip()}", flush=True)
     answer = "".join(parts).strip()

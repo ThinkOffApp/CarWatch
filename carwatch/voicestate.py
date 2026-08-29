@@ -77,7 +77,7 @@ def consume_arm() -> None:
 
 
 def expect_s() -> float:
-    """Typical answer duration, from the last few real ones."""
+    """Typical answer duration, from the last few real ones (any model)."""
     try:
         with open(STATS_PATH) as f:
             hist = json.load(f).get("answer_s") or []
@@ -88,18 +88,37 @@ def expect_s() -> float:
     return DEFAULT_EXPECT_S
 
 
-def record_answer_s(seconds: float) -> None:
+def expect_s_for(model: str) -> float | None:
+    """Median answer time measured on THIS model, or None if it has no
+    samples yet. Model-blind stats lie by the speed ratio after a brain
+    swap (THI-38): petrus saw "~164s typical" - the 35B's median - while
+    the freshly loaded 2B was answering."""
     try:
-        hist = []
+        with open(STATS_PATH) as f:
+            hist = (json.load(f).get("by_model") or {}).get(model) or []
+        if hist:
+            return sorted(hist)[len(hist) // 2]
+    except Exception:
+        pass
+    return None
+
+
+def record_answer_s(seconds: float, model: str | None = None) -> None:
+    try:
+        d = {}
         try:
             with open(STATS_PATH) as f:
-                hist = json.load(f).get("answer_s") or []
+                d = json.load(f)
         except Exception:
             pass
-        hist = (hist + [round(seconds, 1)])[-5:]
+        d["answer_s"] = ((d.get("answer_s") or []) + [round(seconds, 1)])[-5:]
+        if model:
+            bm = d.get("by_model") or {}
+            bm[model] = ((bm.get(model) or []) + [round(seconds, 1)])[-5:]
+            d["by_model"] = bm
         tmp = STATS_PATH + ".tmp"
         with open(tmp, "w") as f:
-            json.dump({"answer_s": hist}, f)
+            json.dump(d, f)
         os.replace(tmp, STATS_PATH)
     except Exception:
         pass

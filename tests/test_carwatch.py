@@ -438,6 +438,48 @@ class TestModelSelector(unittest.TestCase):
         self.assertTrue(self.m.brain_busy())
 
 
+
+class TestModelAwareEstimates(unittest.TestCase):
+    """petrus, 29 Aug (live test): the dash showed "~164s typical" - the
+    35B's median - while a freshly swapped 2B was answering. Estimates must
+    follow the RUNNING model."""
+
+    GB = 1024 ** 3
+
+    def setUp(self):
+        import carwatch.models as models_mod
+        import carwatch.selfstate as selfstate_mod
+        import carwatch.voicestate as vs
+        self.m = models_mod
+        self.tmp = tempfile.mkdtemp()
+        self._orig = (models_mod.MODEL_DIRS, models_mod._bench_map,
+                      selfstate_mod.serving_model, vs.STATS_PATH)
+        models_mod.MODEL_DIRS = [self.tmp]
+        models_mod._bench_map = lambda: {
+            "small.gguf": {"pp512": 30.0, "tg128": 6.2}}
+        selfstate_mod.serving_model = lambda: "small.gguf"
+        vs.STATS_PATH = os.path.join(self.tmp, "voice-stats.json")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import carwatch.selfstate as selfstate_mod
+        import carwatch.voicestate as vs
+        (self.m.MODEL_DIRS, self.m._bench_map,
+         selfstate_mod.serving_model, vs.STATS_PATH) = self._orig
+
+    def test_estimate_follows_the_running_model(self):
+        import carwatch.voicestate as vs
+        # Another model's slow median must NOT leak into a fresh model's
+        # estimate - bench-derived numbers win until real samples exist.
+        vs.record_answer_s(164.0, model="Qwen-35B.gguf")
+        self.assertAlmostEqual(self.m.expected_answer_s(),
+                               round(1500 / 30.0 + 200 / 6.2), delta=1)
+        # Real samples on the running model beat the derivation.
+        for s_ in (40.0, 45.0, 50.0):
+            vs.record_answer_s(s_, model="small.gguf")
+        self.assertEqual(self.m.expected_answer_s(), 45.0)
+
+
 # Keep this at the BOTTOM of the file: unittest.main() runs the moment this
 # line executes, so any class defined after it silently never runs in the
 # dependency-free `python3 tests/test_carwatch.py` path (found 28 Aug: the

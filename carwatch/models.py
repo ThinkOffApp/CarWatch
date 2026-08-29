@@ -142,6 +142,31 @@ def list_models() -> list[dict]:
     return out
 
 
+# Rough shape of a dash answer, for bench-derived estimates: the grounded
+# fact sheet is ~1500 prompt tokens and a typical answer ~200.
+_EST_PROMPT_TOK = 1500
+_EST_ANSWER_TOK = 200
+
+
+def expected_answer_s() -> float:
+    """Answer-time estimate for the RUNNING brain (petrus, 29 Aug: "should
+    use the measured number not fixed 3.5 tps"). Prefers real measured
+    answers from this exact model; a freshly swapped model with no samples
+    yet gets a bench-derived estimate instead of another model's median."""
+    from carwatch import voicestate
+    from carwatch.selfstate import serving_model
+    running = serving_model()
+    if running:
+        measured = voicestate.expect_s_for(running)
+        if measured:
+            return measured
+        b = _bench_map().get(running) or {}
+        if b.get("tg128") and b.get("pp512"):
+            return round(_EST_PROMPT_TOK / b["pp512"]
+                         + _EST_ANSWER_TOK / b["tg128"])
+    return voicestate.expect_s()
+
+
 def registry() -> dict:
     models = list_models()
     running = next((m["name"] for m in models if m["running"]), None)
@@ -151,6 +176,7 @@ def registry() -> dict:
         "state": brain_state(),
         "busy": brain_busy(),
         "ram_gb": round(_mem_total() / 1e9, 1),
+        "expect_s": expected_answer_s(),
     }
 
 

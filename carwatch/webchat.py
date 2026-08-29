@@ -571,9 +571,16 @@ async function speak(){const t=await cwPrompt('Text for the car to speak:');if(!
  F('/api/car-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})},35000)
  .then(r=>r.json()).then(d=>show(d.ok?'spoken':'speak: '+(d.error||d.output||'failed'))).catch(e=>show('speak failed: '+e))}
 async function ask(){const t=$('q').value.trim();if(!t)return;const a=$('answer');
- a.style.display='block';a.textContent='thinking… (~1 min at 3.5 tok/s)';$('q').value='';
+ // Estimate from the RUNNING brain's measured numbers, never a constant
+ // (petrus, 29 Aug: "should use the measured number not fixed 3.5 tps").
+ let est=0,lbl='thinking…';
+ try{const m=(MDLREG&&MDLREG.models||[]).find(x=>x.running);
+  if(MDLREG&&MDLREG.expect_s){est=Math.round(MDLREG.expect_s);
+   lbl='thinking… (~'+est+'s'+(m&&m.bench&&m.bench.tg128?' at '+m.bench.tg128+' tok/s':'')+(m?' on '+m.name.slice(0,22):'')+')';}
+ }catch(e){}
+ a.style.display='block';a.textContent=lbl;$('q').value='';
  clearTimeout(ask._t);ask._t=setTimeout(()=>a.style.display='none',20000);
- try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},120000);
+ try{const r=await F('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:t,manual:true})},Math.max(120000,est*2500));
   const d=await r.json();a.textContent=d.answer||'(no answer)';ask._t=setTimeout(()=>a.style.display='none',25000);}
  catch(e){a.textContent='could not reach the car brain'}}
 document.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>doAct(el.getAttribute('data-act'))));
@@ -588,9 +595,10 @@ const _tl=$('trustlink');if(_tl)_tl.addEventListener('click',async(e)=>{e.preven
 // --- Model selector (THI-38): the ggufs on disk with their measured
 // speeds, tap to swap the brain. The list stays collapsed so the
 // one-screen guarantee holds; the header always shows what is running.
+let MDLREG=null;
 function benchTxt(b){return b?(' · '+(b.tg128!=null?b.tg128+' tok/s':'')+(b.pp512!=null?' (prompt '+b.pp512+')':'')):' · unbenched'}
 async function modelRefresh(){
- try{const d=await(await F('/api/models',{},12000)).json();
+ try{const d=await(await F('/api/models',{},12000)).json();MDLREG=d;
   const src=$('mdlsrc');src.textContent=(d.running||'no model')+' · '+d.state+(d.busy?' · answering':'');
   src.className='src '+(d.state==='ready'?'ok':'warn');
   const el=$('mdllist');el.innerHTML='';
@@ -1114,12 +1122,14 @@ def answer(question: str, use_manual: bool = True) -> str:
     from carwatch import voicestate as _vs
     with _vs.brain_lock():
         _t0 = _time.time()
+        from carwatch.models import expected_answer_s as _exp
         _vs.set_state("answering", question=question, started_at=_t0,
-                      expect_s=_vs.expect_s())
+                      expect_s=_exp())
         try:
             with urllib.request.urlopen(req, timeout=900) as r:
                 msg = json.load(r)["choices"][0]["message"]
-            _vs.record_answer_s(_time.time() - _t0)
+            from carwatch.selfstate import serving_model as _sm
+            _vs.record_answer_s(_time.time() - _t0, model=_sm())
         except Exception:
             _vs.set_state("idle", note="answer failed - brain unreachable?")
             raise
