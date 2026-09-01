@@ -99,7 +99,7 @@ class RoomClient:
                 return json.load(r)["url"]
 
 
-def post_as_car(text: str, timeout: float = 20.0) -> bool:
+def post_as_car(text: str) -> bool:
     """Post one message to the car's room as the car, from the config every
     other module reads. Returns True on success, False on any failure, never
     raises: the OBD daemon and the voice listener call this from their loops.
