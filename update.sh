@@ -14,8 +14,24 @@ set -e
 
 REPO="https://github.com/ThinkOffApp/CarWatch.git"
 DIR="$HOME/CarWatch"
+STATE="$HOME/.carwatch"
+mkdir -p "$STATE"
 
 cd "$DIR"
+
+# Rollback: `bash ~/CarWatch/update.sh --rollback` puts the code back to the
+# commit that was running before the last update and restarts when quiet.
+# The previous commit is recorded below on every update that changes code.
+if [ "${1:-}" = "--rollback" ]; then
+  LAST="$(cat "$STATE/last-good-commit" 2>/dev/null || true)"
+  [ -n "$LAST" ] || { echo "no last-good-commit recorded; nothing to roll back to"; exit 1; }
+  echo "rolling back to $LAST..."
+  git reset --hard -q "$LAST"
+  sudo cp "$DIR"/systemd/*.service "$DIR"/systemd/*.timer /etc/systemd/system/ 2>/dev/null || true
+  sudo CARWATCH_STATE="$STATE" bash "$DIR/scripts/restart-when-quiet.sh" 1800 \
+    carwatch-chat carwatch-agent carwatch-presence carwatch-obd
+  exit $?
+fi
 if [ ! -d .git ]; then
   git init -q
   git remote add origin "$REPO" 2>/dev/null || git remote set-url origin "$REPO"
@@ -29,15 +45,27 @@ echo "fetching latest..."
 find .git -name '*.lock' -delete 2>/dev/null || true
 git update-ref -d refs/remotes/origin/main 2>/dev/null || true
 git fetch -q origin main || { git remote prune origin 2>/dev/null || true; git fetch -q origin main; }
+OLD_HEAD="$(git rev-parse HEAD 2>/dev/null || echo none)"
 git reset --hard -q FETCH_HEAD
-echo "code updated to $(git rev-parse --short HEAD)"
+NEW_HEAD="$(git rev-parse HEAD)"
+if [ "$OLD_HEAD" != "$NEW_HEAD" ]; then
+  # Remember what was running so `update.sh --rollback` has a target.
+  [ "$OLD_HEAD" = none ] || echo "$OLD_HEAD" > "$STATE/last-good-commit"
+  echo "code updated ${OLD_HEAD:0:7} -> ${NEW_HEAD:0:7}"
+else
+  echo "code unchanged at ${NEW_HEAD:0:7}"
+fi
 
 # Install/refresh systemd unit files from the repo. The old updater only
 # restarted EXISTING services, so a newly added unit (like carwatch-reach)
 # never got picked up - part of why fixes did not land. Copy every unit,
 # reload, and enable the always-on ones.
+UNITS_CHANGED=0
 if [ -d "$DIR/systemd" ]; then
   echo "installing service units..."
+  for u in "$DIR"/systemd/*.service "$DIR"/systemd/*.timer; do
+    cmp -s "$u" "/etc/systemd/system/$(basename "$u")" 2>/dev/null || UNITS_CHANGED=1
+  done
   sudo cp "$DIR"/systemd/*.service "$DIR"/systemd/*.timer /etc/systemd/system/ 2>/dev/null || true
   sudo systemctl daemon-reload
   # Dial-out reachability: makes the car reachable from anywhere so no future
@@ -137,7 +165,18 @@ ls "$HOME/.local/bin/piper" >/dev/null 2>&1 && echo "piper ok" || echo "piper MI
 ls "$HOME/carwatch-stack/models/en_US-lessac-medium.onnx" >/dev/null 2>&1 && echo "voice ok" || echo "voice model MISSING"
 echo "=== END AUDIO DIAG ==="
 
-echo "restarting services..."
+# Restart ONLY when something changed, and only when the car is quiet. The
+# hourly timer used to restart four services unconditionally: mid-drive the
+# dash blinked out, mid-answer the brain's client was killed (issue #23,
+# item 6). scripts/restart-when-quiet.sh waits (up to an hour) for no
+# driving / no voice exchange / no answer generating, then restarts.
+# FORCE_RESTART=1 skips the changed-check (never the quiet-check).
+if [ "$OLD_HEAD" = "$NEW_HEAD" ] && [ "$UNITS_CHANGED" = 0 ] && [ "${FORCE_RESTART:-}" != 1 ]; then
+  echo "nothing changed - services left running"
+  echo "DONE - car pulls its own updates AND dials out so it is reachable anywhere"
+  exit 0
+fi
+echo "scheduling service restart for the next quiet moment..."
 # carwatch-obd MUST be in this list: enable --now is a no-op when the unit is
 # already running, so without a restart the OBD watcher keeps executing
 # pre-update code forever (Aug 14: exactly why the first USB adapter plug-in
@@ -150,8 +189,12 @@ echo "restarting services..."
 # systemd-run escapes the cgroup, same trick the deep-probe block uses.
 # Swap AFTER this HTTP request finishes. Killing 8088 here would abort
 # /api/update itself. systemd-run --on-active is a different cgroup.
+# CARWATCH_STATE must point at THIS user's state dir: the unit runs as root
+# and the guard would otherwise look in /root/.carwatch and see a quiet car.
 sudo systemd-run --on-active=5s --collect --unit="carwatch-swap-$(date +%s)" \
-  /bin/bash -c 'pkill -f "carwatch[.]webchat" || true; pkill -f "carwatch[.]presence" || true; sleep 1; systemctl daemon-reload; systemctl enable --now carwatch-chat carwatch-presence; systemctl restart carwatch-chat carwatch-agent carwatch-presence carwatch-obd' \
+  --setenv=CARWATCH_STATE="$STATE" \
+  /bin/bash "$DIR/scripts/restart-when-quiet.sh" 3600 \
+  carwatch-chat carwatch-agent carwatch-presence carwatch-obd \
   || echo "swap scheduled failed"
 # Do NOT restart carwatch-reach here: it is already kept up by systemd, and
 # restarting it every hourly update needlessly churns the tunnel URL (brief

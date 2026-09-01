@@ -692,3 +692,140 @@ class TestPostAsCar(unittest.TestCase):
                 room.RoomClient, "post", lambda self, body, **kw: seen.append(body) or {}):
             self.assertEqual(room.main(["--file", body_file]), 0)
         self.assertEqual(seen, ["two\nlines"])
+
+
+class TestOutboxWiring(unittest.TestCase):
+    """Every room post goes through the persistent outbox (issue #23, item 5)."""
+
+    class _Client:
+        def __init__(self, online=True):
+            self.online, self.sent = online, []
+            self.room, self.api_base = "r", "https://x"
+        def post(self, body, **kw):
+            if not self.online:
+                raise OSError("no route to host")
+            self.sent.append(body)
+            return {}
+
+    def test_offline_queues_then_flushes_in_order(self):
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        c = self._Client(online=False)
+        self.assertFalse(post_queued(c, state, "departure 08:00"))
+        self.assertFalse(post_queued(c, state, "arrived home 08:40"))
+        self.assertEqual(len(Outbox(state)), 2)
+        self.assertEqual(c.sent, [])
+        c.online = True
+        self.assertTrue(post_queued(c, state, "engine off"))
+        self.assertEqual(c.sent, ["departure 08:00", "arrived home 08:40", "engine off"])
+        self.assertEqual(len(Outbox(state)), 0)
+
+    def test_partial_recovery_keeps_order(self):
+        """If the network dies again mid-flush, the new body queues BEHIND
+        the older ones instead of jumping the queue."""
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        c = self._Client(online=False)
+        post_queued(c, state, "one"); post_queued(c, state, "two")
+        calls = {"n": 0}
+        def flaky(body, **kw):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("dropped")
+            c.sent.append(body); return {}
+        c.post = flaky
+        self.assertFalse(post_queued(c, state, "three"))
+        self.assertEqual(c.sent, ["one"])
+        self.assertEqual([m["body"] for m in Outbox(state)._load()], ["two", "three"])
+
+    def test_outbox_is_capped(self):
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        box = Outbox(state)
+        box.MAX_ITEMS = 5
+        for i in range(8):
+            box.enqueue(f"m{i}")
+        self.assertEqual([m["body"] for m in box._load()], ["m3", "m4", "m5", "m6", "m7"])
+
+    def test_post_as_car_goes_through_outbox(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r"}, fh)
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        def offline(self, body, **kw):
+            raise OSError("offline")
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(room.RoomClient, "post", offline):
+            self.assertFalse(room.post_as_car("rpm 800"))
+        self.assertEqual([m["body"] for m in Outbox(state)._load()], ["rpm 800"])
+
+
+class TestRestartGuard(unittest.TestCase):
+    """carwatch.guard says busy while driving, talking or answering."""
+
+    def _state(self, obd=None, voice=None, now=1000.0):
+        import json
+        state = tempfile.mkdtemp()
+        if obd is not None:
+            with open(os.path.join(state, "obd-all.json"), "w") as fh:
+                json.dump(obd, fh)
+        if voice is not None:
+            with open(os.path.join(state, "voice-state.json"), "w") as fh:
+                json.dump(voice, fh)
+        return state
+
+    def _reasons(self, state, now=1000.0):
+        from unittest import mock
+        from carwatch import guard
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(guard, "_brain_lock_path",
+                               return_value=os.path.join(state, "no-such.lock")):
+            return guard.busy_reasons(now=now)
+
+    def test_quiet_when_nothing_written(self):
+        self.assertEqual(self._reasons(self._state()), [])
+
+    def test_driving_is_busy_but_stale_speed_is_not(self):
+        obd = {"ts": 990.0, "groups": {"driving": {"speed_kmh": {"value": 47}}}}
+        self.assertIn("driving", self._reasons(self._state(obd=obd))[0])
+        obd["ts"] = 100.0   # 15 minutes old: says nothing about now
+        self.assertEqual(self._reasons(self._state(obd=obd)), [])
+        obd = {"ts": 995.0, "readings": {"speed_kmh": 0}}
+        self.assertEqual(self._reasons(self._state(obd=obd)), [])
+
+    def test_voice_in_flight_is_busy(self):
+        self.assertIn("voice answering",
+                      self._reasons(self._state(voice={"state": "answering", "ts": 980.0}))[0])
+        self.assertEqual(self._reasons(self._state(voice={"state": "idle", "ts": 999.0})), [])
+        self.assertEqual(self._reasons(self._state(voice={"state": "speaking", "ts": 10.0})), [])
+
+    def test_held_brain_lock_is_busy(self):
+        import fcntl
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        lock = os.path.join(state, "brain.lock")
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        holder = open(lock, "w")
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            with mock.patch.dict(os.environ, clean, clear=True), \
+                 mock.patch.object(guard, "_brain_lock_path", return_value=lock):
+                self.assertIn("brain answering", guard.busy_reasons()[0])
+                self.assertEqual(guard.main(), 1)
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN); holder.close()
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(guard, "_brain_lock_path", return_value=lock):
+            self.assertEqual(guard.busy_reasons(), [])
+            self.assertEqual(guard.main(), 0)

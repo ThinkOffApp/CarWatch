@@ -99,6 +99,33 @@ class RoomClient:
                 return json.load(r)["url"]
 
 
+def post_queued(client: "RoomClient", state_dir: str, body: str) -> bool:
+    """Post through the persistent outbox: drain anything queued from an
+    offline stretch first (oldest first, order preserved), then this body;
+    whatever cannot be delivered now is queued and delivered late rather
+    than lost. Returns True when THIS body went out now. This is the
+    README's offline promise made real (issue #23, item 5); before, the
+    Outbox class existed and no daemon used it.
+    """
+    from carwatch.outbox import Outbox
+    box = Outbox(state_dir)
+    try:
+        box.flush(client)
+    except Exception as e:  # noqa: BLE001 - flush stops at first failure itself
+        print(f"outbox flush error: {e}", flush=True)
+    if len(box):
+        box.enqueue(body)
+        print(f"offline: queued post ({len(box)} waiting)", flush=True)
+        return False
+    try:
+        client.post(body)
+        return True
+    except Exception as e:  # noqa: BLE001 - a daemon must not die on a post
+        box.enqueue(body)
+        print(f"post failed ({e}); queued for later", flush=True)
+        return False
+
+
 def post_as_car(text: str) -> bool:
     """Post one message to the car's room as the car, from the config every
     other module reads. Returns True on success, False on any failure, never
@@ -109,21 +136,16 @@ def post_as_car(text: str) -> bool:
     "post failed" and every engine reading and voice transcript silently
     never reached the room (issue #23, item 2).
     """
-    from carwatch.config import config_path, load_raw
+    from carwatch.config import config_path, load_raw, state_dir
     cfg = load_raw()
     missing = [k for k in ("api_key", "room") if not cfg.get(k)]
     if missing:
         print(f"post skipped: {', '.join(missing)} missing in {config_path()}",
               flush=True)
         return False
-    try:
-        client = RoomClient(cfg.get("api_base") or "https://groupmind.one",
-                            cfg["api_key"], cfg["room"])
-        client.post(text)
-        return True
-    except Exception as e:  # noqa: BLE001 - callers are daemons; report, do not die
-        print(f"post failed: {e}", flush=True)
-        return False
+    client = RoomClient(cfg.get("api_base") or "https://groupmind.one",
+                        cfg["api_key"], cfg["room"])
+    return post_queued(client, state_dir(), text)
 
 
 def main(argv: list[str] | None = None) -> int:

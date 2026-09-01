@@ -14,8 +14,15 @@ import os
 
 
 class Outbox:
+    # A car parked for a month in a garage must not fill the SD card with
+    # heartbeat lines: keep the newest MAX_ITEMS, drop the oldest beyond.
+    MAX_ITEMS = 200
+
     def __init__(self, state_dir: str):
         self.path = os.path.join(state_dir, "outbox.json")
+
+    def __len__(self) -> int:
+        return len(self._load())
 
     def _load(self) -> list[dict]:
         try:
@@ -25,6 +32,9 @@ class Outbox:
             return []
 
     def _save(self, items: list[dict]) -> None:
+        if len(items) > self.MAX_ITEMS:
+            del items[: len(items) - self.MAX_ITEMS]
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         tmp = self.path + ".tmp"
         with open(tmp, "w") as f:
             json.dump(items, f)
