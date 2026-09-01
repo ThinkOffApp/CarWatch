@@ -135,6 +135,21 @@ makes possible the day the other side has an agent too.
 | **Two strangers' agents negotiate** | New city, construction around the block: the car asks the site's agent for a way in, the barrier is opened for ten minutes, both log it | **enabled** the day the site has an agent; rooms are the common ground, any agent can join one |
 | **Help you did not ask for** | An agent that sees a parts list another agent wrote and starts planning the build; a car that notices its 12 V battery sagging over a week and says so before the morning it will not start | **enabled**; trend alerts on OBD history are the next grounded step |
 
+More that follow from what the car can already sense (added by the team, same labels):
+
+| Use case | What happens | Status |
+|---|---|---|
+| **Voice note from the wrist** | Dictate a question into the room from the watch; the car transcribes it on board, answers in text and in voice, no wake phrase needed | **proven** |
+| **"Did I lock it?"** | Ask the room from the sofa; the car answers with lock, window and door state from its cloud read, and closes the window if you say so | **proven** |
+| **Tyres before the long drive** | Your calendar agent sees tomorrow's 600 km; the evening before, the car posts tyre pressures, range and charge, and the manual's cold-tyre table for the load | **enabled**; every input is already read today |
+| **Charge on cheap electricity** | The tariff agent knows tonight's spot prices, the house agent owns the wallbox, the car reports state of charge; between them the plug-in hybrid is full at 6 am at the cheapest hours | **enabled**; the car's part (SoC, charging state) is proven |
+| **The car that was lent** | A family member drives it; the room gets departure, arrival and a trip summary, so "did they get there" is answered by the car, not by a text message | **built**, wiring in progress |
+| **Something hit the parked car** | The dashcam's event clip is pulled over its wifi and posted to the room with the time, so you see it before you walk out to a dented door | **built**; camera API mapped, pipeline not wired |
+| **A fault code, explained** | A stored code appears; the car names it in plain language from the manual and the room agent that knows your workshop asks for a slot | **proven** read and explanation; the booking is **enabled** |
+| **Range versus the plan** | You set off somewhere far; the car compares range to the route and says early where the charge or fuel stop should be | **enabled**; range, fuel and SoC are proven reads |
+| **The bus, decoded together** | The car records its raw CAN broadcast while you drive and the community decodes the signals nobody published | **proven** capture; decoding is [an open puzzle](docs/plan.md) |
+| **A car in a dead zone** | Garage, tunnel, countryside: voice, manual answers, dashboard and trip tracking all run on the Pi, and the room posts arrive when the signal does | **proven** offline loop; late delivery in [#25](https://github.com/ThinkOffApp/CarWatch/pull/25) |
+
 The list is examples, not a spec. Fixed use cases are what a manufacturer
 ships. What CarWatch ships is a car that knows what it can sense, says only
 that, and sits in the same rooms as everything else you own. The use cases
