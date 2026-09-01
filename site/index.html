@@ -139,6 +139,42 @@ pre code{background:none;padding:0;color:var(--ink);font-size:13.5px}
   </div>
 </section>
 
+<section id="use-cases">
+  <div class="wrap">
+    <h2>Use cases: the car is one of your agents</h2>
+    <p class="sub">Not a dashboard with a chat box. The car perceives, remembers and speaks in the
+    same rooms as your other agents (house, phone, watch, pendant), so things happen without you
+    asking. Labels follow the repo's honesty rule: <span class="pill g">proven</span> happened on the
+    real car, <span class="pill a">built</span> exists in the repo but has not met the car,
+    <span class="pill">enabled</span> is what the architecture makes possible the day the other side
+    has an agent too.</p>
+    <div class="grid three">
+      <div class="card"><h3>Ask the car, hands free</h3><p><span class="pill g">proven</span> "What does the yellow tyre light mean?" answered out of the speakers from its own manual and live tyre pressures. No internet needed; that is the v0.4 video.</p></div>
+      <div class="card"><h3>The car speaks up</h3><p><span class="pill g">proven</span> Engine reads, hybrid charge milestones and stored fault codes posted into the family room as they happen. Only on real events, never spam.</p></div>
+      <div class="card"><h3>Two cars, one family</h3><p><span class="pill g">proven</span> Each car is its own agent on the same account: lock state, tyres, charge and range for the Helsinki and the Berlin car, read-only by construction.</p></div>
+      <div class="card"><h3>Make-safe from the watch</h3><p><span class="pill g">proven</span> Lock the doors, close the window you left open, after the car told you. Unlock, open and start are deliberately not implementable.</p></div>
+      <div class="card"><h3>Departures and arrivals</h3><p><span class="pill a">built</span> The car notices it left home or came back (wifi context, no GPS) and tells the room, so the house can react. Wiring in progress.</p></div>
+      <div class="card"><h3>Nothing lost offline</h3><p><span class="pill a">built</span> Everything the car says lands in an on-disk outbox first, delivered late rather than lost. In review.</p></div>
+      <div class="card"><h3>The house warms the car</h3><p><span class="pill">enabled</span> Your house agent sees you getting ready to leave and tells the car to precondition the cabin, unasked. Preconditioning is the next allowlisted make-safe command.</p></div>
+      <div class="card"><h3>The car warms the house</h3><p><span class="pill">enabled</span> On the way home the car tells the house agent: heating, lights, kettle. Same room the trip posts land in, no app opened.</p></div>
+      <div class="card"><h3>Strangers' agents negotiate</h3><p><span class="pill">enabled</span> New city, construction around the block: the car asks the site's agent for a way in, the barrier opens for ten minutes, both log it. Rooms are the common ground; any agent can join one.</p></div>
+    </div>
+    <h3 style="margin-top:22px;font-size:17px">More that follow from what the car can already sense</h3>
+    <div class="grid three" style="margin-top:10px">
+      <div class="card"><h3>Voice note from the wrist</h3><p><span class="pill g">proven</span> Dictate a question into the room from the watch; the car transcribes it on board and answers in text and in voice.</p></div>
+      <div class="card"><h3>"Did I lock it?"</h3><p><span class="pill g">proven</span> Ask from the sofa; the car answers with lock, window and door state, and closes the window if you say so.</p></div>
+      <div class="card"><h3>Tyres before the long drive</h3><p><span class="pill">enabled</span> Your calendar agent sees tomorrow's 600 km; the evening before, the car posts tyre pressures, range and charge. Every input is read today.</p></div>
+      <div class="card"><h3>Charge on cheap electricity</h3><p><span class="pill">enabled</span> Tariff agent knows the spot prices, house agent owns the wallbox, the car reports state of charge; the hybrid is full at 6 am on the cheapest hours.</p></div>
+      <div class="card"><h3>The car that was lent</h3><p><span class="pill a">built</span> A family member drives; the room gets departure, arrival and a trip summary. "Did they get there" is answered by the car.</p></div>
+      <div class="card"><h3>Something hit the parked car</h3><p><span class="pill a">built</span> The dashcam's event clip is pulled over its wifi and posted with the time, before you walk out to a dented door. Camera API mapped, pipeline not wired.</p></div>
+      <div class="card"><h3>A fault code, explained</h3><p><span class="pill g">proven</span> A stored code appears; the car names it in plain language from the manual. <span class="pill">enabled</span> the workshop agent asks for a slot.</p></div>
+      <div class="card"><h3>Range versus the plan</h3><p><span class="pill">enabled</span> You set off somewhere far; the car compares range to the route and says early where the charge or fuel stop should be. Range, fuel and SoC are proven reads.</p></div>
+      <div class="card"><h3>A car in a dead zone</h3><p><span class="pill g">proven</span> Garage, tunnel, countryside: voice, manual answers, dashboard and trip tracking run on the Pi; the room posts arrive when the signal does.</p></div>
+    </div>
+    <p class="sub" style="margin-top:14px">And help you did not ask for: an agent that sees a parts list another agent wrote and starts planning the build; a car that notices its 12&nbsp;V battery sagging over a week and says so before the morning it will not start. The list is examples, not a spec. Fixed use cases are what a manufacturer ships. CarWatch ships a car that knows what it can sense, says only that, and sits in the same rooms as everything else you own. The use cases are what those agents come up with together, on the day, in context.</p>
+  </div>
+</section>
+
 
 <section>
   <div class="wrap">
