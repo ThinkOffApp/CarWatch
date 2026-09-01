@@ -10,7 +10,11 @@
 # Needs CARWATCH_STATE pointing at the car user's ~/.carwatch when run as
 # root (update.sh passes it), otherwise the guard would read /root/.carwatch.
 set -u
+# Repo dir: normally ../ from scripts/, but --rollback runs the copy kept in
+# ~/.carwatch, so fall back to the conventional checkout.
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$DIR/carwatch/guard.py" ] || DIR="${CARWATCH_REPO:-$HOME/CarWatch}"
+[ -f "$DIR/carwatch/guard.py" ] || DIR="$(dirname "${CARWATCH_STATE:-$HOME/.carwatch}")/CarWatch"
 MAX="${1:-3600}"; shift || true
 UNITS="$*"
 [ -n "$UNITS" ] || { echo "restart-when-quiet: no units given"; exit 2; }

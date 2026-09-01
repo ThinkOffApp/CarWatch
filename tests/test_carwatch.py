@@ -829,3 +829,95 @@ class TestRestartGuard(unittest.TestCase):
              mock.patch.object(guard, "_brain_lock_path", return_value=lock):
             self.assertEqual(guard.busy_reasons(), [])
             self.assertEqual(guard.main(), 0)
+
+
+class TestOutboxConcurrencyAndDrain(unittest.TestCase):
+    """codexmb review of #25: shared outbox must be locked across processes
+    and drained without waiting for another event."""
+
+    def test_concurrent_enqueues_lose_nothing(self):
+        import threading
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        def worker(tag):
+            box = Outbox(state)          # separate instance, separate fds
+            for i in range(40):
+                box.enqueue(f"{tag}-{i}")
+        ts = [threading.Thread(target=worker, args=(t,)) for t in ("a", "b", "c")]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertEqual(len(Outbox(state)), 120)
+
+    def test_flush_returns_count_and_flush_outbox_drains(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r"}, fh)
+        box = Outbox(state); box.enqueue("one"); box.enqueue("two")
+        sent = []
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(room.RoomClient, "post", lambda self, body, **kw: sent.append(body) or {}):
+            self.assertEqual(room.flush_outbox(), 2)
+            self.assertEqual(room.flush_outbox(), 0)   # nothing left: no post attempted
+        self.assertEqual(sent, ["one", "two"])
+        self.assertEqual(len(Outbox(state)), 0)
+
+    def test_voice_reply_failure_is_queued(self):
+        from unittest import mock
+        from carwatch import voiceroom
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        cfg = {"api_key": "k", "room": "r", "api_base": "https://x"}
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(voiceroom, "synthesize", return_value=None), \
+             mock.patch.object(voiceroom.urllib.request, "urlopen", side_effect=OSError("offline")):
+            self.assertFalse(voiceroom.post_voice_reply(cfg, "(kuulin: hei)\n\nMoi"))
+        items = Outbox(state)._load()
+        self.assertEqual([m["body"] for m in items], ["(kuulin: hei)\n\nMoi"])
+        self.assertNotIn("audio_url", items[0])
+
+
+class TestRestartGuardTripGrace(unittest.TestCase):
+    """A red light is not parked: recent motion and ignition voltage keep the
+    guard busy (codexmb review of #25)."""
+
+    def _env(self, state):
+        from unittest import mock
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        return mock.patch.dict(os.environ, clean, clear=True)
+
+    def test_recent_motion_keeps_busy_then_expires(self):
+        import json
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "groups": {"driving": {"speed_kmh": {"value": 0}}}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            guard.stamp_motion(now=900.0)          # moved 100 s ago, now at a light
+            self.assertTrue(any("moved" in r for r in guard.busy_reasons(now=1000.0)))
+            self.assertEqual(guard.busy_reasons(now=900.0 + guard.MOTION_GRACE_S + 1), [])
+
+    def test_ignition_voltage_is_busy(self):
+        import json
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "readings": {"speed_kmh": 0, "module_voltage": 14.3}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            self.assertTrue(any("ignition" in r for r in guard.busy_reasons(now=1000.0)))
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "readings": {"speed_kmh": 0, "module_voltage": 12.4}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            self.assertEqual(guard.busy_reasons(now=1000.0), [])

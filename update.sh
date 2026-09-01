@@ -26,9 +26,13 @@ if [ "${1:-}" = "--rollback" ]; then
   LAST="$(cat "$STATE/last-good-commit" 2>/dev/null || true)"
   [ -n "$LAST" ] || { echo "no last-good-commit recorded; nothing to roll back to"; exit 1; }
   echo "rolling back to $LAST..."
+  # The restart helper is run from the STATE copy (kept current by every
+  # update below), because the target commit may predate the helper and the
+  # reset would delete it from the tree (codexmb review of #25).
+  [ -x "$STATE/restart-when-quiet.sh" ] || { echo "no $STATE/restart-when-quiet.sh; run one normal update first"; exit 1; }
   git reset --hard -q "$LAST"
   sudo cp "$DIR"/systemd/*.service "$DIR"/systemd/*.timer /etc/systemd/system/ 2>/dev/null || true
-  sudo CARWATCH_STATE="$STATE" bash "$DIR/scripts/restart-when-quiet.sh" 1800 \
+  sudo CARWATCH_STATE="$STATE" bash "$STATE/restart-when-quiet.sh" 1800 \
     carwatch-chat carwatch-agent carwatch-presence carwatch-obd
   exit $?
 fi
@@ -48,6 +52,9 @@ git fetch -q origin main || { git remote prune origin 2>/dev/null || true; git f
 OLD_HEAD="$(git rev-parse HEAD 2>/dev/null || echo none)"
 git reset --hard -q FETCH_HEAD
 NEW_HEAD="$(git rev-parse HEAD)"
+# Keep a copy of the restart helper outside the tree so --rollback can use
+# it even when rolling back to a commit that did not have it.
+install -m 0755 "$DIR/scripts/restart-when-quiet.sh" "$STATE/restart-when-quiet.sh" 2>/dev/null || true
 if [ "$OLD_HEAD" != "$NEW_HEAD" ]; then
   # Remember what was running so `update.sh --rollback` has a target.
   [ "$OLD_HEAD" = none ] || echo "$OLD_HEAD" > "$STATE/last-good-commit"

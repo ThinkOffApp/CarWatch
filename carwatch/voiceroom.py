@@ -196,5 +196,15 @@ def post_voice_reply(config: dict, text: str, spoken: str | None = None) -> bool
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.status in (200, 201)
-    except Exception:
+    except Exception as e:
+        # Offline mid-answer: the reply is queued like every other post
+        # (text always, the uploaded audio when there is one) and goes out
+        # when the signal returns (codexmb review of #25).
+        try:
+            from carwatch.config import state_dir
+            from carwatch.outbox import Outbox
+            Outbox(state_dir()).enqueue(text, audio_url=audio_url or None)
+            print(f"voice reply post failed ({e}); queued", flush=True)
+        except Exception as e2:  # noqa: BLE001
+            print(f"voice reply post failed ({e}); queue failed too: {e2}", flush=True)
         return False

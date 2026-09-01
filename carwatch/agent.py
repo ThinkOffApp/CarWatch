@@ -455,6 +455,11 @@ def run() -> None:
 
     while True:
         try:
+            try:
+                from carwatch.room import flush_outbox
+                flush_outbox()
+            except Exception as e:  # noqa: BLE001
+                print(f"outbox drain failed: {e}", flush=True)
             for msg in _fetch_messages(config):
                 if msg.get("created_at", "") <= state["last_seen"]:
                     continue
