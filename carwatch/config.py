@@ -2,7 +2,8 @@
 
 Where the car's config.json lives, in order of precedence:
 
-  1. $CARWATCH_CONFIG                       explicit file, wins always
+  1. $CARWATCH_CONFIG                       explicit file, wins always,
+                                           even when it does not exist yet
   2. $CARWATCH_STATE/config.json           the systemd units set
                                            CARWATCH_STATE=~/.carwatch
   3. ~/.carwatch/config.json               the reference car's location
@@ -49,8 +50,14 @@ def config_candidates() -> list[str]:
 
 
 def config_path() -> str:
-    """The config file every module should use: first existing candidate,
-    else the highest-precedence one (where a new config should be written)."""
+    """The config file every module should use. An explicit $CARWATCH_CONFIG
+    is authoritative whether or not it exists (a typo must fail visibly, not
+    silently fall back to another car's credentials; codex review on #24).
+    Otherwise the first existing candidate, else the highest-precedence one
+    (where a new config should be written)."""
+    explicit = os.environ.get("CARWATCH_CONFIG")
+    if explicit:
+        return explicit
     cands = config_candidates()
     for p in cands:
         if os.path.isfile(p):
@@ -68,6 +75,29 @@ def load_raw(path: str | None = None) -> dict:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+def load_strict(path: str | None = None) -> dict:
+    """The config as a dict, or an exception when the file is missing,
+    unreadable or not a JSON object. For code that is about to WRITE the
+    config back: a transient read error must never turn into an overwrite
+    that leaves only the field being edited (codexmb, PR #24 review)."""
+    path = path or config_path()
+    with open(path) as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: config is not a JSON object")
+    return data
+
+
+def update_config(mutate, path: str | None = None) -> dict:
+    """Read strictly, apply mutate(cfg) in place, write atomically. Raises
+    and leaves the file untouched if the current config cannot be read."""
+    path = path or config_path()
+    cfg = load_strict(path)
+    mutate(cfg)
+    save_raw(cfg, path)
+    return cfg
 
 
 def save_raw(cfg: dict, path: str | None = None) -> str:

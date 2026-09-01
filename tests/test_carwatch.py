@@ -514,6 +514,50 @@ class TestConfigResolution(unittest.TestCase):
         with self._env(CARWATCH_CONFIG=explicit, CARWATCH_STATE=state):
             self.assertEqual(config.config_path(), explicit)
 
+    def test_explicit_env_wins_even_when_missing(self):
+        """A mistyped CARWATCH_CONFIG must fail visibly, never fall back to
+        another file's credentials (codex, PR #24)."""
+        from carwatch import config
+        d = tempfile.mkdtemp()
+        state = os.path.join(d, "state")
+        os.makedirs(state)
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            fh.write('{"api_key": "other"}')
+        missing = os.path.join(d, "nope.json")
+        with self._env(CARWATCH_CONFIG=missing, CARWATCH_STATE=state):
+            self.assertEqual(config.config_path(), missing)
+            self.assertEqual(config.load_raw(), {})
+            with self.assertRaises(FileNotFoundError):
+                config.load_strict()
+
+    def test_update_config_fails_closed_on_malformed_file(self):
+        """The wifi editor's read-modify-write must leave a malformed or
+        unreadable config untouched instead of replacing it with only the
+        field being edited (codexmb P1, PR #24)."""
+        from carwatch import config
+        state = tempfile.mkdtemp()
+        p = os.path.join(state, "config.json")
+        broken = '{"api_key": "k", "room": "r", "home_ssids": ['   # truncated
+        with open(p, "w") as fh:
+            fh.write(broken)
+        with self._env(CARWATCH_STATE=state):
+            with self.assertRaises(ValueError):
+                config.update_config(lambda c: c.__setitem__("home_ssids", ["x"]))
+        with open(p) as fh:
+            self.assertEqual(fh.read(), broken)
+        with self._env(CARWATCH_STATE=state):
+            with self.assertRaises(FileNotFoundError):
+                config.update_config(lambda c: None, os.path.join(state, "none.json"))
+        # and the happy path keeps every other key
+        with open(p, "w") as fh:
+            fh.write('{"api_key": "k", "room": "r", "handle": "@gle"}')
+        with self._env(CARWATCH_STATE=state):
+            cfg = config.update_config(lambda c: c.__setitem__("home_ssids", ["Home"]))
+        self.assertEqual(cfg, {"api_key": "k", "room": "r", "handle": "@gle",
+                               "home_ssids": ["Home"]})
+        with self._env(CARWATCH_STATE=state):
+            self.assertEqual(config.load_strict()["api_key"], "k")
+
     def test_state_dir_when_no_explicit(self):
         from carwatch import config
         state = tempfile.mkdtemp()
@@ -568,6 +612,32 @@ class TestOwnerGate(unittest.TestCase):
         self.assertTrue(_owner_ok("anna", ""))
         self.assertFalse(_owner_ok("@claudemm", ""))
         self.assertFalse(_owner_ok("", ""))
+
+    def test_profile_overlays_neutral_defaults(self):
+        """A config with a handle but no car block keeps its repo profile
+        identity; an explicit car block still wins (codex P2, PR #24)."""
+        import json
+        from unittest import mock
+        from carwatch import agent
+        state = tempfile.mkdtemp()
+        p = os.path.join(state, "config.json")
+        with open(p, "w") as fh:
+            json.dump({"handle": "@gle"}, fh)
+        with mock.patch.object(agent, "CONFIG_PATH", p):
+            car = agent.car_identity()
+        self.assertIn("GLE", car["identity"])          # from profiles/gle.json
+        self.assertNotEqual(car["appearance"], agent._CAR_DEFAULTS["appearance"])
+        with open(p, "w") as fh:
+            json.dump({"handle": "@gle", "car": {"appearance": "matte black"}}, fh)
+        with mock.patch.object(agent, "CONFIG_PATH", p):
+            car = agent.car_identity()
+        self.assertEqual(car["appearance"], "matte black")
+        self.assertIn("GLE", car["identity"])
+        with open(p, "w") as fh:
+            json.dump({"handle": "@nobodyscar"}, fh)
+        with mock.patch.object(agent, "CONFIG_PATH", p):
+            car = agent.car_identity()
+        self.assertEqual(car, agent._CAR_DEFAULTS)
 
     def test_mentions_me_uses_owner(self):
         from carwatch import agent

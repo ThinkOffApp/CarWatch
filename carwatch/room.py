@@ -139,7 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         print(main.__doc__, file=sys.stderr)
         return 2
     if argv[0] == "--file" and len(argv) == 2:
-        text = open(argv[1], encoding="utf-8", errors="replace").read()
+        with open(argv[1], encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
     elif argv[0] == "-":
         text = sys.stdin.read()
     else:

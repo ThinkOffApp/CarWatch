@@ -68,20 +68,21 @@ def _serving_model_name():
         return None
 
 def car_identity() -> dict:
+    """Layered: neutral defaults < repo profile for this handle < the
+    config's own "car" block. The profile sits ABOVE the defaults so an
+    install whose config has a handle but no car block (every config made
+    from the old example) keeps its full identity after this update
+    (codex review on #24). Keys added to the repo profile after switch-car
+    merged it (e.g. "plate", 27 Aug) reach the car through the same layer."""
     cfg = _load_json(CONFIG_PATH)
     car = dict(_CAR_DEFAULTS)
-    car.update(cfg.get("car") or {})
-    # Keys added to the repo profile AFTER switch-car merged it (e.g. "plate",
-    # 27 Aug) never reach ~/.carwatch/config.json on their own - overlay the
-    # repo profile for anything the merged config is missing, so a git pull
-    # is enough to teach the car new identity fields.
     handle = (cfg.get("handle") or "").lstrip("@")
     if handle:
         prof = _load_json(os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "profiles", f"{handle}.json"))
-        for k, v in (prof.get("car") or {}).items():
-            car.setdefault(k, v)
+        car.update({k: v for k, v in (prof.get("car") or {}).items() if v})
+    car.update({k: v for k, v in (cfg.get("car") or {}).items() if v})
     return car
 STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
 MODEL_URL = "http://127.0.0.1:8081/v1/chat/completions"
@@ -452,7 +453,10 @@ def run() -> None:
                 state["last_seen"] = msg["created_at"]
                 _save_state(state)
                 sender = msg.get("from") or ""
-                if voiceroom.is_voice_note(msg) and not sender.startswith("@"):
+                # Voice notes pass the same owner gate as text: with an owner
+                # configured, only the owner's notes wake the brain (codex
+                # review on #24); with none, any human's do. Agents never.
+                if voiceroom.is_voice_note(msg) and _owner_ok(sender, owner):
                     # A spoken note is always addressed to the car - nobody
                     # says "@eclass" into audio. Agent senders (the car's own
                     # audio replies included) carry @handles and are skipped,

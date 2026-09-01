@@ -3160,17 +3160,23 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, json.dumps(
                         {"ok": False, "error": "no wifi network detected"}),
                         "application/json")
-                from carwatch.config import config_path, load_raw, save_raw
-                cfg_path = config_path()
-                cfg = load_raw(cfg_path)
-                homes = [s for s in (cfg.get("home_ssids") or []) if s]
+                from carwatch.config import update_config
                 remove = bool(body.get("remove"))
-                if remove:
-                    homes = [s for s in homes if s != ssid]
-                elif ssid not in homes:
-                    homes.append(ssid)
-                cfg["home_ssids"] = homes
-                save_raw(cfg, cfg_path)
+                homes: list = []
+
+                def _edit(cfg: dict) -> None:
+                    # Strict read-modify-write: if the config cannot be read
+                    # this raises and nothing is written, so a transient
+                    # error can never reduce config.json to home_ssids only.
+                    cur = [s for s in (cfg.get("home_ssids") or []) if s]
+                    if remove:
+                        cur = [s for s in cur if s != ssid]
+                    elif ssid not in cur:
+                        cur.append(ssid)
+                    cfg["home_ssids"] = cur
+                    homes[:] = cur
+
+                update_config(_edit)
                 self.__class__._home_wifi_cache = (0.0, False)  # force re-eval
                 return self._send(200, json.dumps(
                     {"ok": True, "ssid": ssid, "trusted": not remove,
