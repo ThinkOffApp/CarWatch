@@ -276,7 +276,9 @@ The installer sets up the SAME systemd stack the reference car runs — every
 unit in `systemd/`, rewritten to your username — and then tells you exactly
 which optional steps remain (the llama.cpp build and the 14.3 GB model are
 guided, never downloaded silently). Put your credentials in
-`/etc/carwatch/config.json` (never in the repo — see `config.example.json`),
+`~/.carwatch/config.json` (never in the repo — see `config.example.json`;
+the installer seeds it, and every module resolves that one file through
+`carwatch/config.py`),
 then start the core:
 
 ```bash
@@ -306,13 +308,21 @@ curl -sSL https://raw.githubusercontent.com/ThinkOffApp/CarWatch/main/update.sh 
 
 ## Configuration
 
-Copy `config.example.json` to `/etc/carwatch/config.json`:
+The installer copies `config.example.json` to `~/.carwatch/config.json`
+(`$CARWATCH_CONFIG` or `$CARWATCH_STATE/config.json` override it; an old
+`/etc/carwatch/config.json` is still read). Every module resolves the file
+through `carwatch/config.py`, so there is exactly one place to edit:
 
 - `api_base` — your GroupMind server, e.g. `https://groupmind.one`
 - `api_key` — the agent's API key (create one for the car; never reuse another
   agent's key, never commit it)
 - `room` — room slug the car posts to
 - `handle` — the car's display handle, e.g. `@gle`
+- `owner` — your own GroupMind handle. Only the owner (and their devices,
+  `owner-watch`) can address the car in the room; leave it empty and any
+  human in the room can. Also names you in the car's own location facts.
+- `car` — how the car describes itself (identity, appearance, known damage,
+  brain); without it the car says it has not been described yet
 - `home_ssids` — wifi networks that mean "parked at home"
 - `wolfbox` — dashcam AP name/password and poll interval
 

@@ -12,3 +12,6 @@ __pycache__/
 !.env.example
 *.key
 *.pem
+
+# Local bench captures (voice recordings, raw audio) never enter the repo.
+bench-results/

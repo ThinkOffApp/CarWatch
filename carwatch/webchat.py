@@ -2341,9 +2341,9 @@ class Handler(BaseHTTPRequestHandler):
             return val
         val = False
         try:
-            with open(os.path.expanduser("~/.carwatch/config.json")) as fh:
-                homes = {s.strip() for s in (json.load(fh).get("home_ssids") or [])
-                         if s and s.strip()}
+            from carwatch.config import load_raw
+            homes = {s.strip() for s in (load_raw().get("home_ssids") or [])
+                     if s and s.strip()}
             if homes:
                 from carwatch.trips import current_ssid
                 ssid = current_ssid()
@@ -2451,8 +2451,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 ssid = None
             try:
-                with open(os.path.expanduser("~/.carwatch/config.json")) as _fh:
-                    _homes = [s for s in (json.load(_fh).get("home_ssids") or []) if s]
+                from carwatch.config import load_raw
+                _homes = [s for s in (load_raw().get("home_ssids") or []) if s]
             except Exception:
                 _homes = []
             self._send(200, json.dumps({
@@ -2575,9 +2575,8 @@ class Handler(BaseHTTPRequestHandler):
             if cache and now - cache[0] < 8:
                 return self._send(200, json.dumps(cache[1]), "application/json")
             try:
-                cfg_path = os.path.expanduser("~/.carwatch/config.json")
-                with open(cfg_path) as fh:
-                    cfg = json.load(fh)
+                from carwatch.config import load_raw
+                cfg = load_raw()
                 from carwatch.room import RoomClient
                 msgs = RoomClient(cfg.get("api_base") or "https://groupmind.one",
                                   cfg["api_key"], cfg["room"]).fetch(limit=80)
@@ -3161,20 +3160,23 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, json.dumps(
                         {"ok": False, "error": "no wifi network detected"}),
                         "application/json")
-                cfg_path = os.path.expanduser("~/.carwatch/config.json")
-                with open(cfg_path) as fh:
-                    cfg = json.load(fh)
-                homes = [s for s in (cfg.get("home_ssids") or []) if s]
+                from carwatch.config import update_config
                 remove = bool(body.get("remove"))
-                if remove:
-                    homes = [s for s in homes if s != ssid]
-                elif ssid not in homes:
-                    homes.append(ssid)
-                cfg["home_ssids"] = homes
-                tmp = cfg_path + ".tmp"
-                with open(tmp, "w") as fh:
-                    json.dump(cfg, fh, indent=2)
-                os.replace(tmp, cfg_path)
+                homes: list = []
+
+                def _edit(cfg: dict) -> None:
+                    # Strict read-modify-write: if the config cannot be read
+                    # this raises and nothing is written, so a transient
+                    # error can never reduce config.json to home_ssids only.
+                    cur = [s for s in (cfg.get("home_ssids") or []) if s]
+                    if remove:
+                        cur = [s for s in cur if s != ssid]
+                    elif ssid not in cur:
+                        cur.append(ssid)
+                    cfg["home_ssids"] = cur
+                    homes[:] = cur
+
+                update_config(_edit)
                 self.__class__._home_wifi_cache = (0.0, False)  # force re-eval
                 return self._send(200, json.dumps(
                     {"ok": True, "ssid": ssid, "trusted": not remove,

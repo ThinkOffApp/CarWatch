@@ -24,15 +24,15 @@ BLOCKLIST="watch|band|phone|tablet|keyboard|mouse|vlink"
 MAX_ATTEMPTS=3
 VOICE="$HOME/carwatch-stack/models/en_US-lessac-medium.onnx"
 PIPER="$HOME/.local/bin/piper"
-POSTER="$HOME/post-as-gle.py"
-GLE_TXT="/tmp/gle_text.txt"
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+GLE_TXT="/tmp/pair-watch-post.txt"
 
 post() {
     # Best-effort room post as the car agent; never fatal. Never repeat the
     # previous line verbatim - the 20.8. loop filled the room with one line.
     [ "$1" = "$(cat /tmp/pair-watch-lastpost 2>/dev/null)" ] && return 0
     printf '%s' "$1" > /tmp/pair-watch-lastpost
-    { printf '%s' "$1" > "$GLE_TXT" && python3 "$POSTER" >/dev/null 2>&1; } || true
+    { printf '%s' "$1" > "$GLE_TXT" && PYTHONPATH="$DIR" python3 -m carwatch.room --file "$GLE_TXT" >/dev/null 2>&1; } || true
 }
 
 advertises_sink() {

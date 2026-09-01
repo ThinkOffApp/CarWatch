@@ -21,11 +21,14 @@ import time
 import urllib.parse
 import urllib.request
 
+from carwatch.config import config_path, owner_handle
 from carwatch.selfstate import cpu_temp_c, live_facts, serving_model
 
-CONFIG_PATH = os.path.expanduser("~/.carwatch/config.json")
+CONFIG_PATH = config_path()
 INTERVAL_S = 60
-USER_ID = "@petrus"          # the human whose dashboard this feeds
+# The human whose dashboard this feeds comes from config.json "owner"; the
+# hardcoded "@petrus" it replaces made every fork heartbeat to the wrong
+# person's dashboard (issue #23, item 3).
 DEVICE_ID = "vadelma"
 # Fallback only - the published agent name follows the configured handle
 # (~/.carwatch/config.json "handle"), so a car identity switch carries the
@@ -80,7 +83,8 @@ def run() -> None:
     with open(CONFIG_PATH) as f:
         config = json.load(f)
     agent_name = (config.get("handle") or "@" + FALLBACK_AGENT_NAME).lstrip("@")
-    doc_ids = [USER_ID]
+    owner = owner_handle(config)
+    doc_ids = ["@" + owner] if owner else []
     uuid = _room_human_user_id(config)
     if uuid:
         doc_ids.append(uuid)

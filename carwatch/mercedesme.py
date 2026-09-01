@@ -81,7 +81,7 @@ def _is_private_ha(url: str) -> bool:
             return False
     return saw
 
-_CONFIG = "/etc/carwatch/config.json"
+from carwatch.config import load_raw as _load_config
 _TOKEN_FILE = os.path.expanduser("~/.carwatch/ha-token")
 _DEFAULT_URL = "http://192.168.50.241:8123"  # the Mini's HA, home LAN
 _CACHE_S = 25.0  # HA itself polls Mercedes; hitting it harder adds nothing
@@ -106,8 +106,7 @@ def _ha_url() -> str:
     if env:
         return env.rstrip("/")
     try:
-        with open(_CONFIG) as f:
-            return (json.load(f).get("ha", {}).get("url") or _DEFAULT_URL).rstrip("/")
+        return ((_load_config().get("ha") or {}).get("url") or _DEFAULT_URL).rstrip("/")
     except Exception:
         return _DEFAULT_URL
 

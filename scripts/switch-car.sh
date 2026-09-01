@@ -14,7 +14,7 @@ set -euo pipefail
 PROFILE="${1:?usage: switch-car.sh <profile: eclass|gle>}"
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE_FILE="$DIR/profiles/$PROFILE.json"
-CONFIG="$HOME/.carwatch/config.json"
+CONFIG="$(PYTHONPATH="$DIR" python3 -m carwatch.config path)"
 STAGED_KEY="$HOME/.carwatch/staged-api-key"
 
 [ -f "$PROFILE_FILE" ] || { echo "no such profile: $PROFILE_FILE"; exit 1; }

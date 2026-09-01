@@ -211,12 +211,9 @@ if __name__ == "__main__":
 # the facts, exactly like every other unsensable thing.
 def car_facts() -> dict:
     """Live engine readings over DoIP, or {} if no link. Never blocks long."""
-    import json as _json
-    try:
-        cfg_path = os.path.expanduser("~/.carwatch/config.json")
-        with open(cfg_path) as f:
-            cfg = _json.load(f)
-    except Exception:
+    from carwatch.config import load_raw
+    cfg = load_raw()
+    if not cfg:
         return {}
     obd_cfg = (cfg.get("obd") or {})
     if not obd_cfg.get("enabled"):

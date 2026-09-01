@@ -55,7 +55,7 @@ Why this over the alternatives:
    run `tailscale ip -4` on the HA machine, or read it from the Tailscale
    admin console.
 
-4. **Point CarWatch at it.** Either set it in `/etc/carwatch/config.json`:
+4. **Point CarWatch at it.** Either set it in `~/.carwatch/config.json`:
    ```json
    { "ha": { "url": "http://100.x.y.z:8123" } }
    ```
