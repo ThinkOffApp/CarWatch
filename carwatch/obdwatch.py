@@ -37,8 +37,6 @@ RECONNECT_GAP_S = 30   # adapter absent longer than this = a real reconnect
                        # quiet). Without this a flapping rfcomm0 re-posted the
                        # "connected" line every flap (claudemm, Aug 19).
 BATT_MILESTONE_PCT = 10  # post a hybrid-SoC line only after this much NET DROP
-GLE_TXT = "/tmp/gle_text.txt"
-POSTER = os.path.expanduser("~/post-as-gle.py")
 
 # Deep-probe bookkeeping. The stamp is a PERSISTED once-per-day marker on
 # disk, not an in-memory flag: the old in-memory `deep_done` reset on every
@@ -141,12 +139,10 @@ def save_deep_result(dp: dict) -> str:
 
 
 def post(text: str) -> None:
-    try:
-        with open(GLE_TXT, "w") as f:
-            f.write(text)
-        subprocess.run(["python3", POSTER], timeout=30, capture_output=True)
-    except Exception as e:
-        print(f"post failed: {e}", flush=True)
+    """Room post as the car via the in-repo poster (carwatch.room). Never
+    raises; a failed post is printed and the read loop carries on."""
+    from carwatch.room import post_as_car
+    post_as_car(text)
 
 
 # The PIDs a healthy W213 read always answers. A post carrying fewer than

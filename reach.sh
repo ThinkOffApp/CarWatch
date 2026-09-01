@@ -19,8 +19,6 @@ BIN_DIR="$HOME/carwatch-stack/bin"
 CF="$BIN_DIR/cloudflared"
 CF_LOG="/tmp/carwatch-reach-cf.log"
 URL_FILE="$HOME/.carwatch/reach-url.txt"
-POSTER="$HOME/post-as-gle.py"
-GLE_TXT="/tmp/gle_text.txt"
 
 mkdir -p "$BIN_DIR" "$(dirname "$URL_FILE")"
 

@@ -97,3 +97,59 @@ class RoomClient:
             )
             with urllib.request.urlopen(req, timeout=300) as r:
                 return json.load(r)["url"]
+
+
+def post_as_car(text: str, timeout: float = 20.0) -> bool:
+    """Post one message to the car's room as the car, from the config every
+    other module reads. Returns True on success, False on any failure, never
+    raises: the OBD daemon and the voice listener call this from their loops.
+
+    This replaces ~/post-as-gle.py, a loose script that lived only on the
+    reference Pi. On any other machine the subprocess failed, printed
+    "post failed" and every engine reading and voice transcript silently
+    never reached the room (issue #23, item 2).
+    """
+    from carwatch.config import config_path, load_raw
+    cfg = load_raw()
+    missing = [k for k in ("api_key", "room") if not cfg.get(k)]
+    if missing:
+        print(f"post skipped: {', '.join(missing)} missing in {config_path()}",
+              flush=True)
+        return False
+    try:
+        client = RoomClient(cfg.get("api_base") or "https://groupmind.one",
+                            cfg["api_key"], cfg["room"])
+        client.post(text)
+        return True
+    except Exception as e:  # noqa: BLE001 - callers are daemons; report, do not die
+        print(f"post failed: {e}", flush=True)
+        return False
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Shell entry point for the same poster:
+         python3 -m carwatch.room --file /tmp/text.txt
+         python3 -m carwatch.room "one line"
+         echo text | python3 -m carwatch.room -
+    Bodies travel via files, never as shell arguments, whenever they are
+    more than a word or two."""
+    import sys
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        print(main.__doc__, file=sys.stderr)
+        return 2
+    if argv[0] == "--file" and len(argv) == 2:
+        text = open(argv[1], encoding="utf-8", errors="replace").read()
+    elif argv[0] == "-":
+        text = sys.stdin.read()
+    else:
+        text = " ".join(argv)
+    text = text.strip()
+    if not text:
+        print("post skipped: empty body", file=sys.stderr)
+        return 1
+    return 0 if post_as_car(text) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

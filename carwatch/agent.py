@@ -29,22 +29,23 @@ from carwatch.grounding import build_system_prompt
 from carwatch.selfstate import live_facts
 from carwatch.manual import context_for
 
-CONFIG_PATH = os.path.expanduser("~/.carwatch/config.json")
+from carwatch.config import config_path, owner_handle
+
+CONFIG_PATH = config_path()
 
 # Per-car identity block from config (profiles/ in the repo hold the shapes;
-# scripts/switch-car.sh installs one). Defaults = the GLE so an un-migrated
-# config behaves exactly as before the Helsinki @eclass prep.
-_GLE_DEFAULTS = {
-    "identity": "@gle, a 2020 Mercedes-Benz GLE (V167)",
-    "appearance": ("a 2020 Mercedes GLE with a big pink rainbow heart that "
-                   "Petrus drew on your bonnet - it makes people smile "
-                   "wherever you drive"),
-    "known_damage": ("your processor lid came off with the old cooler (a "
-                     "known Pi 5 fault); cooling is now FIXED with extra "
-                     "screws and a thicker pad. The PCIe port is broken but "
-                     "CarWatch never uses it"),
-    "brain": ("a Raspberry Pi 5 named Vadelma running a language model "
-              "fully offline, no internet"),
+# scripts/switch-car.sh installs one, config.example.json shows the keys).
+# Defaults are deliberately NEUTRAL: they used to describe the reference GLE
+# (pink heart on the bonnet, a broken PCIe port), so a fork whose config had
+# no "car" block introduced itself as petrus's car. The reference cars keep
+# their descriptions through profiles/<handle>.json, overlaid below.
+_CAR_DEFAULTS = {
+    "identity": "a car running CarWatch",
+    "appearance": ("not described yet - the owner has not told you what "
+                   "you look like, so do not guess"),
+    "known_damage": "no known damage reported",
+    "brain": ("a Raspberry Pi 5 running a language model fully offline, "
+              "no internet"),
 }
 
 
@@ -68,7 +69,7 @@ def _serving_model_name():
 
 def car_identity() -> dict:
     cfg = _load_json(CONFIG_PATH)
-    car = dict(_GLE_DEFAULTS)
+    car = dict(_CAR_DEFAULTS)
     car.update(cfg.get("car") or {})
     # Keys added to the repo profile AFTER switch-car merged it (e.g. "plate",
     # 27 Aug) never reach ~/.carwatch/config.json on their own - overlay the
@@ -142,7 +143,21 @@ def _spoken_names(handle: str) -> list:
     return [s for s in (prof.get("spoken_names") or []) if s]
 
 
-def _mentions_me(msg: dict, handle: str) -> bool:
+def _owner_ok(sender: str, owner: str) -> bool:
+    """Room gate: with an owner configured only that human (or their
+    suffixed devices, "petrus-watch") may address the car; with none
+    configured any human sender may. Agents carry @handles and are never
+    the owner. Pure function so the rule is testable."""
+    sender = (sender or "").strip().lower()
+    if not sender or sender.startswith("@"):
+        return False
+    owner = (owner or "").strip().lstrip("@").lower()
+    if not owner:
+        return True
+    return sender == owner or sender.startswith(owner + "-")
+
+
+def _mentions_me(msg: dict, handle: str, owner: str = "") -> bool:
     """Addressed to the car, not merely about it.
 
     Any human mentioning the handle is talking to the car. Only
@@ -168,9 +183,10 @@ def _mentions_me(msg: dict, handle: str) -> bool:
     # questions on the shared brain during the video rehearsal (28 Aug:
     # "no wonder it doesn't answer me when it's constantly processing room
     # chatter"). isHuman is unreliable for CodeWatch posts, so the owner
-    # handle is the gate; the voice path is untouched by this.
-    owner = "petrus"
-    return sender == owner or sender.startswith(owner + "-")
+    # handle is the gate; the voice path is untouched by this. The owner
+    # comes from config.json "owner" (hardcoding it here meant a fork's car
+    # ignored its own owner forever; issue #23, item 3).
+    return _owner_ok(sender, owner)
 
 
 def _think(question: str, asker: str) -> str:
@@ -191,13 +207,18 @@ def _think(question: str, asker: str) -> str:
     # @gle told him from inside the GLE that it was still on the desk
     # (Aug 12). Which network the Pi is on is a live, honest signal.
     net = facts.get("network", "")
+    who = owner_handle(_load_json(CONFIG_PATH))
     if "phone-hotspot" in net or "S26" in net:
-        facts["location"] = "in the car with Petrus, online through his phone"
+        facts["location"] = (f"in the car with {who}, online through their phone"
+                             if who else
+                             "in the car, online through the driver's phone")
     elif "no network" in net or "vadelma" in net.lower():
         facts["location"] = ("in the car, offline mode, serving your own "
-                             "Vadelma network")
+                             "fallback wifi network")
     else:
-        facts["location"] = "at home, on home wifi (Petrus's desk)"
+        # Home wifi says where the ONBOARD COMPUTER is, not where the car
+        # is parked (issue #15): never name a desk or a room here.
+        facts["location"] = "at home, on home wifi"
     car = car_identity()
     facts["known damage"] = car["known_damage"]
     # petrus told the car this himself (room, Aug 13): a fact about its own
@@ -409,6 +430,10 @@ def run() -> None:
             print(f"config missing {key!r} in {CONFIG_PATH}", file=sys.stderr)
             sys.exit(1)
     handle = config["handle"]
+    owner = owner_handle(config)
+    print(f"config {CONFIG_PATH}; room gate: "
+          f"{'owner ' + owner if owner else 'any human (no owner configured)'}",
+          flush=True)
 
     state = _load_json(STATE_PATH)
     if not state.get("last_seen"):
@@ -451,7 +476,7 @@ def run() -> None:
                             config, f'(kuulin: "{heard}")\n\n{answer}',
                             spoken=answer)
                     continue
-                if not _mentions_me(msg, handle):
+                if not _mentions_me(msg, handle, owner):
                     continue
                 asker = msg.get("from") or "someone"
                 question = (msg.get("body") or "").strip()

@@ -21,7 +21,9 @@ import urllib.request
 
 from carwatch.elm327 import Elm327, DEFAULT_PORT, PIDS
 
-CONFIG = os.path.expanduser("~/.carwatch/config.json")
+from carwatch.config import config_path
+
+CONFIG = config_path()
 
 
 # Results also land here, ALWAYS, before any network is attempted. The

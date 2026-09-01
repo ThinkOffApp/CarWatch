@@ -59,7 +59,7 @@ fi
 # Idempotent: fires only while the marker exists AND the car is still @gle
 # AND a staged key is present; switch-car.sh consumes the key.
 if [ -f "$DIR/profiles/SWITCH-TO-eclass" ] && [ -f "$HOME/.carwatch/staged-api-key" ]; then
-  CUR=$(python3 -c "import json;print(json.load(open('$HOME/.carwatch/config.json')).get('handle',''))" 2>/dev/null || echo "")
+  CUR=$(PYTHONPATH="$DIR" python3 -m carwatch.config get handle 2>/dev/null || echo "")
   if [ "$CUR" = "@gle" ]; then
     echo "running one-shot @eclass switch..."
     SWITCH_NO_RESTART=1 bash "$DIR/scripts/switch-car.sh" eclass || echo "switch failed"

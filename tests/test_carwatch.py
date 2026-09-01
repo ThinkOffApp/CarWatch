@@ -217,8 +217,9 @@ class CarFactsIntegrationTests(unittest.TestCase):
         from carwatch import selfstate, obd
         cfgdir = tempfile.mkdtemp()
         cfg = os.path.join(cfgdir, "config.json")
-        json.dump({"obd": {"enabled": True, "gateway_ip": "169.254.1.1"}}, open(cfg, "w"))
-        with mock.patch.object(os.path, "expanduser", return_value=cfg), \
+        with open(cfg, "w") as fh:
+            json.dump({"obd": {"enabled": True, "gateway_ip": "169.254.1.1"}}, fh)
+        with mock.patch.dict(os.environ, {"CARWATCH_CONFIG": cfg}), \
              mock.patch.object(obd, "connect", return_value=mock.Mock()), \
              mock.patch.object(obd, "read_all", return_value={
                  "engine_rpm": 820.0, "coolant_c": 88, "module_voltage": 14.2}):
@@ -232,8 +233,9 @@ class CarFactsIntegrationTests(unittest.TestCase):
         from unittest import mock
         from carwatch import selfstate
         cfg = os.path.join(tempfile.mkdtemp(), "config.json")
-        json.dump({}, open(cfg, "w"))
-        with mock.patch.object(os.path, "expanduser", return_value=cfg):
+        with open(cfg, "w") as fh:
+            json.dump({}, fh)
+        with mock.patch.dict(os.environ, {"CARWATCH_CONFIG": cfg}):
             self.assertEqual(selfstate.car_facts(), {})
 
 
@@ -486,3 +488,137 @@ class TestModelAwareEstimates(unittest.TestCase):
 # direct run reported 14 tests while the suite held 33).
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConfigResolution(unittest.TestCase):
+    """One config file for every module (issue #23, item 1): explicit env,
+    then the state dir, then ~/.carwatch, then the legacy /etc path; and the
+    write target is the first candidate when nothing exists yet."""
+
+    def _env(self, **kw):
+        from unittest import mock
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("CARWATCH_CONFIG", "CARWATCH_STATE")}
+        clean.update(kw)
+        return mock.patch.dict(os.environ, clean, clear=True)
+
+    def test_explicit_env_wins(self):
+        from carwatch import config
+        d = tempfile.mkdtemp()
+        explicit = os.path.join(d, "explicit.json")
+        state = os.path.join(d, "state")
+        os.makedirs(state)
+        for p in (explicit, os.path.join(state, "config.json")):
+            with open(p, "w") as fh:
+                fh.write("{}")
+        with self._env(CARWATCH_CONFIG=explicit, CARWATCH_STATE=state):
+            self.assertEqual(config.config_path(), explicit)
+
+    def test_state_dir_when_no_explicit(self):
+        from carwatch import config
+        state = tempfile.mkdtemp()
+        p = os.path.join(state, "config.json")
+        with open(p, "w") as fh:
+            fh.write('{"handle": "@x", "owner": "@Anna"}')
+        with self._env(CARWATCH_STATE=state):
+            self.assertEqual(config.config_path(), p)
+            self.assertEqual(config.load_raw()["handle"], "@x")
+            self.assertEqual(config.owner_handle(), "anna")
+
+    def test_write_target_is_state_dir_when_nothing_exists(self):
+        from carwatch import config
+        state = os.path.join(tempfile.mkdtemp(), "fresh")
+        with self._env(CARWATCH_STATE=state):
+            # nothing exists yet: the path is where a new config belongs
+            self.assertEqual(config.config_path(),
+                             os.path.join(state, "config.json"))
+            written = config.save_raw({"handle": "@y"})
+            self.assertEqual(written, os.path.join(state, "config.json"))
+            self.assertEqual(oct(os.stat(written).st_mode & 0o777), "0o600")
+            self.assertEqual(config.load_raw()["handle"], "@y")
+
+    def test_cli_get_and_path(self):
+        from carwatch import config
+        import io
+        from unittest import mock
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            fh.write('{"handle": "@gle"}')
+        with self._env(CARWATCH_STATE=state):
+            out = io.StringIO()
+            with mock.patch.object(sys, "stdout", out):
+                self.assertEqual(config.main(["get", "handle"]), 0)
+                self.assertEqual(config.main(["path"]), 0)
+            lines = out.getvalue().splitlines()
+        self.assertEqual(lines, ["@gle", os.path.join(state, "config.json")])
+
+
+class TestOwnerGate(unittest.TestCase):
+    """The room gate reads the owner from config (issue #23, item 3)."""
+
+    def test_configured_owner_and_devices_only(self):
+        from carwatch.agent import _owner_ok
+        self.assertTrue(_owner_ok("petrus", "petrus"))
+        self.assertTrue(_owner_ok("petrus-watch", "@Petrus"))
+        self.assertFalse(_owner_ok("anna", "petrus"))
+        self.assertFalse(_owner_ok("@claudemm", "petrus"))
+
+    def test_no_owner_means_any_human(self):
+        from carwatch.agent import _owner_ok
+        self.assertTrue(_owner_ok("anna", ""))
+        self.assertFalse(_owner_ok("@claudemm", ""))
+        self.assertFalse(_owner_ok("", ""))
+
+    def test_mentions_me_uses_owner(self):
+        from carwatch import agent
+        msg = {"from": "anna", "body": "@gle how fast am I going"}
+        self.assertTrue(agent._mentions_me(msg, "@gle", ""))
+        self.assertFalse(agent._mentions_me(msg, "@gle", "petrus"))
+        self.assertTrue(agent._mentions_me(dict(msg, **{"from": "petrus"}), "@gle", "petrus"))
+
+
+class TestPostAsCar(unittest.TestCase):
+    """The in-repo poster replaces ~/post-as-gle.py (issue #23, item 2)."""
+
+    def _env(self, state):
+        from unittest import mock
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("CARWATCH_CONFIG", "CARWATCH_STATE")}
+        clean["CARWATCH_STATE"] = state
+        return mock.patch.dict(os.environ, clean, clear=True)
+
+    def test_skips_without_config_and_never_raises(self):
+        from carwatch import room
+        with self._env(tempfile.mkdtemp()):
+            self.assertFalse(room.post_as_car("hello"))
+
+    def test_posts_with_config(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r", "api_base": "https://x"}, fh)
+        seen = {}
+        def fake_post(self, body, **kw):
+            seen["room"], seen["body"], seen["base"] = self.room, body, self.api_base
+            return {}
+        with self._env(state), mock.patch.object(room.RoomClient, "post", fake_post):
+            self.assertTrue(room.post_as_car("engine on"))
+        self.assertEqual(seen, {"room": "r", "body": "engine on", "base": "https://x"})
+
+    def test_cli_reads_body_from_file(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r"}, fh)
+        body_file = os.path.join(state, "body.txt")
+        with open(body_file, "w") as fh:
+            fh.write("two\nlines\n")
+        seen = []
+        with self._env(state), mock.patch.object(
+                room.RoomClient, "post", lambda self, body, **kw: seen.append(body) or {}):
+            self.assertEqual(room.main(["--file", body_file]), 0)
+        self.assertEqual(seen, ["two\nlines"])

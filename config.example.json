@@ -3,6 +3,13 @@
   "api_key": "PUT-THE-CAR-AGENTS-KEY-HERE-NEVER-COMMIT-IT",
   "room": "your-room-slug",
   "handle": "@gle",
+  "owner": "your-groupmind-handle",
+  "car": {
+    "identity": "@gle, a 2020 Mercedes-Benz GLE (V167)",
+    "appearance": "describe your car so it can describe itself",
+    "known_damage": "no known damage",
+    "brain": "a Raspberry Pi 5 running a language model fully offline, no internet"
+  },
   "obd_mac": "AA:BB:CC:DD:EE:FF",
   "home_ssids": [
     "YourHomeWifi"

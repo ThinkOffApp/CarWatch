@@ -90,9 +90,8 @@ ECHO_MATCH_WINDOW_SEC = 30.0  # straggling buffered echo can arrive this late
 
 def _echo_tail_sec() -> float:
     try:
-        import json
-        cfg = json.load(open(os.path.expanduser("~/.carwatch/config.json")))
-        return float((cfg.get("voice") or {}).get("echo_tail_sec"))
+        from carwatch.config import load_raw
+        return float((load_raw().get("voice") or {}).get("echo_tail_sec"))
     except Exception:
         return ECHO_TAIL_SEC
 
@@ -118,9 +117,8 @@ def _is_self_echo(text: str) -> bool:
 
 def _wake_words():
     try:
-        import json
-        cfg = json.load(open(os.path.expanduser("~/.carwatch/config.json")))
-        w = (cfg.get("voice") or {}).get("wake_words")
+        from carwatch.config import load_raw
+        w = (load_raw().get("voice") or {}).get("wake_words")
         if w == []:
             return None          # explicit opt-out: always-on
         if w:
@@ -513,14 +511,8 @@ def _post_on_text(text: str) -> None:
     answer = ask_gle(text)
     if not answer:
         return
-    try:
-        with open("/tmp/gle_text.txt", "w") as f:
-            f.write(f"(heard you say: \"{text}\")\n\n{answer}")
-        subprocess.run(
-            ["python3", os.path.expanduser("~/post-as-gle.py")],
-            timeout=30, capture_output=True)
-    except Exception as e:
-        print(f"post failed: {e}", flush=True)
+    from carwatch.room import post_as_car
+    post_as_car(f"(heard you say: \"{text}\")\n\n{answer}")
 
 
 def _voice_on_text(text: str):
@@ -531,14 +523,8 @@ def _voice_on_text(text: str):
     answer = ask_gle(text)
     if not answer:
         return None
-    try:
-        with open("/tmp/gle_text.txt", "w") as f:
-            f.write(f"(heard: \"{text}\")\n\n{answer}")
-        subprocess.run(
-            ["python3", os.path.expanduser("~/post-as-gle.py")],
-            timeout=30, capture_output=True)
-    except Exception as e:
-        print(f"post failed: {e}", flush=True)
+    from carwatch.room import post_as_car
+    post_as_car(f"(heard: \"{text}\")\n\n{answer}")
     return answer
 
 
