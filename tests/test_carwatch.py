@@ -921,3 +921,20 @@ class TestRestartGuardTripGrace(unittest.TestCase):
         with self._env(state), mock.patch.object(guard, "_brain_lock_path",
                                                  return_value=os.path.join(state, "none.lock")):
             self.assertEqual(guard.busy_reasons(now=1000.0), [])
+
+
+class TestPostQueuedAtomicOrder(unittest.TestCase):
+    """post_queued must never let a newer body overtake an older queued one
+    (codexmb, #25 round 2): the queue is the single order of record."""
+
+    def test_new_body_goes_behind_queued_items_even_when_online(self):
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        Outbox(state).enqueue("older")           # left over from an offline stretch
+        sent = []
+        class C:
+            def post(self, body, **kw): sent.append(body); return {}
+        self.assertTrue(post_queued(C(), state, "newer"))
+        self.assertEqual(sent, ["older", "newer"])
+        self.assertEqual(len(Outbox(state)), 0)

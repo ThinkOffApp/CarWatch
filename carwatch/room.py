@@ -109,21 +109,20 @@ def post_queued(client: "RoomClient", state_dir: str, body: str) -> bool:
     """
     from carwatch.outbox import Outbox
     box = Outbox(state_dir)
+    # Enqueue FIRST, then one locked drain: the queue is the single order of
+    # record, so a concurrent producer cannot slip in between a "queue is
+    # empty" check and a direct send and overtake an older item (codexmb,
+    # #25 round 2). flush() holds the lock across the whole drain.
+    box.enqueue(body)
     try:
         box.flush(client)
     except Exception as e:  # noqa: BLE001 - flush stops at first failure itself
         print(f"outbox flush error: {e}", flush=True)
-    if len(box):
-        box.enqueue(body)
-        print(f"offline: queued post ({len(box)} waiting)", flush=True)
+    left = len(box)
+    if left:
+        print(f"offline: post queued ({left} waiting)", flush=True)
         return False
-    try:
-        client.post(body)
-        return True
-    except Exception as e:  # noqa: BLE001 - a daemon must not die on a post
-        box.enqueue(body)
-        print(f"post failed ({e}); queued for later", flush=True)
-        return False
+    return True
 
 
 def client_from_config(cfg: dict | None = None) -> "RoomClient | None":
