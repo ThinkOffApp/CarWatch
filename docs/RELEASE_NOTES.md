@@ -23,6 +23,11 @@ Three merges from one evening's repo review (#23), all about what happens around
 
 The README and carwatch.dev gained a **Use cases** section: fourteen cases, each labelled proven, built or enabled, from "ask the car anything, hands free" to "the house warms the car" and "two strangers' agents negotiate a way in". Fixed use cases are what a manufacturer ships; CarWatch ships a grounded car in the same rooms as your other agents.
 
+### Also since v0.5.1
+
+- **The dash says "No brain" when the model server is down (#17)** instead of a silent empty top strip.
+- **The README's model chooser section carries the measured speed table** from the Pi itself (prompt and generation tokens per second per model, 29 Aug), and the site shows the same numbers.
+
 ### Measured, not yet shipped
 
 Manual retrieval was benchmarked on 20 driver questions against the same owner's manual the car indexes: today's lexical search finds the right page in the top five 15 times out of 20, a 300 MB local embedding model 18 of 20 and, counting two gold-set artifacts, 20 of 20; all four lexical misses were vocabulary mismatch ("tyre repair kit" versus TIREFIT). The next manual.py adds embeddings through the llama.cpp server the Pi already runs, fused with the lexical index. No reranker: it bought nothing on a 745-page manual.
