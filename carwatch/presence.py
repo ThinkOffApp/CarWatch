@@ -90,6 +90,14 @@ def run() -> None:
         doc_ids.append(uuid)
     print(f"publishing to intent docs: {doc_ids}", flush=True)
     while True:
+        # The always-on heartbeat doubles as the outbox drain: whatever any
+        # daemon queued while offline goes out within a minute of the
+        # signal returning, whether or not another event happens.
+        try:
+            from carwatch.room import flush_outbox
+            flush_outbox()
+        except Exception as e:  # noqa: BLE001
+            print(f"outbox drain failed: {e}", flush=True)
         facts = live_facts()
         model = serving_model() or "none"
         temp = cpu_temp_c()

@@ -367,6 +367,11 @@ def run() -> None:
                 # defer (conservative). Inline: one serial port = one reader, so
                 # it briefly pauses normal reads, fine for a once-a-day scan.
                 speed = result["readings"].get("speed_kmh")
+                if speed:
+                    # Feeds carwatch.guard's trip grace: a red light must not
+                    # look like "parked" to the self-updater.
+                    from carwatch.guard import stamp_motion
+                    stamp_motion()
                 stationary = (speed == 0)
                 if (port and stationary and not deep_ran_this_process
                         and not deep_probe_done_today()):

@@ -692,3 +692,279 @@ class TestPostAsCar(unittest.TestCase):
                 room.RoomClient, "post", lambda self, body, **kw: seen.append(body) or {}):
             self.assertEqual(room.main(["--file", body_file]), 0)
         self.assertEqual(seen, ["two\nlines"])
+
+
+class TestOutboxWiring(unittest.TestCase):
+    """Every room post goes through the persistent outbox (issue #23, item 5)."""
+
+    class _Client:
+        def __init__(self, online=True):
+            self.online, self.sent = online, []
+            self.room, self.api_base = "r", "https://x"
+        def post(self, body, **kw):
+            if not self.online:
+                raise OSError("no route to host")
+            self.sent.append(body)
+            return {}
+
+    def test_offline_queues_then_flushes_in_order(self):
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        c = self._Client(online=False)
+        self.assertFalse(post_queued(c, state, "departure 08:00"))
+        self.assertFalse(post_queued(c, state, "arrived home 08:40"))
+        self.assertEqual(len(Outbox(state)), 2)
+        self.assertEqual(c.sent, [])
+        c.online = True
+        self.assertTrue(post_queued(c, state, "engine off"))
+        self.assertEqual(c.sent, ["departure 08:00", "arrived home 08:40", "engine off"])
+        self.assertEqual(len(Outbox(state)), 0)
+
+    def test_partial_recovery_keeps_order(self):
+        """If the network dies again mid-flush, the new body queues BEHIND
+        the older ones instead of jumping the queue."""
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        c = self._Client(online=False)
+        post_queued(c, state, "one"); post_queued(c, state, "two")
+        calls = {"n": 0}
+        def flaky(body, **kw):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("dropped")
+            c.sent.append(body); return {}
+        c.post = flaky
+        self.assertFalse(post_queued(c, state, "three"))
+        self.assertEqual(c.sent, ["one"])
+        self.assertEqual([m["body"] for m in Outbox(state)._load()], ["two", "three"])
+
+    def test_outbox_is_capped(self):
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        box = Outbox(state)
+        box.MAX_ITEMS = 5
+        for i in range(8):
+            box.enqueue(f"m{i}")
+        self.assertEqual([m["body"] for m in box._load()], ["m3", "m4", "m5", "m6", "m7"])
+
+    def test_post_as_car_goes_through_outbox(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r"}, fh)
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        def offline(self, body, **kw):
+            raise OSError("offline")
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(room.RoomClient, "post", offline):
+            self.assertFalse(room.post_as_car("rpm 800"))
+        self.assertEqual([m["body"] for m in Outbox(state)._load()], ["rpm 800"])
+
+
+class TestRestartGuard(unittest.TestCase):
+    """carwatch.guard says busy while driving, talking or answering."""
+
+    def _state(self, obd=None, voice=None, now=1000.0):
+        import json
+        state = tempfile.mkdtemp()
+        if obd is not None:
+            with open(os.path.join(state, "obd-all.json"), "w") as fh:
+                json.dump(obd, fh)
+        if voice is not None:
+            with open(os.path.join(state, "voice-state.json"), "w") as fh:
+                json.dump(voice, fh)
+        return state
+
+    def _reasons(self, state, now=1000.0):
+        from unittest import mock
+        from carwatch import guard
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(guard, "_brain_lock_path",
+                               return_value=os.path.join(state, "no-such.lock")):
+            return guard.busy_reasons(now=now)
+
+    def test_quiet_when_nothing_written(self):
+        self.assertEqual(self._reasons(self._state()), [])
+
+    def test_driving_is_busy_but_stale_speed_is_not(self):
+        obd = {"ts": 990.0, "groups": {"driving": {"speed_kmh": {"value": 47}}}}
+        self.assertIn("driving", self._reasons(self._state(obd=obd))[0])
+        obd["ts"] = 100.0   # 15 minutes old: says nothing about now
+        self.assertEqual(self._reasons(self._state(obd=obd)), [])
+        obd = {"ts": 995.0, "readings": {"speed_kmh": 0}}
+        self.assertEqual(self._reasons(self._state(obd=obd)), [])
+
+    def test_voice_in_flight_is_busy(self):
+        self.assertIn("voice answering",
+                      self._reasons(self._state(voice={"state": "answering", "ts": 980.0}))[0])
+        self.assertEqual(self._reasons(self._state(voice={"state": "idle", "ts": 999.0})), [])
+        self.assertEqual(self._reasons(self._state(voice={"state": "speaking", "ts": 10.0})), [])
+
+    def test_held_brain_lock_is_busy(self):
+        import fcntl
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        lock = os.path.join(state, "brain.lock")
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        holder = open(lock, "w")
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        try:
+            with mock.patch.dict(os.environ, clean, clear=True), \
+                 mock.patch.object(guard, "_brain_lock_path", return_value=lock):
+                self.assertIn("brain answering", guard.busy_reasons()[0])
+                self.assertEqual(guard.main(), 1)
+        finally:
+            fcntl.flock(holder, fcntl.LOCK_UN); holder.close()
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(guard, "_brain_lock_path", return_value=lock):
+            self.assertEqual(guard.busy_reasons(), [])
+            self.assertEqual(guard.main(), 0)
+
+
+class TestOutboxConcurrencyAndDrain(unittest.TestCase):
+    """codexmb review of #25: shared outbox must be locked across processes
+    and drained without waiting for another event."""
+
+    def test_concurrent_enqueues_lose_nothing(self):
+        import threading
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        def worker(tag):
+            box = Outbox(state)          # separate instance, separate fds
+            for i in range(40):
+                box.enqueue(f"{tag}-{i}")
+        ts = [threading.Thread(target=worker, args=(t,)) for t in ("a", "b", "c")]
+        [t.start() for t in ts]; [t.join() for t in ts]
+        self.assertEqual(len(Outbox(state)), 120)
+
+    def test_flush_returns_count_and_flush_outbox_drains(self):
+        import json
+        from unittest import mock
+        from carwatch import room
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "config.json"), "w") as fh:
+            json.dump({"api_key": "k", "room": "r"}, fh)
+        box = Outbox(state); box.enqueue("one"); box.enqueue("two")
+        sent = []
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(room.RoomClient, "post", lambda self, body, **kw: sent.append(body) or {}):
+            self.assertEqual(room.flush_outbox(), 2)
+            self.assertEqual(room.flush_outbox(), 0)   # nothing left: no post attempted
+        self.assertEqual(sent, ["one", "two"])
+        self.assertEqual(len(Outbox(state)), 0)
+
+    def test_voice_reply_failure_is_queued(self):
+        from unittest import mock
+        from carwatch import voiceroom
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        cfg = {"api_key": "k", "room": "r", "api_base": "https://x"}
+        with mock.patch.dict(os.environ, clean, clear=True), \
+             mock.patch.object(voiceroom, "synthesize", return_value=None), \
+             mock.patch.object(voiceroom.urllib.request, "urlopen", side_effect=OSError("offline")):
+            self.assertFalse(voiceroom.post_voice_reply(cfg, "(kuulin: hei)\n\nMoi"))
+        items = Outbox(state)._load()
+        self.assertEqual([m["body"] for m in items], ["(kuulin: hei)\n\nMoi"])
+        self.assertNotIn("audio_url", items[0])
+
+
+class TestRestartGuardTripGrace(unittest.TestCase):
+    """A red light is not parked: recent motion and ignition voltage keep the
+    guard busy (codexmb review of #25)."""
+
+    def _env(self, state):
+        from unittest import mock
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("CARWATCH_")}
+        clean["CARWATCH_STATE"] = state
+        return mock.patch.dict(os.environ, clean, clear=True)
+
+    def test_recent_motion_keeps_busy_then_expires(self):
+        import json
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "groups": {"driving": {"speed_kmh": {"value": 0}}}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            guard.stamp_motion(now=900.0)          # moved 100 s ago, now at a light
+            self.assertTrue(any("moved" in r for r in guard.busy_reasons(now=1000.0)))
+            self.assertEqual(guard.busy_reasons(now=900.0 + guard.MOTION_GRACE_S + 1), [])
+
+    def test_ignition_voltage_is_busy(self):
+        import json
+        from unittest import mock
+        from carwatch import guard
+        state = tempfile.mkdtemp()
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "readings": {"speed_kmh": 0, "module_voltage": 14.3}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            self.assertTrue(any("ignition" in r for r in guard.busy_reasons(now=1000.0)))
+        with open(os.path.join(state, "obd-all.json"), "w") as fh:
+            json.dump({"ts": 995.0, "readings": {"speed_kmh": 0, "module_voltage": 12.4}}, fh)
+        with self._env(state), mock.patch.object(guard, "_brain_lock_path",
+                                                 return_value=os.path.join(state, "none.lock")):
+            self.assertEqual(guard.busy_reasons(now=1000.0), [])
+
+
+class TestPostQueuedAtomicOrder(unittest.TestCase):
+    """post_queued must never let a newer body overtake an older queued one
+    (codexmb, #25 round 2): the queue is the single order of record."""
+
+    def test_new_body_goes_behind_queued_items_even_when_online(self):
+        from carwatch.room import post_queued
+        from carwatch.outbox import Outbox
+        state = tempfile.mkdtemp()
+        Outbox(state).enqueue("older")           # left over from an offline stretch
+        sent = []
+        class C:
+            def post(self, body, **kw): sent.append(body); return {}
+        self.assertTrue(post_queued(C(), state, "newer"))
+        self.assertEqual(sent, ["older", "newer"])
+        self.assertEqual(len(Outbox(state)), 0)
+
+
+class TestQueuedVoiceReplyDrains(unittest.TestCase):
+    """A queued voice reply (audio_url) must drain, not poison the queue."""
+
+    def test_outbox_flush_forwards_audio_url(self):
+        import io, json
+        from unittest import mock
+        from carwatch.outbox import Outbox
+        from carwatch.room import RoomClient
+        state = tempfile.mkdtemp()
+        box = Outbox(state)
+        box.enqueue("(kuulin: hei)\n\nMoi", audio_url="https://x/a.m4a")
+        box.enqueue("text only")
+        seen = []
+        class R:
+            status = 201
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"{}"
+        def fake_urlopen(req, timeout=0):
+            seen.append(json.loads(req.data)); return R()
+        # No json.load patch: it is the shared json module and would also
+        # blank Outbox._load (codexmb caught exactly that); the fake
+        # response's read() returns decodable bytes instead.
+        with mock.patch("carwatch.room.urllib.request.urlopen", fake_urlopen):
+            self.assertEqual(box.flush(RoomClient("https://x", "k", "r")), 2)
+        self.assertEqual(seen[0]["audio_url"], "https://x/a.m4a")
+        self.assertNotIn("audio_url", seen[1])
+        self.assertEqual(len(box), 0)

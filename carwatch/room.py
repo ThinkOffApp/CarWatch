@@ -28,11 +28,17 @@ class RoomClient:
         file_url: str | None = None,
         file_name: str | None = None,
         file_size: int | None = None,
+        audio_url: str | None = None,
     ) -> dict:
-        """Post a message to the room. Returns the created message JSON."""
+        """Post a message to the room. Returns the created message JSON.
+        audio_url: a voice note (voiceroom queues failed replies with it;
+        without this parameter the drain raised TypeError on that item and
+        the whole outbox stalled behind it, codexmb #25 round 2)."""
         payload: dict = {"room": self.room, "body": body}
         if image_url:
             payload["image_url"] = image_url
+        if audio_url:
+            payload["audio_url"] = audio_url
         if file_url:
             payload["file_url"] = file_url
             if file_name:
@@ -99,6 +105,69 @@ class RoomClient:
                 return json.load(r)["url"]
 
 
+def post_queued(client: "RoomClient", state_dir: str, body: str) -> bool:
+    """Post through the persistent outbox: drain anything queued from an
+    offline stretch first (oldest first, order preserved), then this body;
+    whatever cannot be delivered now is queued and delivered late rather
+    than lost. Returns True when THIS body went out now. This is the
+    README's offline promise made real (issue #23, item 5); before, the
+    Outbox class existed and no daemon used it.
+    """
+    from carwatch.outbox import Outbox
+    box = Outbox(state_dir)
+    # Enqueue FIRST, then one locked drain: the queue is the single order of
+    # record, so a concurrent producer cannot slip in between a "queue is
+    # empty" check and a direct send and overtake an older item (codexmb,
+    # #25 round 2). flush() holds the lock across the whole drain.
+    box.enqueue(body)
+    try:
+        box.flush(client)
+    except Exception as e:  # noqa: BLE001 - flush stops at first failure itself
+        print(f"outbox flush error: {e}", flush=True)
+    left = len(box)
+    if left:
+        print(f"offline: post queued ({left} waiting)", flush=True)
+        return False
+    return True
+
+
+def client_from_config(cfg: dict | None = None) -> "RoomClient | None":
+    """RoomClient for the car's own room, or None when the config lacks a
+    key or room (the caller prints why)."""
+    from carwatch.config import load_raw
+    cfg = cfg if cfg is not None else load_raw()
+    if not cfg.get("api_key") or not cfg.get("room"):
+        return None
+    base = (cfg.get("api_base") or "https://groupmind.one").rstrip("/")
+    if base.endswith("/api/v1"):
+        base = base[: -len("/api/v1")]
+    return RoomClient(base, cfg["api_key"], cfg["room"])
+
+
+def flush_outbox() -> int:
+    """Drain whatever is queued, from any daemon's loop. Without a periodic
+    drain a single failed post could sit in the outbox until the NEXT event
+    happened to call post_queued (codexmb review of #25); presence calls
+    this every heartbeat, the agent every poll. Returns how many went out;
+    0 when nothing queued, nothing configured, or still offline."""
+    from carwatch.config import state_dir
+    from carwatch.outbox import Outbox
+    client = client_from_config()
+    if client is None:
+        return 0
+    box = Outbox(state_dir())
+    try:
+        if not len(box):
+            return 0
+        sent = box.flush(client)
+        if sent:
+            print(f"outbox: delivered {sent} queued post(s), {len(box)} left", flush=True)
+        return sent
+    except Exception as e:  # noqa: BLE001 - a drain must never take a daemon down
+        print(f"outbox drain error: {e}", flush=True)
+        return 0
+
+
 def post_as_car(text: str) -> bool:
     """Post one message to the car's room as the car, from the config every
     other module reads. Returns True on success, False on any failure, never
@@ -109,21 +178,16 @@ def post_as_car(text: str) -> bool:
     "post failed" and every engine reading and voice transcript silently
     never reached the room (issue #23, item 2).
     """
-    from carwatch.config import config_path, load_raw
+    from carwatch.config import config_path, load_raw, state_dir
     cfg = load_raw()
     missing = [k for k in ("api_key", "room") if not cfg.get(k)]
     if missing:
         print(f"post skipped: {', '.join(missing)} missing in {config_path()}",
               flush=True)
         return False
-    try:
-        client = RoomClient(cfg.get("api_base") or "https://groupmind.one",
-                            cfg["api_key"], cfg["room"])
-        client.post(text)
-        return True
-    except Exception as e:  # noqa: BLE001 - callers are daemons; report, do not die
-        print(f"post failed: {e}", flush=True)
-        return False
+    client = RoomClient(cfg.get("api_base") or "https://groupmind.one",
+                        cfg["api_key"], cfg["room"])
+    return post_queued(client, state_dir(), text)
 
 
 def main(argv: list[str] | None = None) -> int:

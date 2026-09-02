@@ -127,7 +127,16 @@ def _fetch_messages(config: dict, limit: int = 20) -> list[dict]:
 
 
 def _post(config: dict, body: str) -> None:
-    _api(config, "POST", "/messages", {"room": config["room"], "body": body})
+    """Room post through the persistent outbox (carwatch.room.post_queued):
+    an answer composed in a tunnel is delivered when the signal returns
+    instead of dying in the poll-level except (issue #23, item 5)."""
+    from carwatch.config import state_dir
+    from carwatch.room import RoomClient, post_queued
+    base = config["api_base"].rstrip("/")
+    if base.endswith("/api/v1"):
+        base = base[: -len("/api/v1")]
+    client = RoomClient(base, config["api_key"], config["room"])
+    post_queued(client, state_dir(), body)
 
 
 def _spoken_names(handle: str) -> list:
@@ -446,6 +455,11 @@ def run() -> None:
 
     while True:
         try:
+            try:
+                from carwatch.room import flush_outbox
+                flush_outbox()
+            except Exception as e:  # noqa: BLE001
+                print(f"outbox drain failed: {e}", flush=True)
             for msg in _fetch_messages(config):
                 if msg.get("created_at", "") <= state["last_seen"]:
                     continue
@@ -494,7 +508,16 @@ def run() -> None:
                     time.sleep(POLL_SECONDS)
                     break
                 started = time.time()
-                answer = _think(question, asker)
+                try:
+                    answer = _think(question, asker)
+                except Exception as e:  # noqa: BLE001 - brain unreachable mid-answer
+                    # Rewind so this question is retried next poll instead of
+                    # being marked seen and silently dropped (issue #23, item 5).
+                    print(f"think failed ({e}); will retry this message", flush=True)
+                    state["last_seen"] = prev_seen
+                    _save_state(state)
+                    time.sleep(POLL_SECONDS)
+                    break
                 if answer:
                     _post(config, answer)
                     print(f"replied in {int(time.time() - started)}s", flush=True)
