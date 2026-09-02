@@ -28,11 +28,17 @@ class RoomClient:
         file_url: str | None = None,
         file_name: str | None = None,
         file_size: int | None = None,
+        audio_url: str | None = None,
     ) -> dict:
-        """Post a message to the room. Returns the created message JSON."""
+        """Post a message to the room. Returns the created message JSON.
+        audio_url: a voice note (voiceroom queues failed replies with it;
+        without this parameter the drain raised TypeError on that item and
+        the whole outbox stalled behind it, codexmb #25 round 2)."""
         payload: dict = {"room": self.room, "body": body}
         if image_url:
             payload["image_url"] = image_url
+        if audio_url:
+            payload["audio_url"] = audio_url
         if file_url:
             payload["file_url"] = file_url
             if file_name:

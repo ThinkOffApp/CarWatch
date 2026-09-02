@@ -938,3 +938,31 @@ class TestPostQueuedAtomicOrder(unittest.TestCase):
         self.assertTrue(post_queued(C(), state, "newer"))
         self.assertEqual(sent, ["older", "newer"])
         self.assertEqual(len(Outbox(state)), 0)
+
+
+class TestQueuedVoiceReplyDrains(unittest.TestCase):
+    """A queued voice reply (audio_url) must drain, not poison the queue."""
+
+    def test_outbox_flush_forwards_audio_url(self):
+        import io, json
+        from unittest import mock
+        from carwatch.outbox import Outbox
+        from carwatch.room import RoomClient
+        state = tempfile.mkdtemp()
+        box = Outbox(state)
+        box.enqueue("(kuulin: hei)\n\nMoi", audio_url="https://x/a.m4a")
+        box.enqueue("text only")
+        seen = []
+        class R:
+            status = 201
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self): return b"{}"
+        def fake_urlopen(req, timeout=0):
+            seen.append(json.loads(req.data)); return R()
+        with mock.patch("carwatch.room.urllib.request.urlopen", fake_urlopen), \
+             mock.patch("carwatch.room.json.load", lambda r: {}):
+            self.assertEqual(box.flush(RoomClient("https://x", "k", "r")), 2)
+        self.assertEqual(seen[0]["audio_url"], "https://x/a.m4a")
+        self.assertNotIn("audio_url", seen[1])
+        self.assertEqual(len(box), 0)
