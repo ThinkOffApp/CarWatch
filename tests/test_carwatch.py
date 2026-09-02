@@ -960,8 +960,10 @@ class TestQueuedVoiceReplyDrains(unittest.TestCase):
             def read(self): return b"{}"
         def fake_urlopen(req, timeout=0):
             seen.append(json.loads(req.data)); return R()
-        with mock.patch("carwatch.room.urllib.request.urlopen", fake_urlopen), \
-             mock.patch("carwatch.room.json.load", lambda r: {}):
+        # No json.load patch: it is the shared json module and would also
+        # blank Outbox._load (codexmb caught exactly that); the fake
+        # response's read() returns decodable bytes instead.
+        with mock.patch("carwatch.room.urllib.request.urlopen", fake_urlopen):
             self.assertEqual(box.flush(RoomClient("https://x", "k", "r")), 2)
         self.assertEqual(seen[0]["audio_url"], "https://x/a.m4a")
         self.assertNotIn("audio_url", seen[1])
