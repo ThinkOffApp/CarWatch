@@ -2255,6 +2255,44 @@ DASH_ICON_PNG_B64 = (
     'REFUAwBGNF72W5kGMAAAAABJRU5ErkJggg==')
 
 
+
+def obd_probe_text(returncode: int, stdout: str, stderr: str) -> tuple[bool, str]:
+    """Turn `python3 -m carwatch.elm327` output into what the dashboard shows.
+
+    The probe prints a JSON result; the page used to dump stdout+stderr
+    verbatim, so on Sep 6 2026 (ignition off, Bluetooth dongle asleep) petrus
+    got a 15-line Python traceback in the OBD tile. A person in a car needs
+    one sentence: what happened and what to do. Returns (probe_ok, text).
+    """
+    import json as _json
+    raw = (stdout or "").strip()
+    try:
+        d = _json.loads(raw) if raw.startswith("{") else None
+    except Exception:
+        d = None
+    if isinstance(d, dict):
+        lines = [str(d.get("summary") or ("read ok" if d.get("ok") else "no data"))]
+        for t in d.get("trace") or []:
+            mark = "ok" if t.get("ok") else "no"
+            detail = t.get("detail") or (f"{t.get('count')} values" if "count" in t else "")
+            lines.append(f"  {t.get('stage', '?')}: {mark} {detail}".rstrip())
+        readings = d.get("readings") or {}
+        if readings:
+            lines.append("  " + ", ".join(f"{k} {v}" for k, v in list(readings.items())[:8]))
+        if d.get("dtcs"):
+            lines.append("  fault codes: " + ", ".join(d["dtcs"]))
+        return bool(d.get("ok")), "\n".join(lines)
+    combined = (raw + "\n" + (stderr or "")).strip()
+    if "Traceback" in combined:
+        last = [ln for ln in combined.splitlines() if ln.strip()][-1].strip()
+        hint = (" (car off or Bluetooth link closed)"
+                if "Input/output error" in last or "Errno 5" in last else "")
+        return False, f"OBD probe crashed: {last}{hint}"
+    if returncode != 0 and not combined:
+        return False, f"OBD probe exited {returncode} with no output"
+    return returncode == 0, combined[-1500:]
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="text/html; charset=utf-8"):
         if "html" in ctype and not isinstance(body, bytes):
@@ -3101,8 +3139,9 @@ class Handler(BaseHTTPRequestHandler):
                     capture_output=True, text=True, timeout=60,
                     cwd=_os.path.expanduser("~/CarWatch"),
                     env={**_os.environ, "CARWATCH_STATE": _os.path.expanduser("~/.carwatch")})
-                out = (r.stdout + r.stderr).strip()[-3000:]
-                return self._send(200, json.dumps({"ok": True, "output": out}),
+                probe_ok, out = obd_probe_text(r.returncode, r.stdout, r.stderr)
+                return self._send(200, json.dumps({"ok": True, "probe_ok": probe_ok,
+                                                   "output": out}),
                                   "application/json")
             except Exception as e:
                 return self._send(500, json.dumps({"ok": False, "error": str(e)}),

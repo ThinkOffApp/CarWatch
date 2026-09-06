@@ -968,3 +968,69 @@ class TestQueuedVoiceReplyDrains(unittest.TestCase):
         self.assertEqual(seen[0]["audio_url"], "https://x/a.m4a")
         self.assertNotIn("audio_url", seen[1])
         self.assertEqual(len(box), 0)
+
+class TestObdAdapterAsleep(unittest.TestCase):
+    """Sep 6 2026: ignition off, Bluetooth ELM asleep, EIO on /dev/rfcomm0
+    escaped as a traceback into the dashboard and killed carwatch-obd."""
+
+    def test_cmd_wraps_dead_link_as_adapter_unreachable(self):
+        from carwatch import elm327
+        elm = object.__new__(elm327.Elm327)
+        r, w = os.pipe()
+        os.close(w)
+        elm.port = "/dev/rfcomm0"
+        elm.fd = r  # writing to the read end fails like a closed rfcomm link
+        try:
+            with self.assertRaises(elm327.AdapterUnreachable) as cm:
+                elm.cmd("0100")
+        finally:
+            os.close(r)
+        self.assertIn("/dev/rfcomm0", str(cm.exception))
+        self.assertIn("car off", str(cm.exception))
+
+    def test_run_session_reports_asleep_instead_of_raising(self):
+        from carwatch import elm327
+
+        class Asleep:
+            def __init__(self, port, baud):
+                self.port = port
+            def init(self):
+                raise elm327.AdapterUnreachable("adapter not answering on rfcomm0")
+            def close(self):
+                pass
+
+        with tempfile.NamedTemporaryFile() as fake_port:
+            original = elm327.Elm327
+            elm327.Elm327 = Asleep
+            try:
+                result = elm327.run_session(fake_port.name)
+            finally:
+                elm327.Elm327 = original
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["state"], "adapter_asleep")
+        self.assertIn("asleep or car off", result["summary"])
+        self.assertEqual(result["trace"][-1]["stage"], "handshake")
+
+    def test_dashboard_never_shows_a_traceback(self):
+        from carwatch.webchat import obd_probe_text
+        tb = ("Traceback (most recent call last):\n"
+              "  File \"elm327.py\", line 118, in cmd\n"
+              "    os.write(self.fd, (line + \"\\r\").encode(\"ascii\"))\n"
+              "OSError: [Errno 5] Input/output error\n")
+        ok, text = obd_probe_text(1, "", tb)
+        self.assertFalse(ok)
+        self.assertNotIn("Traceback", text)
+        self.assertIn("Input/output error", text)
+        self.assertIn("car off or Bluetooth link closed", text)
+
+    def test_dashboard_renders_probe_json_as_sentences(self):
+        import json
+        from carwatch.webchat import obd_probe_text
+        payload = {"ok": False, "state": "adapter_asleep",
+                   "summary": "adapter asleep or car off: the ELM327 is bound but its link is closed",
+                   "trace": [{"stage": "handshake", "ok": False, "detail": "adapter not answering"}],
+                   "readings": {}, "dtcs": []}
+        ok, text = obd_probe_text(0, json.dumps(payload), "")
+        self.assertFalse(ok)
+        self.assertTrue(text.startswith("adapter asleep or car off"))
+        self.assertIn("handshake: no adapter not answering", text)
