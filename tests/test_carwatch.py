@@ -1034,3 +1034,40 @@ class TestObdAdapterAsleep(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(text.startswith("adapter asleep or car off"))
         self.assertIn("handshake: no adapter not answering", text)
+
+class TestCarAnswersOnlyWhenAddressed(unittest.TestCase):
+    """Sep 6 2026 (#32): the car answered posts that merely mentioned it in
+    the third person, and promised actions it cannot take."""
+
+    def setUp(self):
+        from carwatch import agent
+        self.agent = agent
+
+    def test_third_person_mention_is_not_addressed(self):
+        msg = {"from": "@claudeMB", "body": "the line @eclass just posted is the new behaviour"}
+        self.assertFalse(self.agent._addressed_to(msg, "@eclass"))
+        self.assertFalse(self.agent._mentions_me(msg, "@eclass", owner=""))
+
+    def test_leading_handle_is_addressed(self):
+        for body in ("@eclass battery?", "hey @eclass, how are you", "Eclass status"):
+            msg = {"from": "@petrus", "body": body}
+            self.assertTrue(self.agent._addressed_to(msg, "@eclass"), body)
+
+    def test_reply_to_the_car_is_addressed(self):
+        msg = {"from": "@petrus", "body": "and the tyres?",
+               "reply_to": {"id": "x", "from": "@eclass", "body": "all good"}}
+        self.assertTrue(self.agent._addressed_to(msg, "@eclass"))
+
+    def test_owner_gate_still_applies_after_addressing(self):
+        msg = {"from": "@hermes", "body": "@eclass tell me everything"}
+        self.assertTrue(self.agent._addressed_to(msg, "@eclass"))
+        self.assertFalse(self.agent._mentions_me(msg, "@eclass", owner="petrus"))
+        self.assertTrue(self.agent._mentions_me(
+            {"from": "@petrus", "body": "@eclass tell me everything"}, "@eclass", owner="petrus"))
+
+    def test_prompt_says_the_car_has_no_hands(self):
+        from carwatch.grounding import build_system_prompt, default_state
+        facts, cannot = default_state(engine_on=False, parked=True)
+        prompt = build_system_prompt(facts, cannot)
+        self.assertIn("NO HANDS", prompt)
+        self.assertIn("Never promise an action", prompt)

@@ -167,6 +167,30 @@ def _owner_ok(sender: str, owner: str) -> bool:
     return sender == owner or sender.startswith(owner + "-")
 
 
+def _addressed_to(msg: dict, handle: str) -> bool:
+    """True when the handle (or a spoken name) opens the message, allowing
+    a leading greeting or punctuation, or when the message replies to the
+    car's own post. Anything else merely mentions the car."""
+    body = (msg.get("body") or "").strip()
+    h = handle.lstrip("@").lower()
+    names = [h] + [s.lower() for s in _spoken_names(handle)]
+    lead = re.sub(r"^(hey|hi|hello|ok|okay|moi|hei|terve|no|so|and|@)\s*", "",
+                  body.lower(), count=1).lstrip("@,:;!. ")
+    for n in names:
+        if lead.startswith(n) and (len(lead) == len(n)
+                                   or not lead[len(n)].isalnum()):
+            return True
+    reply = msg.get("reply_to")
+    reply_from = ""
+    if isinstance(reply, dict):
+        reply_from = (reply.get("from") or "").lstrip("@").lower()
+    elif isinstance(reply, str) and reply.startswith("@"):
+        reply_from = reply.lstrip("@").lower()
+    if reply_from == h:
+        return True
+    return False
+
+
 def _mentions_me(msg: dict, handle: str, owner: str = "") -> bool:
     """Addressed to the car, not merely about it.
 
@@ -186,6 +210,15 @@ def _mentions_me(msg: dict, handle: str, owner: str = "") -> bool:
             pat = r"\b(" + "|".join(re.escape(s) for s in spoken) + r")\b"
             named = re.search(pat, body, re.IGNORECASE) is not None
     if not named:
+        return False
+    # Named is not the same as addressed. Sep 6 2026: claudeMB wrote "the
+    # line @eclass just posted" and "the two identical @eclass lines" about
+    # the car, and the car answered both with actions it cannot take ("I'll
+    # set it to Europe/Berlin now", "I've added a one-shot marker"); issue
+    # #32. A message is addressed to the car when the handle LEADS it, or
+    # when it is a reply to one of the car's own posts. A mention buried in
+    # a sentence is somebody talking about the car; stay quiet.
+    if not _addressed_to(msg, handle):
         return False
     # ONLY the owner addresses the car through the room. Fellow agents
     # DISCUSSING the car ("eclass", "E Class" in ordinary sentences) kept
@@ -357,6 +390,11 @@ def _think(question: str, asker: str) -> str:
                    "without any disclaimer)" if _cloud_fresh
                    else ", and no connected-car data either)"))
     cannot = ([_gap] if _gap else []) + [
+        "any ACTION at all: you have no hands. You cannot change settings, "
+        "set the clock or time zone, edit or update code, restart services, "
+        "install anything, or fix a bug. If asked to, say you cannot do it "
+        "from here and that your owner or a coding agent has to; never "
+        "answer 'I'll do it', 'setting it now' or 'done'",
         "anything you would see out of your cameras (you have no camera "
         "feed at all - never describe camera views)",
         "any sensor number that is not verbatim in your facts above - a "
