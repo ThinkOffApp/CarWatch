@@ -311,10 +311,17 @@ def run() -> None:
         was_present = port or ""
         was_up = up
         if (port or up) and time.time() >= next_try:
-            if port:
-                result = elm327.run_session(port)
-            else:
-                result = run_session()  # legacy DoIP path via eth0
+            try:
+                if port:
+                    result = elm327.run_session(port)
+                else:
+                    result = run_session()  # legacy DoIP path via eth0
+            except Exception as e:
+                # A dead adapter link must not take the service down with a
+                # traceback (Sep 6 2026: EIO on rfcomm0 at ignition off did).
+                print(f"OBD read failed: {type(e).__name__}: {e}", flush=True)
+                next_try = time.time() + RETRY_COOLDOWN_S
+                continue
             print(json.dumps(result), flush=True)
             if result["ok"]:
                 text = fmt_readings(result["readings"])

@@ -85,8 +85,16 @@ def _open_serial(port: str, baud: int):
     return fd
 
 
+class AdapterUnreachable(OSError):
+    """The adapter node exists but the link behind it is dead: the Bluetooth
+    dongle sleeps a few minutes after ignition off and /dev/rfcomm0 then
+    answers every write with EIO. Sep 6 2026: that EIO escaped as a raw
+    traceback into the dashboard and killed carwatch-obd.service."""
+
+
 class Elm327:
     def __init__(self, port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD):
+        self.port = port
         self.fd = _open_serial(port, baud)
 
     def close(self):
@@ -115,7 +123,12 @@ class Elm327:
         return buf.decode("ascii", "replace")
 
     def cmd(self, line: str, timeout: float = 5.0) -> str:
-        os.write(self.fd, (line + "\r").encode("ascii"))
+        try:
+            os.write(self.fd, (line + "\r").encode("ascii"))
+        except OSError as e:
+            raise AdapterUnreachable(
+                f"adapter not answering on {getattr(self, 'port', '?')}: "
+                f"{e.strerror or e} (car off or Bluetooth link closed)") from e
         raw = self._read_until_prompt(timeout)
         # Strip echo, prompt, whitespace; keep the meaningful lines.
         out = raw.replace(line, "").replace(">", "")
@@ -671,6 +684,13 @@ def run_session(port: str = DEFAULT_PORT, baud: int = DEFAULT_BAUD) -> dict:
                       f"adapter up but car did not answer 0100 ({ident!r})"})
         readings = read_all(elm)
         dtcs = read_dtcs(elm)
+    except AdapterUnreachable as e:
+        # Not a fault of ours and not worth a traceback: say what it is.
+        trace.append({"stage": "handshake", "ok": False, "detail": str(e)})
+        result["state"] = "adapter_asleep"
+        result["summary"] = ("adapter asleep or car off: the ELM327 is bound "
+                             "but its link is closed; starts again with the ignition")
+        return result
     finally:
         elm.close()
     result["readings"] = readings
@@ -818,4 +838,10 @@ if __name__ == "__main__":
         print(json.dumps(run_all(port), indent=2))
     else:
         port = args[0] if args else DEFAULT_PORT
-        print(json.dumps(run_session(port), indent=2))
+        try:
+            print(json.dumps(run_session(port), indent=2))
+        except Exception as e:  # the dashboard shows stdout verbatim: never a traceback
+            print(json.dumps({"ok": False, "state": "error",
+                              "summary": f"OBD probe failed: {type(e).__name__}: {e}"},
+                             indent=2))
+            sys.exit(2)
