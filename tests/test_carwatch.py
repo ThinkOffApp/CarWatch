@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -1071,3 +1072,50 @@ class TestCarAnswersOnlyWhenAddressed(unittest.TestCase):
         prompt = build_system_prompt(facts, cannot)
         self.assertIn("NO HANDS", prompt)
         self.assertIn("Never promise an action", prompt)
+
+
+class TestBrainEndpoint(unittest.TestCase):
+    """carwatch.brain: a remote brain is used only while its /health answers;
+    otherwise the Pi's own llama-server, so the car never goes mute because
+    the fast box stayed at home."""
+
+    def setUp(self):
+        from carwatch import brain
+        self.brain = brain
+        brain.reset_cache()
+        self._env = os.environ.pop("CARWATCH_MODEL_URL", None)
+
+    def tearDown(self):
+        self.brain.reset_cache()
+        if self._env is not None:
+            os.environ["CARWATCH_MODEL_URL"] = self._env
+        else:
+            os.environ.pop("CARWATCH_MODEL_URL", None)
+
+    def test_health_url_derived_from_chat_url(self):
+        self.assertEqual(self.brain.health_url("http://192.168.0.146:8080/v1/chat/completions"),
+                         "http://192.168.0.146:8080/health")
+
+    def test_local_when_nothing_configured(self):
+        with unittest.mock.patch.object(self.brain, "remote_url", return_value=None), \
+             unittest.mock.patch.object(self.brain, "_healthy", return_value=True):
+            self.assertEqual(self.brain.model_url(now=1000.0), self.brain.LOCAL_URL)
+
+    def test_remote_when_configured_and_healthy(self):
+        os.environ["CARWATCH_MODEL_URL"] = "http://vta:8080/v1/chat/completions"
+        with unittest.mock.patch.object(self.brain, "_healthy", return_value=True):
+            self.assertEqual(self.brain.model_url(now=1000.0), "http://vta:8080/v1/chat/completions")
+
+    def test_falls_back_to_local_when_remote_is_down(self):
+        os.environ["CARWATCH_MODEL_URL"] = "http://vta:8080/v1/chat/completions"
+        with unittest.mock.patch.object(self.brain, "_healthy", return_value=False):
+            self.assertEqual(self.brain.model_url(now=1000.0), self.brain.LOCAL_URL)
+
+    def test_decision_is_cached_then_reevaluated(self):
+        os.environ["CARWATCH_MODEL_URL"] = "http://vta:8080/v1/chat/completions"
+        with unittest.mock.patch.object(self.brain, "_healthy", return_value=True) as h:
+            self.brain.model_url(now=1000.0)
+            self.brain.model_url(now=1010.0)
+            self.assertEqual(h.call_count, 1)
+            self.brain.model_url(now=1000.0 + self.brain.CHECK_EVERY + 1)
+            self.assertEqual(h.call_count, 2)

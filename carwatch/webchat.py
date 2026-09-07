@@ -21,6 +21,8 @@ import json
 import os
 import subprocess
 import urllib.request
+
+from carwatch import brain
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1161,7 +1163,7 @@ def answer(question: str, use_manual: bool = True) -> str:
         system = build_system_prompt(facts, cannot, manual_excerpts=ctx)
 
     req = urllib.request.Request(
-        MODEL_URL,
+        brain.model_url(),
         data=json.dumps({
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": question}],
