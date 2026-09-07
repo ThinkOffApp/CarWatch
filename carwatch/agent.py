@@ -24,6 +24,7 @@ import time
 import urllib.parse
 import urllib.request
 
+from carwatch import brain
 from carwatch import voiceroom
 from carwatch.grounding import build_system_prompt
 from carwatch.selfstate import live_facts
@@ -85,7 +86,6 @@ def car_identity() -> dict:
     car.update({k: v for k, v in (cfg.get("car") or {}).items() if v})
     return car
 STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
-MODEL_URL = "http://127.0.0.1:8081/v1/chat/completions"
 POLL_SECONDS = 20
 MAX_TOKENS = 400
 
@@ -404,7 +404,7 @@ def _think(question: str, asker: str) -> str:
     system = build_system_prompt(
         facts, cannot, manual_excerpts=context_for(question),
         identity=car["identity"], brain=car["brain"])
-    req = urllib.request.Request(MODEL_URL, data=json.dumps({
+    req = urllib.request.Request(brain.model_url(), data=json.dumps({
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": f"{asker} says: {question}\n"
@@ -464,11 +464,7 @@ def _think(question: str, asker: str) -> str:
 
 
 def _model_ready() -> bool:
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:8081/health", timeout=4) as r:
-            return r.status == 200
-    except Exception:
-        return False
+    return brain.model_ready()
 
 
 def run() -> None:
