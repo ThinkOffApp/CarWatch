@@ -1,5 +1,38 @@
 # Release notes
 
+## CarWatch v0.7.0 - a second brain, and a car that knows when it is spoken to
+
+Three merges since v0.6.0, each one from something that went wrong in real use: the car answered when it was only being talked about, a sleeping OBD dongle looked like a crash, and the Pi was the only brain the car could ever use.
+
+**Where this release stands on the honesty scale.** One of the three changes is verified in the car: the OBD fix reached Vadelma on 6 Sep through the dash Update button, and the car's own room post that afternoon carried the new "adapter asleep or car off" state instead of a traceback. The addressing gate and the second brain are covered by unit tests only (76 now, 14 new) and have not been exercised on the car yet: the gate needs `"owner"` set in the car's config.json before it closes, and the second brain does nothing until a URL is configured. Both go live on the next drive, not at the tag.
+
+### A second brain when one is in reach (#35)
+
+- **`carwatch/brain.py` picks the model endpoint per call.** If `CARWATCH_MODEL_URL` (or `brain.url` in config.json) points at an OpenAI-compatible server whose `/health` answers, the car thinks there. The moment that health check fails, the car falls back to its own llama-server on the Pi, and it returns to the remote when it is back. Checked once a minute, cached in between.
+- **Every thinker uses it.** The room agent, the dashboard chat and the voice loop resolve the URL through the same function; the hardcoded local address is gone.
+- **Why.** Qwen3.6-35B-A3B on a mini PC in the house answers in half a second at 19 tokens per second; the Pi's own model takes about a minute. In the garage the car thinks with the house, on the road it thinks alone, and nobody edits a config in between.
+
+### The car answers only when addressed (#33, fixes #32)
+
+- **Talking about the car no longer wakes it.** A room message is for the car when its handle or one of its spoken names leads the message (a greeting in front is fine), or when it replies to one of the car's own posts. "The line @eclass just posted" in the middle of a sentence to someone else is talk about the car: it stays quiet. The owner gate still applies after that.
+- **The car has no hands.** New grounding rule and a standing "cannot" entry: the car never promises to change a setting, set the clock, edit or update code, restart or install anything. It says who can instead. On 6 Sep it had promised "I'll set it to Europe/Berlin now" to a message that was not even addressed to it.
+
+### A sleeping adapter is a state, not a traceback (#30)
+
+- **Bluetooth ELM327 asleep, car off.** Every write to the dongle returned EIO, the OBD service died with exit 1, and the dashboard's Read button printed a fifteen-line Python traceback into the OBD tile. Now the failed write is reported as "adapter asleep or car off" with the handshake stage, the read loop survives it with one log line and the normal retry cooldown, and the dash renders the probe as sentences (summary, stages, first readings, fault codes), never a traceback.
+
+### Known, not fixed
+
+- **#31** The "no engine data yet" room post repeats when the OBD service is restarted twice in a row by the updater (seen once on 6 Sep, 15 s apart). The marker that prevents the repeat is process-local; persisting it and restarting once in update.sh is the fix.
+
+### For people running the previous release
+
+Nothing to do for the two fixes; the car pulls them on its next hourly update and restarts when quiet. To give the car a second brain, set `CARWATCH_MODEL_URL=http://host:8080/v1/chat/completions` in the agent's environment (or `"brain": {"url": "..."}` in config.json); leave it unset and nothing changes. For the owner-only gate, make sure `"owner": "your-handle"` is in config.json.
+
+- 76 tests pass (`python3 -m unittest discover -s tests`), 14 new since v0.6.0.
+- 9 files changed, about 400 lines added, 17 removed.
+
+
 ## CarWatch v0.6.0 - a fresh clone runs, and the promises hold while driving
 
 Three merges from one evening's repo review (#23), all about what happens around the car's loop rather than inside it: a fresh clone runs, nothing the car says is lost offline, the self-updater stops interrupting the driver, and the README says what a car agent is for.
