@@ -4,7 +4,7 @@
 
 Three merges since v0.6.0, each one from something that went wrong in real use: the car answered when it was only being talked about, a sleeping OBD dongle looked like a crash, and the Pi was the only brain the car could ever use.
 
-**Where this release stands on the honesty scale.** One of the three changes is verified in the car: the OBD fix reached Vadelma on 6 Sep through the dash Update button, and the car's own room post that afternoon carried the new "adapter asleep or car off" state instead of a traceback. The addressing gate and the second brain are covered by unit tests only (76 now, 14 new) and have not been exercised on the car yet: the gate needs `"owner"` set in the car's config.json before it closes, and the second brain does nothing until a URL is configured. Both go live on the next drive, not at the tag.
+**Where this release stands on the honesty scale.** One of the three changes is verified in the car: the OBD fix reached Vadelma on 6 Sep through the dash Update button, and the car's own room post that afternoon carried the new "adapter asleep or car off" state instead of a traceback. The addressing gate and the second brain are covered by unit tests only (76 now, 14 new). Both reached the reference car with the 7 Sep 20:40 self-update: the gate is closed there because `"owner"` is set in its config.json, but no message has exercised it yet, and the second brain does nothing until a URL is configured (the reference car's is not, at the tag). Live proof comes with the next drive, not with this release.
 
 ### A second brain when one is in reach (#35)
 
