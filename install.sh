@@ -84,13 +84,20 @@ echo ">> Installed units: $(ls "$DEST"/systemd | tr '\n' ' ')"
 #     unit's -t default (4) is a Pi 5. Derive it once from nproc, leaving two
 #     cores for whisper/webchat, floor 4; an existing BRAIN_THREADS (the
 #     owner's choice, or a previous install) is never overwritten.
+#     Physical cores, not logical: llama.cpp prompt processing on CPU gets
+#     slower, not faster, past the core count on SMT parts (claudemm's review
+#     of #42: 22 threads on a 12c/24t Ryzen can lose to 12).
 BRAIN_ENV="$HOME_DIR/.config/carwatch/brain.env"
 if ! grep -qs '^BRAIN_THREADS=' "$BRAIN_ENV"; then
-  NCPU=$(nproc 2>/dev/null || echo 4)
+  NCPU=$(lscpu -p=Core,Socket 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' ')
+  [ "${NCPU:-0}" -gt 0 ] || NCPU=$(nproc 2>/dev/null || echo 4)
   BRAIN_THREADS=$((NCPU - 2)); [ "$BRAIN_THREADS" -lt 4 ] && BRAIN_THREADS=4
   mkdir -p "$(dirname "$BRAIN_ENV")"
   printf 'BRAIN_THREADS=%s\n' "$BRAIN_THREADS" >> "$BRAIN_ENV"
-  echo ">> Brain threads: $BRAIN_THREADS of $NCPU cores (BRAIN_THREADS in $BRAIN_ENV)"
+  # If this script ran under sudo the dir is root-owned and the dash's model
+  # swap (webchat, as the user) would fail with OSError. Hand it back.
+  sudo chown "$RUN_USER" "$(dirname "$BRAIN_ENV")" "$BRAIN_ENV" 2>/dev/null || true
+  echo ">> Brain threads: $BRAIN_THREADS of $NCPU physical cores (BRAIN_THREADS in $BRAIN_ENV)"
 fi
 
 # 6) The brain needs llama.cpp + a model. Both are guided, never silent:
