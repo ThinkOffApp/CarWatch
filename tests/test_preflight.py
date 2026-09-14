@@ -113,8 +113,9 @@ class TestPreflight(unittest.TestCase):
             "no cars": {"ok": True, "cars": {}, "fetched_at": time.time()},
             "label-only car (fully unavailable vehicle)": {"ok": True, "cars": {"car": {"label": "car", "slug": "car"}}, "fetched_at": time.time()},
             "stale:true last-known": {"ok": True, "stale": True, "cars": {"x": {"lock": {"locked": True}}}, "fetched_at": time.time()},
-            "future ts": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() + 3600},
-            "stale": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() - 7200},
+            # usable car data in both, so ONLY the timestamp can be the reason (codexmb)
+            "future ts": {"ok": True, "cars": {"x": {"lock": {"locked": True}}}, "fetched_at": time.time() + 3600},
+            "stale": {"ok": True, "cars": {"x": {"lock": {"locked": True}}}, "fetched_at": time.time() - 7200},
         }
         for label, payload in cases.items():
             path = os.path.join(self.tmp, "cloud-last.json")
@@ -125,7 +126,13 @@ class TestPreflight(unittest.TestCase):
                 self._snap("cloud-last.json", 0, payload)
             t = self._tile(pf.run(), "mercedes")
             self.assertFalse(t["ok"], f"{label}: {t}")
-            self.assertTrue("no valid cloud data" in t["detail"] or "stale" in t["detail"], f"{label}: {t}")
+            expect = "stale" if label == "stale" else "no valid cloud data"
+            self.assertIn(expect, t["detail"], f"{label}: {t}")
+            if label in ("future ts", "stale"):
+                # a control with the same car and a fresh timestamp must pass,
+                # proving the failure above came from the timestamp alone
+                self._snap("cloud-last.json", 30, {**payload, "fetched_at": time.time() - 30})
+                self.assertTrue(self._tile(pf.run(), "mercedes")["ok"], f"{label} control")
 
     def test_obd_file_that_is_not_a_reading_is_not_a_reading(self):
         for payload in ("", "{bad", {"ts": time.time()}, {"ts": time.time(), "readings": {}},
