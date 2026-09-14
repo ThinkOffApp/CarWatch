@@ -14,6 +14,23 @@ import urllib.request
 from unittest import mock
 
 
+class _QuietServer:
+    """ThreadingHTTPServer without HTTPServer.server_bind's getfqdn(): that
+    reverse lookup took 35 s on a Mac with a dead resolver, so the test's
+    wall time depended on DNS instead of the code."""
+
+    @classmethod
+    def make(cls, webchat, addr):
+        import socketserver
+
+        class _S(webchat.ThreadingHTTPServer):
+            def server_bind(self):
+                socketserver.TCPServer.server_bind(self)
+                self.server_name = "localhost"
+                self.server_port = self.server_address[1]
+        return _S(addr, webchat.Handler)
+
+
 def _free_port():
     s = socket.socket(); s.bind(("127.0.0.1", 0)); p = s.getsockname()[1]; s.close(); return p
 
@@ -27,7 +44,7 @@ class TestAskRoute(unittest.TestCase):
         from carwatch import webchat
         cls.webchat = webchat
         cls.port = _free_port()
-        cls.srv = webchat.ThreadingHTTPServer(("127.0.0.1", cls.port), webchat.Handler)
+        cls.srv = _QuietServer.make(webchat, ("127.0.0.1", cls.port))
         cls.thread = threading.Thread(target=cls.srv.serve_forever, daemon=True)
         cls.thread.start()
 
