@@ -222,6 +222,29 @@ def registry() -> dict:
     }
 
 
+def _set_env_key(key: str, value: str) -> None:
+    """Set one KEY=value line in the env file, keeping every other line.
+    brain.env carries more than the model now (BRAIN_THREADS from
+    install.sh), so a model swap must not rewrite the file wholesale and
+    silently drop the host's thread count back to the Pi default."""
+    try:
+        with open(ENV_FILE) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    out, done = [], False
+    for line in lines:
+        if line.split("=", 1)[0].strip() == key:
+            if not done:
+                out.append(f"{key}={value}")
+                done = True
+            continue
+        out.append(line)
+    if not done:
+        out.append(f"{key}={value}")
+    _write_env("\n".join(out) + "\n")
+
+
 def _write_env(content: str | None) -> None:
     """Atomically set the env file to `content`, or remove it for None."""
     if content is None:
@@ -272,7 +295,7 @@ def select_model(name: str) -> dict:
                 prev = f.read()
         except OSError:
             prev = None
-        _write_env(f"BRAIN_MODEL={pick['path']}\n")
+        _set_env_key("BRAIN_MODEL", pick["path"])
         # carwatch-brain is a DIFFERENT unit from the one webchat runs in, so
         # this cannot self-kill; sudo -n so a missing sudoers rule fails loud
         # instead of hanging the request on a password prompt.
