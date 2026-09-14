@@ -88,7 +88,8 @@ function meta(t){const d=document.createElement('div');d.className='meta';d.text
 f.onsubmit=async e=>{e.preventDefault();const text=q.value.trim();if(!text)return;
   add(text,'you');q.value='';b.disabled=true;
   const think=add('thinking...','car');const t0=Date.now();
-  try{const r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+  try{const _t=new URLSearchParams(location.search).get('t')||'';
+      const r=await fetch(_t?('/ask?t='+encodeURIComponent(_t)):'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({q:text,manual:man.checked})});
       const j=await r.json();
       think.textContent=j.answer||'(no answer)';
@@ -3539,7 +3540,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps(
                     {"ok": False, "error": str(e)}), "application/json")
-        if self.path != "/ask":
+        # Query-stripped `path`, like every other POST route: a tokened dash
+        # posts /ask?t=... and the raw compare 404'd it (claudemm, 14 Sep).
+        if path != "/ask":
             return self._send(404, "not found")
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
