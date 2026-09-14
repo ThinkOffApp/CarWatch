@@ -49,24 +49,51 @@ def _http_status(url: str, timeout: float = 4.0) -> int | None:
         return None
 
 
-def _file_age_s(path: str) -> float | None:
-    try:
-        return time.time() - os.path.getmtime(path)
-    except OSError:
-        return None
+FUTURE_SLACK_S = 60.0
 
 
-def _json_ts_age_s(path: str) -> float | None:
-    """Age of the `ts` field in a JSON snapshot, falling back to mtime."""
+def _snapshot_age_s(path: str, ts_key: str, valid) -> float | None:
+    """Age of a snapshot from ITS OWN timestamp, and only if `valid(d)` says
+    the payload is a real reading. A file that exists is not a reading:
+    malformed, empty, error payloads and future timestamps all return None
+    (codexmb's review of #48). Never falls back to mtime."""
     try:
         with open(path) as f:
             d = json.load(f)
-        ts = float(d.get("ts", 0)) if isinstance(d, dict) else 0.0
-        if ts:
-            return time.time() - ts
+        if not isinstance(d, dict) or not valid(d):
+            return None
+        ts = float(d.get(ts_key) or 0)
+        now = time.time()
+        if ts <= 0 or ts > now + FUTURE_SLACK_S:
+            return None
+        return now - ts
     except Exception:
-        pass
-    return _file_age_s(path)
+        return None
+
+
+def _cloud_valid(d: dict) -> bool:
+    return d.get("ok") is True and isinstance(d.get("cars"), dict) and bool(d["cars"])
+
+
+def _obd_valid(d: dict) -> bool:
+    r = d.get("readings")
+    return isinstance(r, dict) and any(isinstance(v, (int, float)) for v in r.values())
+
+
+def _ha_auth(token: str) -> str:
+    """"ok" if HA accepts the Bearer on GET /api/, "rejected" on 401/403,
+    "refused" if the URL is not private (mercedesme will not send the token
+    there), "unreachable" otherwise. Token existence proves nothing."""
+    from carwatch import mercedesme
+    try:
+        mercedesme._get("/api/", token, timeout=4.0)
+        return "ok"
+    except urllib.error.HTTPError as e:
+        return "rejected" if e.code in (401, 403) else "unreachable"
+    except ValueError:
+        return "refused"
+    except Exception:
+        return "unreachable"
 
 
 # ---- tiles ----------------------------------------------------------------
@@ -124,30 +151,44 @@ def check_brain() -> dict:
 
 
 def check_mercedes() -> dict:
+    """READY only when the token is ACCEPTED by HA and a real, fresh cloud
+    snapshot exists. Reachability plus a token file is not a connection
+    (claudemm reproduced READY with token "garbage" + 401 + no data)."""
     from carwatch import mercedesme
     missing = []
     ts_ip = _run(["tailscale", "ip", "-4"]) or ""
     on_tailnet = ts_ip.startswith("100.")
     url = mercedesme._ha_url()
-    have_token = os.path.exists(mercedesme._TOKEN_FILE)
-    if not have_token:
+    token = ""
+    try:
+        with open(mercedesme._TOKEN_FILE) as f:
+            token = f.read().strip()
+    except OSError:
+        pass
+    if not token:
         missing.append("no HA token (ha-token)")
-    code = _http_status(url.rstrip("/") + "/api/")
-    reachable = code in (200, 401, 403)
-    if not reachable:
-        why = "" if on_tailnet else " and not on the tailnet"
-        if not _internet():
-            why += ", no internet"
-        missing.append(f"HA {url} unreachable" + why)
-    age = _json_ts_age_s(os.path.join(state_dir(), "cloud-last.json"))
+        auth = "no token"
+    else:
+        auth = _ha_auth(token)
+        if auth == "rejected":
+            missing.append(f"HA {url} rejected the token (401/403)")
+        elif auth == "refused":
+            missing.append(f"HA URL {url} is not private, token not sent")
+        elif auth != "ok":
+            why = "" if on_tailnet else " and not on the tailnet"
+            if not _internet():
+                why += ", no internet"
+            missing.append(f"HA {url} unreachable" + why)
+    age = _snapshot_age_s(os.path.join(state_dir(), "cloud-last.json"), "fetched_at", _cloud_valid)
     if age is None:
-        fresh = "no cloud data yet"
+        missing.append("no valid cloud data (cloud-last.json missing, malformed, ok:false, no cars, or bad timestamp)")
+        fresh = "no valid cloud data"
     else:
         fresh = f"last cloud read {int(age)}s ago"
         if age > CLOUD_FRESH_S:
             missing.append(fresh + " (stale)")
     ok = not missing
-    detail = ", ".join(missing) if missing else f"HA {url} reachable, token present, {fresh}"
+    detail = ", ".join(missing) if missing else f"HA {url} accepted the token, {fresh}"
     return _tile("mercedes", ok, detail)
 
 
@@ -179,9 +220,9 @@ def check_obd() -> dict:
     sleeps with the car. The pre-drive question is whether a dongle is
     configured and paired/bound at all (claudemm's review of #48); the
     snapshot age is reported, never used to fail the tile."""
-    age = _json_ts_age_s(os.path.join(state_dir(), "obd-all.json"))
-    fresh = ("no snapshot yet" if age is None
-             else f"last snapshot {int(age)}s ago" + ("" if age <= OBD_FRESH_S else " (car off?)"))
+    age = _snapshot_age_s(os.path.join(state_dir(), "obd-all.json"), "ts", _obd_valid)
+    fresh = ("no valid reading yet" if age is None
+             else f"last reading {int(age)}s ago" + ("" if age <= OBD_FRESH_S else " (car off?)"))
     path = _adapter_present()
     if path:
         return _tile("obd", True, f"adapter {path} present, {fresh}")

@@ -39,6 +39,7 @@ class TestPreflight(unittest.TestCase):
             mock.patch("carwatch.mercedesme._TOKEN_FILE", os.path.join(self.tmp, "ha-token")),
             mock.patch.object(pf, "_adapter_present", lambda: None),
             mock.patch.object(pf, "_obd_mac", lambda: "AA:BB:CC:DD:EE:FF"),
+            mock.patch.object(pf, "_ha_auth", lambda token: "ok"),
         ]
         for p in self._patches:
             p.start()
@@ -54,9 +55,21 @@ class TestPreflight(unittest.TestCase):
         else:
             os.environ["CARWATCH_STATE"] = self._env
 
-    def _snap(self, name, age_s):
+    def _snap(self, name, age_s, payload=None):
+        """A REAL snapshot by default: obd carries a numeric reading, cloud
+        carries ok:true + a car + fetched_at. payload overrides for the
+        negative cases."""
+        if payload is None:
+            if name == "obd-all.json":
+                payload = {"ts": time.time() - age_s, "readings": {"rpm": 800}}
+            else:
+                payload = {"ok": True, "cars": {"isk-579": {"lock": "locked"}},
+                           "fetched_at": time.time() - age_s}
         with open(os.path.join(self.tmp, name), "w") as f:
-            json.dump({"ts": time.time() - age_s}, f)
+            if isinstance(payload, str):
+                f.write(payload)
+            else:
+                json.dump(payload, f)
 
     def _tile(self, res, name):
         return next(t for t in res["tiles"] if t["tile"] == name)
@@ -77,14 +90,54 @@ class TestPreflight(unittest.TestCase):
         t = self._tile(res, "mercedes")
         self.assertFalse(t["ok"])
         self.assertIn("no HA token", t["detail"])
-        self.assertIn("unreachable and not on the tailnet", t["detail"])
         self.assertEqual(res["summary"], "READY EXCEPT: mercedes")
+
+    def test_mercedes_token_rejected_is_not_ready(self):
+        with mock.patch.object(pf, "_ha_auth", lambda token: "rejected"):
+            t = self._tile(pf.run(), "mercedes")
+        self.assertFalse(t["ok"]); self.assertIn("rejected the token", t["detail"])
+
+    def test_mercedes_unreachable_names_tailnet_and_internet(self):
+        self.runs.pop(("tailscale", "ip", "-4"))
+        self.http.pop(pf.INTERNET_PROBE)
+        with mock.patch.object(pf, "_ha_auth", lambda token: "unreachable"):
+            t = self._tile(pf.run(), "mercedes")
+        self.assertFalse(t["ok"])
+        self.assertIn("unreachable and not on the tailnet, no internet", t["detail"])
+
+    def test_mercedes_needs_real_cloud_data_not_a_file(self):
+        cases = {
+            "missing": None,
+            "malformed": "{not json",
+            "ok false": {"ok": False, "error": "not connected yet", "fetched_at": time.time()},
+            "no cars": {"ok": True, "cars": {}, "fetched_at": time.time()},
+            "future ts": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() + 3600},
+            "stale": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() - 7200},
+        }
+        for label, payload in cases.items():
+            path = os.path.join(self.tmp, "cloud-last.json")
+            if payload is None:
+                if os.path.exists(path):
+                    os.remove(path)
+            else:
+                self._snap("cloud-last.json", 0, payload)
+            t = self._tile(pf.run(), "mercedes")
+            self.assertFalse(t["ok"], f"{label}: {t}")
+            self.assertTrue("no valid cloud data" in t["detail"] or "stale" in t["detail"], f"{label}: {t}")
+
+    def test_obd_file_that_is_not_a_reading_is_not_a_reading(self):
+        for payload in ("", "{bad", {"ts": time.time()}, {"ts": time.time(), "readings": {}},
+                        {"ts": time.time() + 3600, "readings": {"rpm": 1}}, {"ok": False, "error": "x"}):
+            self._snap("obd-all.json", 0, payload)
+            t = self._tile(pf.run(), "obd")
+            self.assertIn("no valid reading yet", t["detail"], repr(payload))
+            self.assertNotIn("last reading", t["detail"], repr(payload))
 
     def test_obd_pre_drive_is_about_pairing_not_freshness(self):
         # Paired dongle, no snapshot yet (car off): READY, freshness is info.
         os.remove(os.path.join(self.tmp, "obd-all.json"))
         t = self._tile(pf.run(), "obd")
-        self.assertTrue(t["ok"], t); self.assertIn("paired", t["detail"]); self.assertIn("no snapshot yet", t["detail"])
+        self.assertTrue(t["ok"], t); self.assertIn("paired", t["detail"]); self.assertIn("no valid reading yet", t["detail"])
         # Stale snapshot with a paired dongle: still READY, says car off?
         self._snap("obd-all.json", 3600)
         t = self._tile(pf.run(), "obd")
@@ -106,8 +159,8 @@ class TestPreflight(unittest.TestCase):
 
     def test_offline_car_is_still_ready_and_mercedes_says_no_internet(self):
         self.http.pop(pf.INTERNET_PROBE)                 # no internet
-        self.http.pop("http://100.97.140.13:8123/api/")  # so HA is unreachable too
-        res = pf.run()
+        with mock.patch.object(pf, "_ha_auth", lambda token: "unreachable"):  # so HA is too
+            res = pf.run()
         self.assertTrue(self._tile(res, "network")["ok"])
         self.assertIn("no internet", self._tile(res, "network")["detail"])
         m = self._tile(res, "mercedes")
