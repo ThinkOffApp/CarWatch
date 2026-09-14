@@ -434,6 +434,42 @@ class TestModelSelector(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertFalse(os.path.exists(self.m.ENV_FILE))
 
+    def test_brain_state_follows_effective_model_url(self):
+        # The tile must probe the server that answers, not :8081 by name.
+        # With a healthy remote configured, brain.model_url() returns it and
+        # the health probe goes to that host (#45).
+        from carwatch import brain
+        seen = {}
+
+        class _R:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake_open(url, timeout=0):
+            seen["url"] = url
+            return _R()
+        with unittest.mock.patch.object(brain, "model_url",
+                                        return_value="http://127.0.0.1:8080/v1/chat/completions"), \
+             unittest.mock.patch.object(self.m.urllib.request, "urlopen", fake_open):
+            self.assertEqual(self._orig["state"](), "ready")  # the real one; setUp stubs self.m.brain_state
+        self.assertEqual(seen["url"], "http://127.0.0.1:8080/health")
+
+    def test_brain_state_local_by_default(self):
+        from carwatch import brain
+        seen = {}
+
+        class _R:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        with unittest.mock.patch.object(brain, "model_url", return_value=brain.LOCAL_URL), \
+             unittest.mock.patch.object(self.m.urllib.request, "urlopen",
+                                        lambda url, timeout=0: seen.setdefault("url", url) and _R()):
+            self.assertEqual(self._orig["state"](), "ready")  # the real one; setUp stubs self.m.brain_state
+        self.assertEqual(seen["url"], "http://127.0.0.1:8081/health")
+
     def test_brain_busy_fails_closed(self):
         # If the lock cannot even be inspected, claim busy - a wrong "idle"
         # removes the one warning this probe exists to give.
