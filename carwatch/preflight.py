@@ -83,12 +83,19 @@ def check_network() -> dict:
     except Exception:
         pass
     route = _run(["ip", "route", "show", "default"]) or ""
-    net = _http_status(INTERNET_PROBE) == 204
+    net = _internet()
     parts = []
     parts.append(f"wifi {ssid}" if ssid else "no wifi association")
     parts.append("default route" if route else "no default route")
-    parts.append("internet" if net else "no internet")
-    return _tile("network", bool(route) and net, ", ".join(parts))
+    parts.append("internet" if net else "no internet (OBD and the local brain do not need it)")
+    # A car with no hotspot still works offline: OBD and the local brain
+    # need no internet (claudemm's review of #48). Only the route gates
+    # here; the internet answer feeds the mercedes line.
+    return _tile("network", bool(route), ", ".join(parts))
+
+
+def _internet() -> bool:
+    return _http_status(INTERNET_PROBE) == 204
 
 
 def _local_state() -> str:
@@ -128,8 +135,10 @@ def check_mercedes() -> dict:
     code = _http_status(url.rstrip("/") + "/api/")
     reachable = code in (200, 401, 403)
     if not reachable:
-        missing.append(f"HA {url} unreachable"
-                       + ("" if on_tailnet else " and not on the tailnet"))
+        why = "" if on_tailnet else " and not on the tailnet"
+        if not _internet():
+            why += ", no internet"
+        missing.append(f"HA {url} unreachable" + why)
     age = _json_ts_age_s(os.path.join(state_dir(), "cloud-last.json"))
     if age is None:
         fresh = "no cloud data yet"
@@ -142,13 +151,47 @@ def check_mercedes() -> dict:
     return _tile("mercedes", ok, detail)
 
 
+ADAPTER_PATHS = ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/rfcomm0")  # elm327 probes these
+
+
+def _adapter_present() -> str | None:
+    for path in ADAPTER_PATHS:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _obd_mac() -> str:
+    try:
+        from carwatch.config import load_raw
+        return str(load_raw().get("obd_mac") or "").strip()
+    except Exception:
+        return ""
+
+
+def _paired(mac: str) -> bool:
+    out = _run(["bluetoothctl", "info", mac], timeout=8.0) or ""
+    return "Paired: yes" in out
+
+
 def check_obd() -> dict:
+    """Before ignition there is no fresh snapshot and cannot be: the dongle
+    sleeps with the car. The pre-drive question is whether a dongle is
+    configured and paired/bound at all (claudemm's review of #48); the
+    snapshot age is reported, never used to fail the tile."""
     age = _json_ts_age_s(os.path.join(state_dir(), "obd-all.json"))
-    if age is None:
-        return _tile("obd", False, "no OBD snapshot ever (dongle paired and in the car?)")
-    if age > OBD_FRESH_S:
-        return _tile("obd", False, f"last OBD snapshot {int(age)}s ago (stale; dongle present?)")
-    return _tile("obd", True, f"OBD snapshot {int(age)}s ago")
+    fresh = ("no snapshot yet" if age is None
+             else f"last snapshot {int(age)}s ago" + ("" if age <= OBD_FRESH_S else " (car off?)"))
+    path = _adapter_present()
+    if path:
+        return _tile("obd", True, f"adapter {path} present, {fresh}")
+    mac = _obd_mac()
+    if not mac:
+        return _tile("obd", False,
+                     f"no OBD dongle configured (obd_mac) and no adapter path; pair with scripts/pair-bt-obd.sh; {fresh}")
+    if _paired(mac):
+        return _tile("obd", True, f"dongle {mac} paired (presence confirmed at ignition), {fresh}")
+    return _tile("obd", False, f"dongle {mac} configured but not paired/bound, {fresh}")
 
 
 def check_presence() -> dict:

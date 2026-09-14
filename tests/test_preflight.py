@@ -25,6 +25,7 @@ class TestPreflight(unittest.TestCase):
             ("systemctl", "is-active", "carwatch-presence"): "active",
             ("systemctl", "is-active", "carwatch-chat"): "active",
             ("tailscale", "ip", "-4"): "100.65.0.9",
+            ("bluetoothctl", "info", "AA:BB:CC:DD:EE:FF"): "Device AA:BB:CC:DD:EE:FF\n\tPaired: yes\n\tTrusted: yes",
         }
         self.http = {pf.INTERNET_PROBE: 204, "http://100.97.140.13:8123/api/": 401}
         self._patches = [
@@ -36,6 +37,8 @@ class TestPreflight(unittest.TestCase):
             mock.patch.object(pf, "_local_state", lambda: "down"),
             mock.patch("carwatch.mercedesme._ha_url", lambda: "http://100.97.140.13:8123"),
             mock.patch("carwatch.mercedesme._TOKEN_FILE", os.path.join(self.tmp, "ha-token")),
+            mock.patch.object(pf, "_adapter_present", lambda: None),
+            mock.patch.object(pf, "_obd_mac", lambda: "AA:BB:CC:DD:EE:FF"),
         ]
         for p in self._patches:
             p.start()
@@ -77,13 +80,39 @@ class TestPreflight(unittest.TestCase):
         self.assertIn("unreachable and not on the tailnet", t["detail"])
         self.assertEqual(res["summary"], "READY EXCEPT: mercedes")
 
-    def test_obd_never_and_stale(self):
+    def test_obd_pre_drive_is_about_pairing_not_freshness(self):
+        # Paired dongle, no snapshot yet (car off): READY, freshness is info.
         os.remove(os.path.join(self.tmp, "obd-all.json"))
         t = self._tile(pf.run(), "obd")
-        self.assertFalse(t["ok"]); self.assertIn("no OBD snapshot ever", t["detail"])
+        self.assertTrue(t["ok"], t); self.assertIn("paired", t["detail"]); self.assertIn("no snapshot yet", t["detail"])
+        # Stale snapshot with a paired dongle: still READY, says car off?
         self._snap("obd-all.json", 3600)
         t = self._tile(pf.run(), "obd")
-        self.assertFalse(t["ok"]); self.assertIn("stale", t["detail"])
+        self.assertTrue(t["ok"], t); self.assertIn("car off?", t["detail"])
+
+    def test_obd_not_ready_when_no_dongle_configured_or_paired(self):
+        with mock.patch.object(pf, "_obd_mac", lambda: ""):
+            t = self._tile(pf.run(), "obd")
+        self.assertFalse(t["ok"]); self.assertIn("no OBD dongle configured", t["detail"])
+        self.runs[("bluetoothctl", "info", "AA:BB:CC:DD:EE:FF")] = "Device AA:BB:CC:DD:EE:FF\n\tPaired: no"
+        t = self._tile(pf.run(), "obd")
+        self.assertFalse(t["ok"]); self.assertIn("not paired", t["detail"])
+
+    def test_obd_ready_when_an_adapter_path_exists(self):
+        with mock.patch.object(pf, "_adapter_present", lambda: "/dev/rfcomm0"), \
+             mock.patch.object(pf, "_obd_mac", lambda: ""):
+            t = self._tile(pf.run(), "obd")
+        self.assertTrue(t["ok"]); self.assertIn("/dev/rfcomm0", t["detail"])
+
+    def test_offline_car_is_still_ready_and_mercedes_says_no_internet(self):
+        self.http.pop(pf.INTERNET_PROBE)                 # no internet
+        self.http.pop("http://100.97.140.13:8123/api/")  # so HA is unreachable too
+        res = pf.run()
+        self.assertTrue(self._tile(res, "network")["ok"])
+        self.assertIn("no internet", self._tile(res, "network")["detail"])
+        m = self._tile(res, "mercedes")
+        self.assertFalse(m["ok"]); self.assertIn("no internet", m["detail"])
+        self.assertEqual(res["summary"], "READY EXCEPT: mercedes")
 
     def test_brain_down_names_both_sides(self):
         with mock.patch("carwatch.brain._healthy", lambda url, timeout=2.0: False):
@@ -95,8 +124,8 @@ class TestPreflight(unittest.TestCase):
 
     def test_presence_inactive_and_summary_lists_every_bad_tile(self):
         self.runs[("systemctl", "is-active", "carwatch-presence")] = "inactive"
-        os.remove(os.path.join(self.tmp, "obd-all.json"))
-        res = pf.run()
+        with mock.patch.object(pf, "_obd_mac", lambda: ""):
+            res = pf.run()
         self.assertFalse(res["ready"])
         self.assertEqual(res["summary"], "READY EXCEPT: obd, presence")
 
