@@ -1,0 +1,24 @@
+# The two checks every PR had were Vercel deploy + preview comments; nothing
+# ran the tests (#43, noticed on #42). This does, on every PR and on main.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: shell syntax
+        # One file per call: `bash -n a b c` parses only a, the rest become
+        # $1 $2 (codexmb's review of #44). `run` is bash -e, so the first
+        # failing file fails the step.
+        run: for f in install.sh update.sh reach.sh; do bash -n "$f"; done
