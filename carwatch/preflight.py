@@ -268,14 +268,14 @@ def check_obd() -> dict:
 
 
 def check_presence() -> dict:
-    st = _run(["systemctl", "is-active", "carwatch-presence"])
+    st = _run(["systemctl", "is-active", "carwatch-presence"], any_rc=True)  # inactive/failed exit 3
     active = st == "active"
     return _tile("presence", active, "carwatch-presence active" if active
                  else f"carwatch-presence {st or 'unknown'}")
 
 
 def check_chat() -> dict:
-    st = _run(["systemctl", "is-active", "carwatch-chat"])
+    st = _run(["systemctl", "is-active", "carwatch-chat"], any_rc=True)  # inactive/failed exit 3
     active = st == "active"
     return _tile("dash", active, "carwatch-chat active" if active
                  else f"carwatch-chat {st or 'unknown'}")

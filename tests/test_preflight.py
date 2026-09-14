@@ -237,6 +237,17 @@ class TestPreflight(unittest.TestCase):
             t = self._tile(pf.run(), "brain")
         self.assertIn("is-enabled disabled", t["detail"])
 
+    def test_is_active_inactive_and_failed_are_named_not_unknown(self):
+        # systemctl is-active prints inactive/failed and exits 3.
+        for word in ("inactive", "failed"):
+            class R:
+                returncode = 3; stdout = word + "\n"; stderr = ""
+            with mock.patch.object(pf.subprocess, "run", lambda *a, **k: R()):
+                self.assertEqual(_REAL_RUN(["systemctl", "is-active", "x"], any_rc=True), word)
+        self.runs[("systemctl", "is-active", "carwatch-presence")] = "failed"
+        t = self._tile(pf.run(), "presence")
+        self.assertFalse(t["ok"]); self.assertIn("carwatch-presence failed", t["detail"])
+
     def test_text_format_and_exit_code(self):
         txt = pf.format_text(pf.run())
         self.assertIn("READY", txt.splitlines()[-1])
