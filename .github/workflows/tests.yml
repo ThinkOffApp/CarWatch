@@ -18,4 +18,7 @@ jobs:
       - name: unit tests
         run: python3 -m unittest discover -s tests -v
       - name: shell syntax
-        run: bash -n install.sh update.sh reach.sh
+        # One file per call: `bash -n a b c` parses only a, the rest become
+        # $1 $2 (codexmb's review of #44). `run` is bash -e, so the first
+        # failing file fails the step.
+        run: for f in install.sh update.sh reach.sh; do bash -n "$f"; done
