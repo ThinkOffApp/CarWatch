@@ -71,8 +71,20 @@ def _snapshot_age_s(path: str, ts_key: str, valid) -> float | None:
         return None
 
 
+def _usable_fields(car: dict) -> int:
+    """Fields the dash could show. MercedesMeHA creates a car entry before it
+    discards unknown/unavailable values, so a fully unavailable vehicle is
+    {"label", "slug"} and nothing else (codexmb's review of #48)."""
+    return sum(1 for k, v in car.items()
+               if k not in ("label", "slug") and v not in (None, "", {}, []))
+
+
 def _cloud_valid(d: dict) -> bool:
-    return d.get("ok") is True and isinstance(d.get("cars"), dict) and bool(d["cars"])
+    if d.get("ok") is not True or d.get("stale") is True:
+        return False
+    cars = d.get("cars")
+    return isinstance(cars, dict) and any(
+        isinstance(c, dict) and _usable_fields(c) > 0 for c in cars.values())
 
 
 def _obd_valid(d: dict) -> bool:
@@ -98,8 +110,13 @@ def _ha_auth(token: str) -> str:
 
 # ---- tiles ----------------------------------------------------------------
 
-def _tile(name: str, ok: bool, detail: str) -> dict:
-    return {"tile": name, "ok": bool(ok), "detail": detail}
+def _tile(name: str, ok: bool, detail: str, status: str | None = None) -> dict:
+    """status: "ready" | "not ready" | "unverified". `ok` is True only for
+    ready; "unverified" (a check that cannot be completed before ignition)
+    never counts toward global READY but is reported apart from failures."""
+    if status is None:
+        status = "ready" if ok else "not ready"
+    return {"tile": name, "ok": status == "ready", "status": status, "detail": detail}
 
 
 def check_network() -> dict:
@@ -184,11 +201,11 @@ def check_mercedes() -> dict:
         missing.append("no valid cloud data (cloud-last.json missing, malformed, ok:false, no cars, or bad timestamp)")
         fresh = "no valid cloud data"
     else:
-        fresh = f"last cloud read {int(age)}s ago"
+        fresh = f"fetched from HA {int(age)}s ago (retrieval time; the snapshot carries no per-value provider age)"
         if age > CLOUD_FRESH_S:
-            missing.append(fresh + " (stale)")
+            missing.append(f"last fetch {int(age)}s ago (stale)")
     ok = not missing
-    detail = ", ".join(missing) if missing else f"HA {url} accepted the token, {fresh}"
+    detail = ", ".join(missing) if missing else f"HA {url} accepted the token, usable vehicle data, {fresh}"
     return _tile("mercedes", ok, detail)
 
 
@@ -224,14 +241,22 @@ def check_obd() -> dict:
     fresh = ("no valid reading yet" if age is None
              else f"last reading {int(age)}s ago" + ("" if age <= OBD_FRESH_S else " (car off?)"))
     path = _adapter_present()
+    if path and path.startswith("/dev/ttyUSB"):
+        # A USB adapter node exists only while the adapter is plugged in.
+        return _tile("obd", True, f"USB adapter {path} present, {fresh}")
     if path:
-        return _tile("obd", True, f"adapter {path} present, {fresh}")
+        # /dev/rfcomm0 exists once bound, whether or not the dongle is
+        # anywhere near the car. Pairing is the same: a promise, not presence
+        # (claudemm: paired last week, on the kitchen table today).
+        return _tile("obd", False, f"rfcomm bound at {path}; dongle presence unverified until ignition, {fresh}",
+                     status="unverified")
     mac = _obd_mac()
     if not mac:
         return _tile("obd", False,
                      f"no OBD dongle configured (obd_mac) and no adapter path; pair with scripts/pair-bt-obd.sh; {fresh}")
     if _paired(mac):
-        return _tile("obd", True, f"dongle {mac} paired (presence confirmed at ignition), {fresh}")
+        return _tile("obd", False, f"dongle {mac} paired; presence unverified until ignition, {fresh}",
+                     status="unverified")
     return _tile("obd", False, f"dongle {mac} configured but not paired/bound, {fresh}")
 
 
@@ -259,10 +284,20 @@ def run() -> dict:
             tiles.append(fn())
         except Exception as e:  # a broken check must never hide the others
             tiles.append(_tile(fn.__name__.replace("check_", ""), False, f"check failed: {e}"))
-    bad = [t["tile"] for t in tiles if not t["ok"]]
+    bad = [t["tile"] for t in tiles if t["status"] == "not ready"]
+    unverified = [t["tile"] for t in tiles if t["status"] == "unverified"]
+    if not bad and not unverified:
+        summary = "READY"
+    else:
+        parts = []
+        if bad:
+            parts.append("READY EXCEPT: " + ", ".join(bad))
+        if unverified:
+            parts.append(("" if bad else "READY except ") + "unverified until ignition: " + ", ".join(unverified))
+        summary = "; ".join(parts)
     return {
-        "ready": not bad,
-        "summary": "READY" if not bad else "READY EXCEPT: " + ", ".join(bad),
+        "ready": not bad and not unverified,
+        "summary": summary,
         "tiles": tiles,
         "ts": time.time(),
     }
@@ -270,7 +305,7 @@ def run() -> dict:
 
 def format_text(result: dict) -> str:
     width = max(len(t["tile"]) for t in result["tiles"]) if result["tiles"] else 8
-    lines = [f"{t['tile']:<{width}}  {'READY' if t['ok'] else 'NOT READY'}  {t['detail']}"
+    lines = [f"{t['tile']:<{width}}  {t['status'].upper():<10} {t['detail']}"
              for t in result["tiles"]]
     return "\n".join(lines + [result["summary"]])
 

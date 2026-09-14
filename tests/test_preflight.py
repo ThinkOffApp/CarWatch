@@ -37,7 +37,7 @@ class TestPreflight(unittest.TestCase):
             mock.patch.object(pf, "_local_state", lambda: "down"),
             mock.patch("carwatch.mercedesme._ha_url", lambda: "http://100.97.140.13:8123"),
             mock.patch("carwatch.mercedesme._TOKEN_FILE", os.path.join(self.tmp, "ha-token")),
-            mock.patch.object(pf, "_adapter_present", lambda: None),
+            mock.patch.object(pf, "_adapter_present", lambda: "/dev/ttyUSB0"),
             mock.patch.object(pf, "_obd_mac", lambda: "AA:BB:CC:DD:EE:FF"),
             mock.patch.object(pf, "_ha_auth", lambda token: "ok"),
         ]
@@ -111,6 +111,8 @@ class TestPreflight(unittest.TestCase):
             "malformed": "{not json",
             "ok false": {"ok": False, "error": "not connected yet", "fetched_at": time.time()},
             "no cars": {"ok": True, "cars": {}, "fetched_at": time.time()},
+            "label-only car (fully unavailable vehicle)": {"ok": True, "cars": {"car": {"label": "car", "slug": "car"}}, "fetched_at": time.time()},
+            "stale:true last-known": {"ok": True, "stale": True, "cars": {"x": {"lock": {"locked": True}}}, "fetched_at": time.time()},
             "future ts": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() + 3600},
             "stale": {"ok": True, "cars": {"x": {}}, "fetched_at": time.time() - 7200},
         }
@@ -133,29 +135,36 @@ class TestPreflight(unittest.TestCase):
             self.assertIn("no valid reading yet", t["detail"], repr(payload))
             self.assertNotIn("last reading", t["detail"], repr(payload))
 
-    def test_obd_pre_drive_is_about_pairing_not_freshness(self):
-        # Paired dongle, no snapshot yet (car off): READY, freshness is info.
+    def test_obd_paired_but_absent_is_unverified_not_ready(self):
+        # This morning's case: paired last week, on the kitchen table today.
         os.remove(os.path.join(self.tmp, "obd-all.json"))
-        t = self._tile(pf.run(), "obd")
-        self.assertTrue(t["ok"], t); self.assertIn("paired", t["detail"]); self.assertIn("no valid reading yet", t["detail"])
-        # Stale snapshot with a paired dongle: still READY, says car off?
-        self._snap("obd-all.json", 3600)
-        t = self._tile(pf.run(), "obd")
-        self.assertTrue(t["ok"], t); self.assertIn("car off?", t["detail"])
+        with mock.patch.object(pf, "_adapter_present", lambda: None):
+            res = pf.run()
+        t = self._tile(res, "obd")
+        self.assertEqual(t["status"], "unverified"); self.assertFalse(t["ok"])
+        self.assertIn("unverified until ignition", t["detail"])
+        self.assertFalse(res["ready"])
+        self.assertEqual(res["summary"], "READY except unverified until ignition: obd")
+
+    def test_obd_rfcomm_bound_is_unverified_too(self):
+        with mock.patch.object(pf, "_adapter_present", lambda: "/dev/rfcomm0"):
+            t = self._tile(pf.run(), "obd")
+        self.assertEqual(t["status"], "unverified"); self.assertIn("rfcomm bound", t["detail"])
 
     def test_obd_not_ready_when_no_dongle_configured_or_paired(self):
-        with mock.patch.object(pf, "_obd_mac", lambda: ""):
-            t = self._tile(pf.run(), "obd")
-        self.assertFalse(t["ok"]); self.assertIn("no OBD dongle configured", t["detail"])
-        self.runs[("bluetoothctl", "info", "AA:BB:CC:DD:EE:FF")] = "Device AA:BB:CC:DD:EE:FF\n\tPaired: no"
-        t = self._tile(pf.run(), "obd")
-        self.assertFalse(t["ok"]); self.assertIn("not paired", t["detail"])
-
-    def test_obd_ready_when_an_adapter_path_exists(self):
-        with mock.patch.object(pf, "_adapter_present", lambda: "/dev/rfcomm0"), \
+        with mock.patch.object(pf, "_adapter_present", lambda: None), \
              mock.patch.object(pf, "_obd_mac", lambda: ""):
             t = self._tile(pf.run(), "obd")
-        self.assertTrue(t["ok"]); self.assertIn("/dev/rfcomm0", t["detail"])
+        self.assertEqual(t["status"], "not ready"); self.assertIn("no OBD dongle configured", t["detail"])
+        self.runs[("bluetoothctl", "info", "AA:BB:CC:DD:EE:FF")] = "Device AA:BB:CC:DD:EE:FF\n\tPaired: no"
+        with mock.patch.object(pf, "_adapter_present", lambda: None):
+            t = self._tile(pf.run(), "obd")
+        self.assertEqual(t["status"], "not ready"); self.assertIn("not paired", t["detail"])
+
+    def test_obd_ready_only_with_a_physical_usb_adapter(self):
+        with mock.patch.object(pf, "_obd_mac", lambda: ""):
+            t = self._tile(pf.run(), "obd")
+        self.assertTrue(t["ok"]); self.assertIn("/dev/ttyUSB0", t["detail"])
 
     def test_offline_car_is_still_ready_and_mercedes_says_no_internet(self):
         self.http.pop(pf.INTERNET_PROBE)                 # no internet
@@ -177,10 +186,17 @@ class TestPreflight(unittest.TestCase):
 
     def test_presence_inactive_and_summary_lists_every_bad_tile(self):
         self.runs[("systemctl", "is-active", "carwatch-presence")] = "inactive"
-        with mock.patch.object(pf, "_obd_mac", lambda: ""):
+        with mock.patch.object(pf, "_obd_mac", lambda: ""), \
+             mock.patch.object(pf, "_adapter_present", lambda: None):
             res = pf.run()
         self.assertFalse(res["ready"])
         self.assertEqual(res["summary"], "READY EXCEPT: obd, presence")
+
+    def test_summary_separates_failures_from_unverified(self):
+        self.runs[("systemctl", "is-active", "carwatch-presence")] = "inactive"
+        with mock.patch.object(pf, "_adapter_present", lambda: None):   # obd -> unverified (paired)
+            res = pf.run()
+        self.assertEqual(res["summary"], "READY EXCEPT: presence; unverified until ignition: obd")
 
     def test_a_crashing_check_does_not_hide_the_others(self):
         def boom():
