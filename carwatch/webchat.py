@@ -675,7 +675,7 @@ async function modelSwap(m){
   const poll=setInterval(async()=>{try{
     const s=await modelRefresh();
     const secs=Math.round((Date.now()-t0)/1000);
-    if(s&&s.state==='ready'&&s.running===m.name){clearInterval(poll);msg.textContent=m.name+' loaded in '+secs+'s - the car answers with it now'}
+    if(s&&(s.local_state||s.state)==='ready'&&s.running===m.name){clearInterval(poll);msg.textContent=m.name+' loaded in '+secs+'s'+(s.serving==='remote'?' - loaded locally; answers still come from the remote brain while it is up':' - the car answers with it now')}
     else msg.textContent='loading '+m.name+' ... '+secs+'s (a 14GB model off the microSD takes ~3min)';
    }catch(e){}},3000);
  }catch(e){msg.textContent='swap failed: '+e}}

@@ -27,7 +27,19 @@ ENV_FILE = os.path.expanduser("~/.config/carwatch/brain.env")
 # the dash reads it, so the menu says what each model actually costs on THIS
 # machine instead of quoting someone else's numbers.
 BENCH_FILE = os.path.expanduser("~/.config/carwatch/model-bench.json")
-BRAIN_HEALTH = "http://127.0.0.1:8081/health"
+BRAIN_HEALTH = "http://127.0.0.1:8081/health"  # the local unit's own probe
+
+
+def effective_health_url() -> str:
+    """The /health of the server that would answer a question right now.
+    brain.model_url() already picks remote-if-healthy-else-local for the
+    chat; the MODEL tile must ask the same server, or it says DOWN about
+    :8081 while every answer is coming from :8080 (VTA, 14 Sep 2026, #45)."""
+    try:
+        from carwatch import brain
+        return brain.health_url(brain.model_url())
+    except Exception:
+        return BRAIN_HEALTH
 # Headroom calibrated against ground truth, not a guessed margin: the 14.3GB
 # (15.34e9 byte) Qwen 35B demonstrably runs as the brain on the 16GB Pi with
 # every CarWatch service up, so the fit-check must pass it - 2.5GB headroom
@@ -70,16 +82,44 @@ def selected_path() -> str | None:
     return None
 
 
-def brain_state() -> str:
+def _probe(url: str) -> str:
     """ready / loading / down - asked from the server itself, never assumed.
     llama-server answers /health 503 while the weights stream in."""
     try:
-        with urllib.request.urlopen(BRAIN_HEALTH, timeout=3) as r:
+        with urllib.request.urlopen(url, timeout=3) as r:
             return "ready" if r.status == 200 else "loading"
     except urllib.error.HTTPError as e:
         return "loading" if e.code == 503 else "down"
     except Exception:
         return "down"
+
+
+def brain_state() -> str:
+    """State of the server that answers questions right now (remote if
+    configured and healthy, else the local unit). This is what the MODEL
+    tile shows. It says nothing about the local unit when a remote is
+    serving; for that ask local_brain_state()."""
+    return _probe(effective_health_url())
+
+
+def serving_side() -> str:
+    """"local" when the local unit answers, "remote" when a configured remote
+    wins routing. After a local swap the dash must not claim "the car
+    answers with it now" while a remote is still the one answering
+    (codexmb's review of #46)."""
+    try:
+        from carwatch import brain
+        return "local" if brain.model_url() == brain.LOCAL_URL else "remote"
+    except Exception:
+        return "local"
+
+
+def local_brain_state() -> str:
+    """State of carwatch-brain (:8081) itself, regardless of any remote.
+    Model selection restarts THIS unit, so its loading guard and the
+    post-swap poll must look here, not at whichever server happens to be
+    answering (codexmb's review of #46)."""
+    return _probe(BRAIN_HEALTH)
 
 
 def brain_busy() -> bool:
@@ -173,7 +213,9 @@ def registry() -> dict:
     return {
         "models": models,
         "running": running,
-        "state": brain_state(),
+        "state": brain_state(),            # the server that answers (tile)
+        "local_state": local_brain_state(),  # carwatch-brain itself (swaps)
+        "serving": serving_side(),           # "local" | "remote": who answers
         "busy": brain_busy(),
         "ram_gb": round(_mem_total() / 1e9, 1),
         "expect_s": expected_answer_s(),
@@ -220,7 +262,7 @@ def select_model(name: str) -> dict:
         except OSError:
             return {"ok": False,
                     "error": "brain is mid-answer - try again when it finishes"}
-        if brain_state() == "loading":
+        if local_brain_state() == "loading":
             return {"ok": False,
                     "error": "a model is already loading - wait for it"}
         # Remember the previous selection so a failed restart does not leave
@@ -247,7 +289,7 @@ def select_model(name: str) -> dict:
                     "restart failed: " + (r.stderr or r.stdout).strip()[:300]}
         return {"ok": True, "loading": pick["name"],
                 "note": "old model unloading, new one loading - "
-                        "poll /api/models until state=ready"}
+                        "poll /api/models until local_state=ready"}
     finally:
         try:
             fcntl.flock(lock, fcntl.LOCK_UN)

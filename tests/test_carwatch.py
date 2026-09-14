@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+import urllib.error
 import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -303,6 +304,7 @@ class TestModelSelector(unittest.TestCase):
             "env": models_mod.ENV_FILE,
             "serving": selfstate_mod.serving_model,
             "state": models_mod.brain_state,
+            "local_state": models_mod.local_brain_state,
             "lock": voicestate_mod.BRAIN_LOCK,
         }
         models_mod.MODEL_DIRS = [self.tmp]
@@ -312,6 +314,7 @@ class TestModelSelector(unittest.TestCase):
             "small.gguf": {"pp512": 30.0, "tg128": 6.2}}
         selfstate_mod.serving_model = lambda: "small.gguf"
         models_mod.brain_state = lambda: "ready"
+        models_mod.local_brain_state = lambda: "ready"
         voicestate_mod.BRAIN_LOCK = os.path.join(self.tmp, "brain.lock")
         self.addCleanup(self._restore)
 
@@ -323,6 +326,7 @@ class TestModelSelector(unittest.TestCase):
         self.m.ENV_FILE = self._orig["env"]
         selfstate_mod.serving_model = self._orig["serving"]
         self.m.brain_state = self._orig["state"]
+        self.m.local_brain_state = self._orig["local_state"]
         self.vs.BRAIN_LOCK = self._orig["lock"]
 
     def _gguf(self, name, size):
@@ -381,7 +385,7 @@ class TestModelSelector(unittest.TestCase):
         finally:
             fcntl.flock(holder, fcntl.LOCK_UN)
             holder.close()
-        self.m.brain_state = lambda: "loading"
+        self.m.local_brain_state = lambda: "loading"  # the guard watches the local unit (#46)
         self.assertIn("already loading", self.m.select_model("mid")["error"])
 
     def test_select_holds_lock_across_restart(self):
@@ -433,6 +437,81 @@ class TestModelSelector(unittest.TestCase):
         res = self.m.select_model("mid")
         self.assertFalse(res["ok"])
         self.assertFalse(os.path.exists(self.m.ENV_FILE))
+
+    def test_brain_state_follows_effective_model_url(self):
+        # The tile must probe the server that answers, not :8081 by name.
+        # With a healthy remote configured, brain.model_url() returns it and
+        # the health probe goes to that host (#45).
+        from carwatch import brain
+        seen = {}
+
+        class _R:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def fake_open(url, timeout=0):
+            seen["url"] = url
+            return _R()
+        with unittest.mock.patch.object(brain, "model_url",
+                                        return_value="http://127.0.0.1:8080/v1/chat/completions"), \
+             unittest.mock.patch.object(self.m.urllib.request, "urlopen", fake_open):
+            self.assertEqual(self._orig["state"](), "ready")  # the real one; setUp stubs self.m.brain_state
+        self.assertEqual(seen["url"], "http://127.0.0.1:8080/health")
+
+    def test_brain_state_local_by_default(self):
+        from carwatch import brain
+        seen = {}
+
+        class _R:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        with unittest.mock.patch.object(brain, "model_url", return_value=brain.LOCAL_URL), \
+             unittest.mock.patch.object(self.m.urllib.request, "urlopen",
+                                        lambda url, timeout=0: seen.setdefault("url", url) and _R()):
+            self.assertEqual(self._orig["state"](), "ready")  # the real one; setUp stubs self.m.brain_state
+        self.assertEqual(seen["url"], "http://127.0.0.1:8081/health")
+
+    def test_local_loading_refuses_swap_even_when_remote_serves(self):
+        # Remote :8080 answers 200, the local unit :8081 is mid-load (503).
+        # The tile may say ready (a remote IS answering); the swap guard
+        # must still refuse, because a swap restarts the local unit.
+        from carwatch import brain
+        self._gguf("mid.gguf", 5 * self.GB)
+        self._patch_run(lambda cmd, **kw: self._R())
+        self.m.brain_state = self._orig["state"]              # real functions,
+        self.m.local_brain_state = self._orig["local_state"]  # not setUp's stubs
+        real_local = self.m.local_brain_state
+
+        class _E(Exception):
+            pass
+
+        def fake_open(url, timeout=0):
+            if url.endswith(":8080/health"):
+                class _R:
+                    status = 200
+                    def __enter__(self): return self
+                    def __exit__(self, *a): return False
+                return _R()
+            raise urllib.error.HTTPError(url, 503, "loading", {}, None)
+        with unittest.mock.patch.object(brain, "model_url",
+                                        return_value="http://127.0.0.1:8080/v1/chat/completions"), \
+             unittest.mock.patch.object(self.m.urllib.request, "urlopen", fake_open):
+            self.assertEqual(self.m.brain_state(), "ready")
+            self.assertEqual(real_local(), "loading")
+            res = self.m.select_model("mid")
+        self.assertFalse(res["ok"], res)
+        self.assertIn("loading", res["error"])
+        reg_keys = {"state", "local_state", "serving"}
+        with unittest.mock.patch.object(brain, "model_url",
+                                        return_value="http://127.0.0.1:8080/v1/chat/completions"):
+            reg = self.m.registry()
+        self.assertTrue(reg_keys <= set(reg.keys()))
+        self.assertEqual(reg["serving"], "remote")
+        with unittest.mock.patch.object(brain, "model_url", return_value=brain.LOCAL_URL):
+            self.assertEqual(self.m.registry()["serving"], "local")
 
     def test_brain_busy_fails_closed(self):
         # If the lock cannot even be inspected, claim busy - a wrong "idle"
