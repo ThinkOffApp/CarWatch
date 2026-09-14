@@ -481,7 +481,8 @@ class TestModelSelector(unittest.TestCase):
         from carwatch import brain
         self._gguf("mid.gguf", 5 * self.GB)
         self._patch_run(lambda cmd, **kw: self._R())
-        self.m.brain_state = self._orig["state"]          # real functions
+        self.m.brain_state = self._orig["state"]              # real functions,
+        self.m.local_brain_state = self._orig["local_state"]  # not setUp's stubs
         real_local = self.m.local_brain_state
 
         class _E(Exception):
