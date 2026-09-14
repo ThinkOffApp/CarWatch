@@ -11,6 +11,8 @@ from unittest import mock
 
 from carwatch import preflight as pf
 
+_REAL_RUN = pf._run  # setUp replaces pf._run with a fixture; tests of _run itself use this
+
 
 class TestPreflight(unittest.TestCase):
     def setUp(self):
@@ -29,7 +31,7 @@ class TestPreflight(unittest.TestCase):
         }
         self.http = {pf.INTERNET_PROBE: 204, "http://100.97.140.13:8123/api/": 401}
         self._patches = [
-            mock.patch.object(pf, "_run", lambda cmd, timeout=5.0: self.runs.get(tuple(cmd))),
+            mock.patch.object(pf, "_run", lambda cmd, timeout=5.0, any_rc=False: self.runs.get(tuple(cmd))),
             mock.patch.object(pf, "_http_status", lambda url, timeout=4.0: self.http.get(url)),
             mock.patch("carwatch.trips.current_ssid", lambda: "Petrus's S26 Ultra"),
             mock.patch("carwatch.brain.model_url", lambda now=None: "http://127.0.0.1:8080/v1/chat/completions"),
@@ -220,6 +222,31 @@ class TestPreflight(unittest.TestCase):
             res = pf.run()
         self.assertEqual(res["tiles"][0]["detail"], "check failed: probe exploded")
         self.assertTrue(res["tiles"][1]["ok"])
+
+    def test_run_returns_disabled_despite_exit_1(self):
+        # systemctl is-enabled says "disabled" AND exits 1; the word is the answer.
+        class R:
+            returncode = 1; stdout = "disabled\n"; stderr = ""
+        with mock.patch.object(pf.subprocess, "run", lambda *a, **k: R()):
+            self.assertEqual(_REAL_RUN(["systemctl", "is-enabled", "x"], any_rc=True), "disabled")
+            self.assertIsNone(_REAL_RUN(["systemctl", "is-enabled", "x"]))
+
+    def test_brain_tile_names_disabled_unit(self):
+        self.runs[("systemctl", "is-enabled", "carwatch-brain")] = "disabled"
+        with mock.patch("carwatch.brain._healthy", lambda url, timeout=2.0: False):
+            t = self._tile(pf.run(), "brain")
+        self.assertIn("is-enabled disabled", t["detail"])
+
+    def test_is_active_inactive_and_failed_are_named_not_unknown(self):
+        # systemctl is-active prints inactive/failed and exits 3.
+        for word in ("inactive", "failed"):
+            class R:
+                returncode = 3; stdout = word + "\n"; stderr = ""
+            with mock.patch.object(pf.subprocess, "run", lambda *a, **k: R()):
+                self.assertEqual(_REAL_RUN(["systemctl", "is-active", "x"], any_rc=True), word)
+        self.runs[("systemctl", "is-active", "carwatch-presence")] = "failed"
+        t = self._tile(pf.run(), "presence")
+        self.assertFalse(t["ok"]); self.assertIn("carwatch-presence failed", t["detail"])
 
     def test_text_format_and_exit_code(self):
         txt = pf.format_text(pf.run())

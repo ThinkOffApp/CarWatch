@@ -29,12 +29,19 @@ INTERNET_PROBE = "http://connectivitycheck.gstatic.com/generate_204"
 
 # ---- probes (replaced in tests) ------------------------------------------
 
-def _run(cmd: list[str], timeout: float = 5.0) -> str | None:
+def _run(cmd: list[str], timeout: float = 5.0, any_rc: bool = False) -> str | None:
+    """stdout of a command, or None if it failed. any_rc=True returns stdout
+    regardless of the exit code, for commands whose answer IS the non-zero
+    exit: `systemctl is-enabled` prints "disabled" and exits 1, which read
+    as "unknown" on VTA (14 Sep 2026)."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except Exception:
         return None
-    return (r.stdout or "").strip() if r.returncode == 0 else None
+    out = (r.stdout or "").strip()
+    if any_rc:
+        return out or None
+    return out if r.returncode == 0 else None
 
 
 def _http_status(url: str, timeout: float = 4.0) -> int | None:
@@ -155,7 +162,7 @@ def check_brain() -> dict:
     url = brain.model_url()
     up = brain._healthy(url)
     local = _local_state()
-    enabled = _run(["systemctl", "is-enabled", "carwatch-brain"]) or "unknown"
+    enabled = _run(["systemctl", "is-enabled", "carwatch-brain"], any_rc=True) or "unknown"
     side = "local" if url == brain.LOCAL_URL else "remote"
     if up:
         detail = f"answering via {side} {url.split('/v1/')[0]}"
@@ -261,14 +268,14 @@ def check_obd() -> dict:
 
 
 def check_presence() -> dict:
-    st = _run(["systemctl", "is-active", "carwatch-presence"])
+    st = _run(["systemctl", "is-active", "carwatch-presence"], any_rc=True)  # inactive/failed exit 3
     active = st == "active"
     return _tile("presence", active, "carwatch-presence active" if active
                  else f"carwatch-presence {st or 'unknown'}")
 
 
 def check_chat() -> dict:
-    st = _run(["systemctl", "is-active", "carwatch-chat"])
+    st = _run(["systemctl", "is-active", "carwatch-chat"], any_rc=True)  # inactive/failed exit 3
     active = st == "active"
     return _tile("dash", active, "carwatch-chat active" if active
                  else f"carwatch-chat {st or 'unknown'}")
