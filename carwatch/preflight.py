@@ -233,29 +233,29 @@ def _paired(mac: str) -> bool:
 
 
 def check_obd() -> dict:
-    """Before ignition there is no fresh snapshot and cannot be: the dongle
-    sleeps with the car. The pre-drive question is whether a dongle is
-    configured and paired/bound at all (claudemm's review of #48); the
-    snapshot age is reported, never used to fail the tile."""
+    """Only communication verifies a dongle. A fresh valid reading (any
+    path, USB or Bluetooth) is presence and READY. A USB serial node,
+    an rfcomm binding or a remembered pairing is configuration only:
+    unverified until a reading arrives (codexmb's review of #48: any
+    /dev/ttyUSB0 could be another serial device, and a Bluetooth dongle
+    that just answered has proven itself). Nothing configured = not ready."""
     age = _snapshot_age_s(os.path.join(state_dir(), "obd-all.json"), "ts", _obd_valid)
+    if age is not None and age <= OBD_FRESH_S:
+        return _tile("obd", True, f"dongle answering, last reading {int(age)}s ago")
     fresh = ("no valid reading yet" if age is None
-             else f"last reading {int(age)}s ago" + ("" if age <= OBD_FRESH_S else " (car off?)"))
+             else f"last reading {int(age)}s ago (car off?)")
     path = _adapter_present()
-    if path and path.startswith("/dev/ttyUSB"):
-        # A USB adapter node exists only while the adapter is plugged in.
-        return _tile("obd", True, f"USB adapter {path} present, {fresh}")
-    if path:
-        # /dev/rfcomm0 exists once bound, whether or not the dongle is
-        # anywhere near the car. Pairing is the same: a promise, not presence
-        # (claudemm: paired last week, on the kitchen table today).
-        return _tile("obd", False, f"rfcomm bound at {path}; dongle presence unverified until ignition, {fresh}",
-                     status="unverified")
     mac = _obd_mac()
+    if path:
+        what = f"serial node {path} present (not identified as OBD)" if path.startswith("/dev/ttyUSB") \
+            else f"rfcomm bound at {path}"
+        return _tile("obd", False, f"{what}; presence unverified until a reading, {fresh}",
+                     status="unverified")
     if not mac:
         return _tile("obd", False,
-                     f"no OBD dongle configured (obd_mac) and no adapter path; pair with scripts/pair-bt-obd.sh; {fresh}")
+                     f"no OBD dongle configured (obd_mac) and no adapter node; pair with scripts/pair-bt-obd.sh; {fresh}")
     if _paired(mac):
-        return _tile("obd", False, f"dongle {mac} paired; presence unverified until ignition, {fresh}",
+        return _tile("obd", False, f"dongle {mac} paired; presence unverified until a reading, {fresh}",
                      status="unverified")
     return _tile("obd", False, f"dongle {mac} configured but not paired/bound, {fresh}")
 

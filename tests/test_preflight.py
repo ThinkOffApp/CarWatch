@@ -37,7 +37,7 @@ class TestPreflight(unittest.TestCase):
             mock.patch.object(pf, "_local_state", lambda: "down"),
             mock.patch("carwatch.mercedesme._ha_url", lambda: "http://100.97.140.13:8123"),
             mock.patch("carwatch.mercedesme._TOKEN_FILE", os.path.join(self.tmp, "ha-token")),
-            mock.patch.object(pf, "_adapter_present", lambda: "/dev/ttyUSB0"),
+            mock.patch.object(pf, "_adapter_present", lambda: None),
             mock.patch.object(pf, "_obd_mac", lambda: "AA:BB:CC:DD:EE:FF"),
             mock.patch.object(pf, "_ha_auth", lambda token: "ok"),
         ]
@@ -133,25 +133,45 @@ class TestPreflight(unittest.TestCase):
             self._snap("obd-all.json", 0, payload)
             t = self._tile(pf.run(), "obd")
             self.assertIn("no valid reading yet", t["detail"], repr(payload))
-            self.assertNotIn("last reading", t["detail"], repr(payload))
+            self.assertNotIn("dongle answering", t["detail"], repr(payload))
+            self.assertEqual(t["status"], "unverified", repr(payload))
+
+    def test_obd_fresh_reading_is_ready_on_any_path(self):
+        # Bluetooth dongle, no USB node, fresh valid reading: it answered.
+        t = self._tile(pf.run(), "obd")
+        self.assertTrue(t["ok"], t); self.assertIn("dongle answering", t["detail"])
 
     def test_obd_paired_but_absent_is_unverified_not_ready(self):
-        # This morning's case: paired last week, on the kitchen table today.
+        # This morning's case: paired last week, on the kitchen table today, no reading.
         os.remove(os.path.join(self.tmp, "obd-all.json"))
-        with mock.patch.object(pf, "_adapter_present", lambda: None):
-            res = pf.run()
+        res = pf.run()
         t = self._tile(res, "obd")
         self.assertEqual(t["status"], "unverified"); self.assertFalse(t["ok"])
-        self.assertIn("unverified until ignition", t["detail"])
+        self.assertIn("unverified until a reading", t["detail"])
         self.assertFalse(res["ready"])
         self.assertEqual(res["summary"], "READY except unverified until ignition: obd")
 
+    def test_obd_stale_reading_is_unverified(self):
+        self._snap("obd-all.json", 3600)
+        t = self._tile(pf.run(), "obd")
+        self.assertEqual(t["status"], "unverified"); self.assertIn("car off?", t["detail"])
+
+    def test_obd_usb_node_alone_is_unverified_not_ready(self):
+        # A /dev/ttyUSB0 is any serial device until it answers as OBD.
+        os.remove(os.path.join(self.tmp, "obd-all.json"))
+        with mock.patch.object(pf, "_adapter_present", lambda: "/dev/ttyUSB0"), \
+             mock.patch.object(pf, "_obd_mac", lambda: ""):
+            t = self._tile(pf.run(), "obd")
+        self.assertEqual(t["status"], "unverified"); self.assertIn("not identified as OBD", t["detail"])
+
     def test_obd_rfcomm_bound_is_unverified_too(self):
+        os.remove(os.path.join(self.tmp, "obd-all.json"))
         with mock.patch.object(pf, "_adapter_present", lambda: "/dev/rfcomm0"):
             t = self._tile(pf.run(), "obd")
         self.assertEqual(t["status"], "unverified"); self.assertIn("rfcomm bound", t["detail"])
 
     def test_obd_not_ready_when_no_dongle_configured_or_paired(self):
+        os.remove(os.path.join(self.tmp, "obd-all.json"))
         with mock.patch.object(pf, "_adapter_present", lambda: None), \
              mock.patch.object(pf, "_obd_mac", lambda: ""):
             t = self._tile(pf.run(), "obd")
@@ -160,11 +180,6 @@ class TestPreflight(unittest.TestCase):
         with mock.patch.object(pf, "_adapter_present", lambda: None):
             t = self._tile(pf.run(), "obd")
         self.assertEqual(t["status"], "not ready"); self.assertIn("not paired", t["detail"])
-
-    def test_obd_ready_only_with_a_physical_usb_adapter(self):
-        with mock.patch.object(pf, "_obd_mac", lambda: ""):
-            t = self._tile(pf.run(), "obd")
-        self.assertTrue(t["ok"]); self.assertIn("/dev/ttyUSB0", t["detail"])
 
     def test_offline_car_is_still_ready_and_mercedes_says_no_internet(self):
         self.http.pop(pf.INTERNET_PROBE)                 # no internet
@@ -186,16 +201,16 @@ class TestPreflight(unittest.TestCase):
 
     def test_presence_inactive_and_summary_lists_every_bad_tile(self):
         self.runs[("systemctl", "is-active", "carwatch-presence")] = "inactive"
-        with mock.patch.object(pf, "_obd_mac", lambda: ""), \
-             mock.patch.object(pf, "_adapter_present", lambda: None):
+        os.remove(os.path.join(self.tmp, "obd-all.json"))
+        with mock.patch.object(pf, "_obd_mac", lambda: ""):
             res = pf.run()
         self.assertFalse(res["ready"])
         self.assertEqual(res["summary"], "READY EXCEPT: obd, presence")
 
     def test_summary_separates_failures_from_unverified(self):
         self.runs[("systemctl", "is-active", "carwatch-presence")] = "inactive"
-        with mock.patch.object(pf, "_adapter_present", lambda: None):   # obd -> unverified (paired)
-            res = pf.run()
+        os.remove(os.path.join(self.tmp, "obd-all.json"))   # obd -> unverified (paired, no reading)
+        res = pf.run()
         self.assertEqual(res["summary"], "READY EXCEPT: presence; unverified until ignition: obd")
 
     def test_a_crashing_check_does_not_hide_the_others(self):
