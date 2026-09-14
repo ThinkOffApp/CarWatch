@@ -504,8 +504,14 @@ class TestModelSelector(unittest.TestCase):
             res = self.m.select_model("mid")
         self.assertFalse(res["ok"], res)
         self.assertIn("loading", res["error"])
-        reg_keys = {"state", "local_state"}
-        self.assertTrue(reg_keys <= set(self.m.registry().keys()))
+        reg_keys = {"state", "local_state", "serving"}
+        with unittest.mock.patch.object(brain, "model_url",
+                                        return_value="http://127.0.0.1:8080/v1/chat/completions"):
+            reg = self.m.registry()
+        self.assertTrue(reg_keys <= set(reg.keys()))
+        self.assertEqual(reg["serving"], "remote")
+        with unittest.mock.patch.object(brain, "model_url", return_value=brain.LOCAL_URL):
+            self.assertEqual(self.m.registry()["serving"], "local")
 
     def test_brain_busy_fails_closed(self):
         # If the lock cannot even be inspected, claim busy - a wrong "idle"

@@ -102,6 +102,18 @@ def brain_state() -> str:
     return _probe(effective_health_url())
 
 
+def serving_side() -> str:
+    """"local" when the local unit answers, "remote" when a configured remote
+    wins routing. After a local swap the dash must not claim "the car
+    answers with it now" while a remote is still the one answering
+    (codexmb's review of #46)."""
+    try:
+        from carwatch import brain
+        return "local" if brain.model_url() == brain.LOCAL_URL else "remote"
+    except Exception:
+        return "local"
+
+
 def local_brain_state() -> str:
     """State of carwatch-brain (:8081) itself, regardless of any remote.
     Model selection restarts THIS unit, so its loading guard and the
@@ -203,6 +215,7 @@ def registry() -> dict:
         "running": running,
         "state": brain_state(),            # the server that answers (tile)
         "local_state": local_brain_state(),  # carwatch-brain itself (swaps)
+        "serving": serving_side(),           # "local" | "remote": who answers
         "busy": brain_busy(),
         "ram_gb": round(_mem_total() / 1e9, 1),
         "expect_s": expected_answer_s(),
