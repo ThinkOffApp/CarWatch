@@ -416,6 +416,27 @@ class TestModelSelector(unittest.TestCase):
             self.assertEqual(f.read().strip(), "BRAIN_MODEL=" + path)
         self.assertEqual(calls[0][-2:], ["restart", "carwatch-brain"])
 
+    def test_select_preserves_other_env_keys(self):
+        # brain.env also carries BRAIN_THREADS (install.sh, from nproc). A
+        # model swap must change the model line only, or every swap would
+        # quietly put a 24-core box back on the Pi's 4 threads.
+        path = self._gguf("mid.gguf", 5 * self.GB)
+        self._patch_run(lambda cmd, **kw: self._R())
+        os.makedirs(os.path.dirname(self.m.ENV_FILE), exist_ok=True)
+        with open(self.m.ENV_FILE, "w") as f:
+            f.write("BRAIN_THREADS=16\nBRAIN_MODEL=/old/model.gguf\n")
+        self.assertTrue(self.m.select_model("mid")["ok"])
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read(), "BRAIN_THREADS=16\nBRAIN_MODEL=" + path + "\n")
+
+    def test_set_env_key_appends_when_missing(self):
+        os.makedirs(os.path.dirname(self.m.ENV_FILE), exist_ok=True)
+        with open(self.m.ENV_FILE, "w") as f:
+            f.write("BRAIN_THREADS=16\n")
+        self.m._set_env_key("BRAIN_MODEL", "/new.gguf")
+        with open(self.m.ENV_FILE) as f:
+            self.assertEqual(f.read(), "BRAIN_THREADS=16\nBRAIN_MODEL=/new.gguf\n")
+
     def test_select_rolls_back_env_on_restart_failure(self):
         # A failed restart must not leave the unverified model armed for the
         # next boot (codexmb's persistence finding).

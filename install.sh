@@ -80,6 +80,19 @@ done
 sudo systemctl daemon-reload
 echo ">> Installed units: $(ls "$DEST"/systemd | tr '\n' ' ')"
 
+# 5b) The brain's thread count is a host fact, not a product constant: the
+#     unit's -t default (4) is a Pi 5. Derive it once from nproc, leaving two
+#     cores for whisper/webchat, floor 4; an existing BRAIN_THREADS (the
+#     owner's choice, or a previous install) is never overwritten.
+BRAIN_ENV="$HOME_DIR/.config/carwatch/brain.env"
+if ! grep -qs '^BRAIN_THREADS=' "$BRAIN_ENV"; then
+  NCPU=$(nproc 2>/dev/null || echo 4)
+  BRAIN_THREADS=$((NCPU - 2)); [ "$BRAIN_THREADS" -lt 4 ] && BRAIN_THREADS=4
+  mkdir -p "$(dirname "$BRAIN_ENV")"
+  printf 'BRAIN_THREADS=%s\n' "$BRAIN_THREADS" >> "$BRAIN_ENV"
+  echo ">> Brain threads: $BRAIN_THREADS of $NCPU cores (BRAIN_THREADS in $BRAIN_ENV)"
+fi
+
 # 6) The brain needs llama.cpp + a model. Both are guided, never silent:
 #    a build takes ~20 min and the model is a 14.3 GB download - your call.
 if [ ! -x "$HOME_DIR/carwatch-stack/llama.cpp/build/bin/llama-server" ]; then

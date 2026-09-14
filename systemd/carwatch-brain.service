@@ -11,8 +11,13 @@ User=petrus
 # Build llama.cpp on the Pi first (see README "Install"); install.sh prints
 # the model download command if the .gguf is missing.
 Environment=BRAIN_MODEL=/home/petrus/models/Qwen3.6-35B-A3B-UD-Q3_K_S.gguf
+# Thread count is per host, not per product: 4 is right for a Pi 5 and wrong
+# for a 24-core mini PC (VTA, 14 Sep 2026: minutes per answer on 4 of 24
+# cores). install.sh writes BRAIN_THREADS into brain.env from nproc; this
+# default only serves when that file is missing.
+Environment=BRAIN_THREADS=4
 EnvironmentFile=-/home/petrus/.config/carwatch/brain.env
-ExecStart=/home/petrus/carwatch-stack/llama.cpp/build/bin/llama-server   -m ${BRAIN_MODEL}   -t 4 -c 4096 --reasoning off --reasoning-budget 0   --host 127.0.0.1 --port 8081
+ExecStart=/home/petrus/carwatch-stack/llama.cpp/build/bin/llama-server   -m ${BRAIN_MODEL}   -t ${BRAIN_THREADS} -c 4096 --reasoning off --reasoning-budget 0   --host 127.0.0.1 --port 8081
 Restart=always
 RestartSec=10
 # 15GB model off the microSD: give it time to load before systemd judges it
