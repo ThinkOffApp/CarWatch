@@ -89,8 +89,11 @@ echo ">> Installed units: $(ls "$DEST"/systemd | tr '\n' ' ')"
 #     of #42: 22 threads on a 12c/24t Ryzen can lose to 12).
 BRAIN_ENV="$HOME_DIR/.config/carwatch/brain.env"
 if ! grep -qs '^BRAIN_THREADS=' "$BRAIN_ENV"; then
-  NCPU=$(lscpu -p=Core,Socket 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' ')
-  [ "${NCPU:-0}" -gt 0 ] || NCPU=$(nproc 2>/dev/null || echo 4)
+  # Guarded: under set -e a failing/missing lscpu in this substitution would
+  # exit the installer before the fallback ran (codexmb's review of #42).
+  NCPU=$(lscpu -p=Core,Socket 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' ') || NCPU=0
+  case "$NCPU" in ''|*[!0-9]*) NCPU=0 ;; esac
+  [ "$NCPU" -gt 0 ] || NCPU=$(nproc 2>/dev/null || echo 4)
   BRAIN_THREADS=$((NCPU - 2)); [ "$BRAIN_THREADS" -lt 4 ] && BRAIN_THREADS=4
   mkdir -p "$(dirname "$BRAIN_ENV")"
   printf 'BRAIN_THREADS=%s\n' "$BRAIN_THREADS" >> "$BRAIN_ENV"
