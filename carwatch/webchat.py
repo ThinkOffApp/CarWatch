@@ -2581,6 +2581,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._send(500, json.dumps({"error": str(e)}),
                                   "application/json")
+        elif self.path.split("?", 1)[0] == "/api/preflight":
+            # Per-tile readiness (#47): the word "ready" comes from the box.
+            from carwatch import preflight as _pf
+            try:
+                return self._send(200, json.dumps(_pf.run()), "application/json")
+            except Exception as e:
+                return self._send(500, json.dumps({"error": str(e)}),
+                                  "application/json")
         elif self.path.split("?", 1)[0] == "/api/models":
             # THI-38 model selector: the ggufs on disk with their measured
             # speeds, plus which one is actually loaded (from ps, never
