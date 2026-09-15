@@ -506,6 +506,7 @@ const _tok=new URLSearchParams(location.search).get('t')||'';
 const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
 // --- voice loop state strip (petrus 27 Aug: show whether the car HEARD) ---
 function renderVoice(s){
+ if(s&&['listening','answering','speaking'].includes(s.state))cwActive();
  const b=$('speakBtn'),st=$('vstatus'),d=$('vdetail'),bw=$('vbarwrap');
  let bar=false; b.className='';
  if(s.state==='armed'){b.textContent='Listening..';b.className='armed';st.textContent='say your question now';d.textContent='';}
@@ -533,7 +534,23 @@ function renderVoice(s){
 async function pollVoice(){try{const r=await fetch(_q('/api/voice/state'));renderVoice(await r.json());}catch(e){}}
 $('speakBtn').onclick=async()=>{try{await fetch(_q('/api/voice/start'),{method:'POST'});pollVoice();}catch(e){}};
 document.querySelector('.vstate').addEventListener('click',e=>e.currentTarget.classList.toggle('open'));
-setInterval(pollVoice,1500);pollVoice();
+// Idle back-off (petrus, 15 Sep 2026: the VTA sat at 80 C with its fans up
+// for four hours on the desk; measured on the box: chrome + cage = one full
+// core, GPU 0 %, llama-server idle. The cause was this page repainting on
+// 1 / 1.5 / 2 s timers all day). Fast rates while the car is live, the wheel
+// moves, voice is busy or a finger touches the screen; after 60 s without any
+// of that the same polls run at 5 / 6 / 10 s. The first poll that sees a
+// change flips back to fast, so a turned wheel or a started engine is noticed
+// within one idle interval. Hidden tab: no polling at all.
+const CW_FAST={voice:1500,status:2000,steer:1000}, CW_IDLE={voice:6000,status:10000,steer:5000};
+let cwLastActive=Date.now();
+function cwActive(){cwLastActive=Date.now();}
+function cwIsIdle(){return Date.now()-cwLastActive>60000;}
+['pointerdown','keydown','touchstart','wheel'].forEach(ev=>document.addEventListener(ev,cwActive,{passive:true}));
+function cwLoop(name,fn){const run=async()=>{if(!document.hidden){try{await fn()}catch(e){}}
+ setTimeout(run,(cwIsIdle()?CW_IDLE:CW_FAST)[name]);};run();}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)cwActive();});
+cwLoop('voice',pollVoice);
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
  return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
 const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000],read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
@@ -706,6 +723,7 @@ async function poll(){
     const fr=Math.min(1,Math.max(0,(isFinite(sv)?sv:0)/240));
     gf.style.strokeDashoffset=String(Math.round(271*(1-fr)))}
    const stale=d.age_s!==undefined&&d.age_s>180;
+   if(!stale)cwActive();
    const os=$('obdsrc');
    os.textContent=stale?'car disconnected: ign off':'live from the car · '+(d.age_s!==undefined?Math.round(d.age_s)+'s':'now');
    os.className='src '+(stale?'warn':'ok');
@@ -741,6 +759,7 @@ async function pollSteer(){
     w.className='steer stale'; return; }
   const centre=(d&&d.centre!=null)?Number(d.centre):STEER_CENTRE;
   const raw=Number(st.last), off=raw-centre;
+  if(raw!==window.cwSteerLast){window.cwSteerLast=raw;cwActive();}
   const frac=Math.max(-1,Math.min(1,off/STEER_SPAN)), pct=Math.abs(frac)*50;
   $('steerval').textContent=raw+(Math.abs(off)<2?' · centred':(off<0?' · left':' · right'));
   $('steerfill').style.width=Math.max(pct,1.5)+'%';
@@ -813,10 +832,10 @@ async function pollCloud(){
  }catch(e){$('mnote').textContent='mercedes cloud unreachable: '+e;
   const ms=$('mercsrc');ms.textContent='cloud disconnected';ms.className='src warn'}
 }
-poll();setInterval(poll,2000);
+cwLoop('status',poll);
 pollCloud();setInterval(pollCloud,30000);
-// 1s so the bar visibly tracks the wheel while it is being turned.
-pollSteer();setInterval(pollSteer,1000);
+// 1s so the bar visibly tracks the wheel while it is being turned (5 s once idle).
+cwLoop('steer',pollSteer);
 </script></body></html>"""
 
 # Playback of the last ATMA capture. Live ATMA wedges the ELM, so this page
