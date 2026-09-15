@@ -1,0 +1,25 @@
+[Unit]
+Description=CarWatch dash kiosk on the local HDMI panel (cage + Chromium)
+After=carwatch-chat.service systemd-user-sessions.service
+Wants=carwatch-chat.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=%i
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+Environment=XDG_SESSION_TYPE=wayland
+ExecStart=/usr/local/bin/carwatch-kiosk.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical.target
