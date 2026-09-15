@@ -86,7 +86,10 @@ def car_identity() -> dict:
     car.update({k: v for k, v in (cfg.get("car") or {}).items() if v})
     return car
 STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
-POLL_SECONDS = 20
+# 60 s (was 20). petrus, 15 Sep 2026: "make the changes immediately to reduce
+# unnecessary polling"; hosting bills per request and this loop alone was
+# 4,320 room reads a day per box. Override with CARWATCH_POLL_SECONDS.
+POLL_SECONDS = int(os.environ.get("CARWATCH_POLL_SECONDS", "60"))
 MAX_TOKENS = 400
 
 
