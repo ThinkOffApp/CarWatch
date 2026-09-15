@@ -17,6 +17,7 @@ def _scheduler_js():
 
 HARNESS = r"""
 const document={hidden:false,addEventListener(){}};
+const AbortController=class{constructor(){this.signal={aborted:false,_l:[],addEventListener(n,f){this._l.push(f)}}}abort(){this.signal.aborted=true;this.signal._l.forEach(f=>f())}};
 let now=0; const timers=[];
 const setTimeout=(f,ms)=>{timers.push({at:now+ms,f});return timers.length};
 const clearTimeout=(id)=>{if(id)timers[id-1]=null};
@@ -28,15 +29,17 @@ async function advance(ms){const target=now+ms;for(;;){const due=timers.filter(t
 const Date={now:()=>now};
 %s
 (async()=>{
-let calls=0; const stalled=()=>{calls++;return new Promise(()=>{});};  // never settles
+let calls=0, settled=0; const order=[];
+// never settles on its own, but honours the abort signal like a real fetch
+const stalled=(signal)=>{calls++;order.push('call'+calls);return new Promise((res,rej)=>{signal.addEventListener('abort',()=>{settled++;order.push('settle'+calls);rej(new Error('aborted'))})})};
 cwLoop('voice',stalled);
 await advance(0);                    // first call
 const c1=calls;
 await advance(CW_DEADLINE-1);        // before the deadline: no second call (non-overlap)
 const c2=calls;
-await advance(CW_FAST.voice+2);      // deadline passed, next interval elapsed
+await advance(CW_FAST.voice+2);      // deadline passed: first run aborted + settled, next interval elapsed
 const c3=calls;
-console.log(JSON.stringify({c1,c2,c3,deadline:CW_DEADLINE}));
+console.log(JSON.stringify({c1,c2,c3,settled,order,deadline:CW_DEADLINE}));
 })();
 """
 
@@ -50,3 +53,5 @@ def test_stalled_poll_does_not_stop_the_loop(tmp_path):
     assert r["c1"] == 1, r
     assert r["c2"] == 1, "a second poll started while the first was still pending"
     assert r["c3"] == 2, "the loop stopped after a poll that never settled"
+    assert r["settled"] == 1, "the deadline did not abort the stalled poll"
+    assert r["order"] == ["call1", "settle1", "call2"], f"second run started before the first settled: {r['order']}"

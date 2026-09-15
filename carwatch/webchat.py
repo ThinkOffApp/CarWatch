@@ -531,18 +531,19 @@ function renderVoice(s){
   d.textContent=s.answer||'';}
  bw.style.display=bar?'block':'none';
 }
-async function pollVoice(){const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
- try{const r=await fetch(_q('/api/voice/state'),{signal:c.signal});renderVoice(await r.json());}catch(e){}finally{clearTimeout(t)}}
+async function pollVoice(signal){try{const r=await F('/api/voice/state',{signal},8000);renderVoice(await r.json());}catch(e){}}
 $('speakBtn').onclick=async()=>{try{await fetch(_q('/api/voice/start'),{method:'POST'});pollVoice();}catch(e){}};
 document.querySelector('.vstate').addEventListener('click',e=>e.currentTarget.classList.toggle('open'));
-// Idle back-off (petrus, 15 Sep 2026: the VTA sat at 80 C with its fans up
-// for four hours on the desk; measured on the box: chrome + cage = one full
-// core, GPU 0 %, llama-server idle. The cause was this page repainting on
-// 1 / 1.5 / 2 s timers all day). Fast rates while the car is live, the wheel
+// Idle back-off (petrus, 15 Sep 2026, "reduce unnecessary polling"). These
+// 1 / 1.5 / 2 s self-polls were request waste on a page that sits idle for
+// hours. They were NOT the VTA's 80 C that evening: that was the kiosk
+// drawing the dash for a panel that was not attached (measured by a pause
+// test; see CarWatch #60). Fast rates while the car is live, the wheel
 // moves, voice is busy or a finger touches the screen; after 60 s without any
 // of that the same polls run at 5 / 6 / 10 s. The first poll that sees a
 // change flips back to fast, so a turned wheel or a started engine is noticed
-// within one idle interval. Hidden tab: no polling at all.
+// within one idle interval. Hidden tab: the loop keeps ticking but skips the
+// fetch, so nothing is requested until the tab is visible again.
 const CW_FAST={voice:1500,status:2000,steer:1000}, CW_IDLE={voice:6000,status:10000,steer:5000};
 let cwLastActive=Date.now();
 function cwActive(){cwLastActive=Date.now();}
@@ -550,15 +551,24 @@ function cwIsIdle(){return Date.now()-cwLastActive>60000;}
 ['pointerdown','keydown','touchstart','wheel'].forEach(ev=>document.addEventListener(ev,cwActive,{passive:true}));
 // The next run is scheduled no matter what fn() does: a request that never
 // settles (codexmb, post-merge review of #57) must not stop the loop, which is
-// what setInterval used to guarantee. fn() is raced against CW_DEADLINE ms;
-// the loser is abandoned (its own fetch is bounded by F / pollVoice's abort).
-const CW_DEADLINE=15000;
+// what setInterval used to guarantee. Each run gets an AbortSignal that fn
+// passes to its fetch; at CW_DEADLINE the signal is aborted and the run is
+// awaited until it settles (codexmb, #59: an abandoned run is not a cancelled
+// one), with CW_SETTLE_GRACE as the bound for a fn that ignores its signal.
+// So two runs of the same loop never overlap.
+const CW_DEADLINE=15000, CW_SETTLE_GRACE=2000;
 function cwLoop(name,fn){const run=async()=>{if(!document.hidden){
-  let t;try{await Promise.race([fn(),new Promise(r=>{t=setTimeout(r,CW_DEADLINE)})])}catch(e){}finally{clearTimeout(t)}}
+  const c=new AbortController();let t,g;
+  const p=Promise.resolve().then(()=>fn(c.signal)).catch(()=>{});
+  const late=await Promise.race([p.then(()=>false),new Promise(r=>{t=setTimeout(()=>r(true),CW_DEADLINE)})]);
+  clearTimeout(t);
+  if(late){c.abort();await Promise.race([p,new Promise(r=>{g=setTimeout(r,CW_SETTLE_GRACE)})]);clearTimeout(g);}}
  setTimeout(run,(cwIsIdle()?CW_IDLE:CW_FAST)[name]);};run();}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cwActive();});
 cwLoop('voice',pollVoice);
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
+ // An outer signal (the scheduler's) aborts this request too.
+ if(o.signal){if(o.signal.aborted)c.abort();else o.signal.addEventListener('abort',()=>c.abort(),{once:true});}
  // The abort timer covers the body read too, not only the headers: r.json() is
  // wrapped so the timer clears when the body has arrived (codexmb, #57 review).
  return fetch(_q(u),Object.assign({signal:c.signal},o)).then(r=>{const j=r.json.bind(r);r.json=()=>j().finally(()=>clearTimeout(t));return r},e=>{clearTimeout(t);throw e});};
@@ -718,13 +728,13 @@ function flat(d){const o={};if(!d||!d.groups)return o;
  Object.values(d.groups).forEach(v=>Object.values(v).forEach(r=>{if(r&&r.key)o[r.key]=r}));return o}
 const STAT=[['engine_rpm','engine rpm','&#9881;'],['hybrid_battery_pct','hybrid battery','&#128267;'],
  ['module_voltage','12V system','&#9889;'],['coolant_c','coolant','&#127777;'],['engine_load_pct','engine load','&#128200;']];
-async function poll(){
- try{const s=await(await F('/api/status')).json();
+async function poll(signal){
+ try{const s=await(await F('/api/status',{signal})).json();
   if(s.error==='token required'){$('status').innerHTML='<span style=color:#ffc857>open from the app link or Tailscale</span>';}
   else{const f=s.facts||{};$('status').innerHTML=(f.network||'')+' &middot; '+(f['your temperature']||'')+'<br><b>'+(f.uptime||'')+'</b>';
    if(s.listening!==undefined)setListen(s.listening);}
  }catch(e){$('status').innerHTML='<span style=color:#ff667d>cannot reach the car</span>'}
- try{const d=await(await F('/api/obd/all')).json();
+ try{const d=await(await F('/api/obd/all',{signal})).json();
   if(d&&d.groups&&Object.keys(d.groups).length){
    const m=flat(d);const spd=m.speed_kmh;
    $('spd').textContent=spd&&spd.value!=null?spd.value:'-';
@@ -760,9 +770,9 @@ const STEER_CENTRE=28698, STEER_SPAN=150;
 // disproven parked (yaw) and stays out. The label says candidate until
 // petrus watches this bar track his wheel live - that test is the point of
 // unhiding it.
-async function pollSteer(){
+async function pollSteer(signal){
  try{
-  const d=await(await F('/api/steering')).json();
+  const d=await(await F('/api/steering',{signal})).json();
   const st=(d&&d.ok!==false&&d.value!=null)?{last:d.value}:null, w=$('steerwrap');
   if(!st||st.last==null){ $('steerval').textContent='-'; $('steerfill').style.width='0';
     w.className='steer stale'; return; }
