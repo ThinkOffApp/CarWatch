@@ -1,3 +1,14 @@
-# Start the CarWatch kiosk when a display is plugged in (DRM hotplug event).
+# Start the CarWatch kiosk when a panel is plugged in.
 # Installed by install-kiosk*.sh with the kiosk user substituted for KUSER.
-SUBSYSTEM=="drm", ACTION=="change", ENV{HOTPLUG}=="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="carwatch-kiosk@KUSER.service"
+#
+# RUN, not SYSTEMD_WANTS: Wants= on the device unit fires once when card0
+# becomes active, and card0 stays active across unplug/replug (codexmb, #60).
+#
+# ENV{HOTPLUG}=="1" is load-bearing: the kernel sets it only on real connector
+# hotplug (drivers/gpu/drm/drm_sysfs.c, drm_sysfs_hotplug_event). The kiosk's
+# own start switches the VT, which also emits a DRM "change" event WITHOUT
+# HOTPLUG; a rule keyed on any change event therefore restarts the kiosk from
+# its own start: 517 starts in a minute, measured on the VTA, 15 Sep 2026.
+# The price is that `udevadm trigger` cannot exercise this rule (synthetic
+# events carry no HOTPLUG); only a real plug does.
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ACTION=="change", ENV{HOTPLUG}=="1", RUN+="/usr/local/bin/carwatch-kiosk-hotplug.sh KUSER"

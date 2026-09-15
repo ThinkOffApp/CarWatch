@@ -42,8 +42,10 @@ panel_connected() {
   done
   return 1
 }
+# stderr under a TTY-bound unit does not reach the journal; say it there too.
+say() { echo "carwatch-kiosk: $*" >&2; command -v logger >/dev/null 2>&1 && logger -t carwatch-kiosk -- "$*"; }
 if ! panel_connected; then
-  echo "carwatch-kiosk: no display connected, not starting the browser" >&2
+  say "no display connected, not starting the browser"
   exit "$NO_PANEL_EXIT"
 fi
 TOKEN_FILE="${CARWATCH_DASH_TOKEN_FILE:-$HOME/.carwatch/dash-token}"
@@ -88,7 +90,7 @@ trap 'kill "$BROWSER" 2>/dev/null' TERM INT
 # Watch the panel while the browser runs: unplugged panel = stop drawing.
 while kill -0 "$BROWSER" 2>/dev/null; do
   if ! panel_connected; then
-    echo "carwatch-kiosk: display disconnected, stopping the browser" >&2
+    say "display disconnected, stopping the browser"
     kill "$BROWSER" 2>/dev/null
     wait "$BROWSER" 2>/dev/null
     exit "$NO_PANEL_EXIT"
