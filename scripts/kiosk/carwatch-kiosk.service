@@ -20,6 +20,10 @@ Environment=XDG_SESSION_TYPE=wayland
 ExecStart=/usr/local/bin/carwatch-kiosk.sh
 Restart=always
 RestartSec=3
+# 78 = the launcher found no connected panel: stay down until udev
+# (90-carwatch-kiosk.rules) starts us on hotplug, instead of a 3 s loop.
+RestartPreventExitStatus=78
+SuccessExitStatus=78
 
 [Install]
 WantedBy=graphical.target
