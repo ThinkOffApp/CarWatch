@@ -158,3 +158,14 @@ cat <<DONE
      carwatch-presence  carwatch-netfallback  carwatch-pairwatch
      carwatch-update.timer (hourly self-update)
 DONE
+
+# --- persistent journal ---------------------------------------------------
+# Raspberry Pi OS ships /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf
+# (Storage=volatile), so after a reboot the previous boot's log is gone and a
+# car-side crash cannot be diagnosed. Override it; 200M cap keeps the SD card safe.
+if [ -d /etc/systemd ] && command -v journalctl >/dev/null 2>&1; then
+  sudo mkdir -p /etc/systemd/journald.conf.d /var/log/journal
+  printf '[Journal]\nStorage=persistent\nSystemMaxUse=200M\n' | sudo tee /etc/systemd/journald.conf.d/carwatch-persistent.conf >/dev/null
+  sudo systemctl restart systemd-journald 2>/dev/null || true
+  sudo journalctl --flush 2>/dev/null || true
+fi
