@@ -8,6 +8,34 @@ import pathlib, re, shutil, subprocess, pytest
 SRC = pathlib.Path(__file__).resolve().parents[1] / "carwatch" / "webchat.py"
 
 
+def _fetch_helper_js():
+    text = SRC.read_text()
+    m = re.search(r"const F=\(u,o=\{\},ms=4000\)=>.*?\};\n", text, re.S)
+    assert m, "F helper not found in webchat.py"
+    return m.group(0)
+
+
+F_HARNESS = r"""
+%s
+const _q=(u)=>u;
+const seen=[];
+const fetch=(u,o)=>{seen.push(o.signal);return new Promise(()=>{});};  // never answers
+(async()=>{
+  const AbortControllerReal=AbortController;
+  // 1. no outer signal: F's own timeout must abort the signal fetch received
+  F('/a',{},20); await new Promise(r=>setTimeout(r,60));
+  const ownTimeoutAborts=seen[0]&&seen[0].aborted===true;
+  // 2. caller passes {signal:undefined} (pollVoice called by hand): same
+  F('/b',{signal:undefined},20); await new Promise(r=>setTimeout(r,60));
+  const undefinedOuterOk=seen[1]&&seen[1].aborted===true;
+  // 3. outer signal aborted by the scheduler must abort the request before F's timeout
+  const outer=new AbortControllerReal(); F('/c',{signal:outer.signal},10000); outer.abort(); await new Promise(r=>setTimeout(r,10));
+  const outerAborts=seen[2]&&seen[2].aborted===true;
+  console.log(JSON.stringify({ownTimeoutAborts,undefinedOuterOk,outerAborts,distinct:seen[2]!==outer.signal}));
+})();
+"""
+
+
 def _scheduler_js():
     text = SRC.read_text()
     m = re.search(r"const CW_FAST=.*?function cwLoop.*?run\(\);\}\n", text, re.S)

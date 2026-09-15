@@ -554,8 +554,9 @@ function cwIsIdle(){return Date.now()-cwLastActive>60000;}
 // what setInterval used to guarantee. Each run gets an AbortSignal that fn
 // passes to its fetch; at CW_DEADLINE the signal is aborted and the run is
 // awaited until it settles (codexmb, #59: an abandoned run is not a cancelled
-// one), with CW_SETTLE_GRACE as the bound for a fn that ignores its signal.
-// So two runs of the same loop never overlap.
+// one). Runs that honour their signal, which all three polls do through F,
+// therefore never overlap; a fn that ignores its signal is abandoned after
+// CW_SETTLE_GRACE so one hung request cannot stop the loop, and may overlap.
 const CW_DEADLINE=15000, CW_SETTLE_GRACE=2000;
 function cwLoop(name,fn){const run=async()=>{if(!document.hidden){
   const c=new AbortController();let t,g;
@@ -571,7 +572,9 @@ const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>
  if(o.signal){if(o.signal.aborted)c.abort();else o.signal.addEventListener('abort',()=>c.abort(),{once:true});}
  // The abort timer covers the body read too, not only the headers: r.json() is
  // wrapped so the timer clears when the body has arrived (codexmb, #57 review).
- return fetch(_q(u),Object.assign({signal:c.signal},o)).then(r=>{const j=r.json.bind(r);r.json=()=>j().finally(()=>clearTimeout(t));return r},e=>{clearTimeout(t);throw e});};
+ // Options first, then OUR signal: a caller's {signal} (or {signal:undefined}) must not
+ // replace the linked one, or the timeout never reaches the request (codexmb, #61).
+ return fetch(_q(u),Object.assign({},o,{signal:c.signal})).then(r=>{const j=r.json.bind(r);r.json=()=>j().finally(()=>clearTimeout(t));return r},e=>{clearTimeout(t);throw e});};
 const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000],read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
  pair:['/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)',70000],update:['/api/update','pull latest code + restart',90000]};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight;
