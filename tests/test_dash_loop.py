@@ -83,3 +83,18 @@ def test_stalled_poll_does_not_stop_the_loop(tmp_path):
     assert r["c3"] == 2, "the loop stopped after a poll that never settled"
     assert r["settled"] == 1, "the deadline did not abort the stalled poll"
     assert r["order"] == ["call1", "settle1", "call2"], f"second run started before the first settled: {r['order']}"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+def test_fetch_helper_abort_reaches_the_request(tmp_path):
+    """codexmb, #61: Object.assign({signal}, o) let the caller's options overwrite
+    the helper's own signal, so its timeout never aborted the request."""
+    js = tmp_path / "f.js"
+    js.write_text(F_HARNESS % _fetch_helper_js())
+    out = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    r = __import__("json").loads(out.stdout.strip().splitlines()[-1])
+    assert r["ownTimeoutAborts"], "F's own timeout did not abort the request (no outer signal)"
+    assert r["undefinedOuterOk"], "a caller passing {signal: undefined} disabled F's timeout"
+    assert r["outerAborts"], "an aborted outer signal did not abort the request"
+    assert r["distinct"], "F passed the outer signal itself instead of its linked one"
