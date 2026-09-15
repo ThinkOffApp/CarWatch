@@ -17,6 +17,8 @@ cat > /etc/systemd/system/carwatch-kiosk@.service.d/snap-chromium.conf <<'CONF'
 Environment=CARWATCH_CHROMIUM=/snap/bin/chromium
 CONF
 install -m 644 "$HERE/carwatch-kiosk.service" /etc/systemd/system/carwatch-kiosk@.service
+sed "s/KUSER/${KUSER}/g" "$HERE/90-carwatch-kiosk.rules" > /etc/udev/rules.d/90-carwatch-kiosk.rules
+udevadm control --reload-rules 2>/dev/null || true
 usermod -aG video,input,render "$KUSER" 2>/dev/null || true
 # keep an existing tty1 text console, moved to tty2 (Ctrl+Alt+F2)
 if systemctl cat vta-console.service >/dev/null 2>&1; then

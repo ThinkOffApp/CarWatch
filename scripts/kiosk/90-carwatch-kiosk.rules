@@ -1,0 +1,3 @@
+# Start the CarWatch kiosk when a display is plugged in (DRM hotplug event).
+# Installed by install-kiosk*.sh with the kiosk user substituted for KUSER.
+SUBSYSTEM=="drm", ACTION=="change", ENV{HOTPLUG}=="1", TAG+="systemd", ENV{SYSTEMD_WANTS}+="carwatch-kiosk@KUSER.service"
