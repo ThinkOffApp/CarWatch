@@ -11,7 +11,11 @@ apt-get update -q
 apt-get install -y -q --no-install-recommends cage seatd grim fonts-noto-color-emoji curl
 snap list chromium >/dev/null 2>&1 || snap install chromium
 install -m 755 "$HERE/carwatch-kiosk.sh" /usr/local/bin/carwatch-kiosk.sh
-sed -i 's#/usr/bin/chromium #/snap/bin/chromium #' /usr/local/bin/carwatch-kiosk.sh
+mkdir -p /etc/systemd/system/carwatch-kiosk@.service.d
+cat > /etc/systemd/system/carwatch-kiosk@.service.d/snap-chromium.conf <<'CONF'
+[Service]
+Environment=CARWATCH_CHROMIUM=/snap/bin/chromium
+CONF
 install -m 644 "$HERE/carwatch-kiosk.service" /etc/systemd/system/carwatch-kiosk@.service
 usermod -aG video,input,render "$KUSER" 2>/dev/null || true
 # keep an existing tty1 text console, moved to tty2 (Ctrl+Alt+F2)
