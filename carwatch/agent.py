@@ -86,7 +86,11 @@ def car_identity() -> dict:
     car.update({k: v for k, v in (cfg.get("car") or {}).items() if v})
     return car
 STATE_PATH = os.path.expanduser("~/.carwatch/agent-state.json")
-POLL_SECONDS = 20
+# Room poll cadence. Every tick is one GroupMind request, which is billed per
+# invocation, and the car agent answers when spoken to, not on a stopwatch:
+# 60 s keeps it responsive and cuts the box from 4,320 to 1,440 reads a day.
+# Override with CARWATCH_POLL_SECONDS (minimum 5).
+POLL_SECONDS = max(5, int(os.environ.get("CARWATCH_POLL_SECONDS", "60") or 60))
 MAX_TOKENS = 400
 
 
