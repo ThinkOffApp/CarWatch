@@ -1,5 +1,11 @@
 [Unit]
 Description=CarWatch dash kiosk on the local HDMI panel (cage + Chromium)
+# A panel plug can arrive as a burst of DRM change events, each a start
+# attempt that exits 78 within a second when the panel is not (yet) there;
+# the default 5-in-10-s limit turned such a burst into 'start-limit-hit'
+# and a unit stuck 'failed' (measured on the VTA, 15 Sep 2026).
+StartLimitIntervalSec=30
+StartLimitBurst=20
 After=carwatch-chat.service systemd-user-sessions.service
 Wants=carwatch-chat.service
 Conflicts=getty@tty1.service
