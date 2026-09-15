@@ -531,7 +531,8 @@ function renderVoice(s){
   d.textContent=s.answer||'';}
  bw.style.display=bar?'block':'none';
 }
-async function pollVoice(){try{const r=await fetch(_q('/api/voice/state'));renderVoice(await r.json());}catch(e){}}
+async function pollVoice(){const c=new AbortController();const t=setTimeout(()=>c.abort(),8000);
+ try{const r=await fetch(_q('/api/voice/state'),{signal:c.signal});renderVoice(await r.json());}catch(e){}finally{clearTimeout(t)}}
 $('speakBtn').onclick=async()=>{try{await fetch(_q('/api/voice/start'),{method:'POST'});pollVoice();}catch(e){}};
 document.querySelector('.vstate').addEventListener('click',e=>e.currentTarget.classList.toggle('open'));
 // Idle back-off (petrus, 15 Sep 2026: the VTA sat at 80 C with its fans up
@@ -547,12 +548,20 @@ let cwLastActive=Date.now();
 function cwActive(){cwLastActive=Date.now();}
 function cwIsIdle(){return Date.now()-cwLastActive>60000;}
 ['pointerdown','keydown','touchstart','wheel'].forEach(ev=>document.addEventListener(ev,cwActive,{passive:true}));
-function cwLoop(name,fn){const run=async()=>{if(!document.hidden){try{await fn()}catch(e){}}
+// The next run is scheduled no matter what fn() does: a request that never
+// settles (codexmb, post-merge review of #57) must not stop the loop, which is
+// what setInterval used to guarantee. fn() is raced against CW_DEADLINE ms;
+// the loser is abandoned (its own fetch is bounded by F / pollVoice's abort).
+const CW_DEADLINE=15000;
+function cwLoop(name,fn){const run=async()=>{if(!document.hidden){
+  let t;try{await Promise.race([fn(),new Promise(r=>{t=setTimeout(r,CW_DEADLINE)})])}catch(e){}finally{clearTimeout(t)}}
  setTimeout(run,(cwIsIdle()?CW_IDLE:CW_FAST)[name]);};run();}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cwActive();});
 cwLoop('voice',pollVoice);
 const F=(u,o={},ms=4000)=>{const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
- return fetch(_q(u),Object.assign({signal:c.signal},o)).finally(()=>clearTimeout(t));};
+ // The abort timer covers the body read too, not only the headers: r.json() is
+ // wrapped so the timer clears when the body has arrived (codexmb, #57 review).
+ return fetch(_q(u),Object.assign({signal:c.signal},o)).then(r=>{const j=r.json.bind(r);r.json=()=>j().finally(()=>clearTimeout(t));return r},e=>{clearTimeout(t);throw e});};
 const ACT={brief:['/api/car-brief','composing + speaking your car brief',130000],read:['/api/obd','one live engine read',70000],record:['/api/obd/record-arm','armed: records 120s raw CAN on the next moving read',30000],
  pair:['/api/car-pair','scan + pair car Bluetooth (MBUX in pairing mode)',70000],update:['/api/update','pull latest code + restart',90000]};
 function show(t){const o=$('out');o.style.display='block';o.textContent=t;o.scrollTop=o.scrollHeight;
