@@ -9,6 +9,7 @@ apt-get update -q
 apt-get install -y -q --no-install-recommends cage chromium seatd grim fonts-noto-color-emoji
 install -m 755 "$HERE/carwatch-kiosk.sh" /usr/local/bin/carwatch-kiosk.sh
 install -m 644 "$HERE/carwatch-kiosk.service" /etc/systemd/system/carwatch-kiosk@.service
+install -m 755 "$HERE/carwatch-kiosk-hotplug.sh" /usr/local/bin/carwatch-kiosk-hotplug.sh
 sed "s/KUSER/${KUSER}/g" "$HERE/90-carwatch-kiosk.rules" > /etc/udev/rules.d/90-carwatch-kiosk.rules
 udevadm control --reload-rules 2>/dev/null || true
 usermod -aG video,input,render "$KUSER" 2>/dev/null || true
