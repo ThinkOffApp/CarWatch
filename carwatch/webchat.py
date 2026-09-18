@@ -2353,6 +2353,10 @@ class Handler(BaseHTTPRequestHandler):
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        # The dashboard token travels as ?t=<token> so a plain link works in
+        # the car with one tap (#12). That means every outbound link from a
+        # dashboard page would otherwise carry the token in its Referer.
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         if "html" in ctype:
             # The dashboard changed several times in one day; a cached copy
@@ -2856,7 +2860,14 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            # NO Access-Control-Allow-Origin. This endpoint returns live car
+            # facts, the Pi's process list and agent journal lines, and on
+            # home wifi _peer_is_owner() authorises by NETWORK rather than by
+            # token. Ambient authority plus a wildcard CORS header means any
+            # web page open on a phone on that wifi could fetch this and read
+            # the response cross-origin. The dashboard is same-origin and
+            # never needed the header (#12).
+            self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
