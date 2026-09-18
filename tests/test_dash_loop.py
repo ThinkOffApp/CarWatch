@@ -3,7 +3,13 @@ never settles. Post-merge review of #57 (codexmb): the first version awaited
 fn() with no bound, so one stalled voice request stopped that loop for good,
 which setInterval never did. The scheduler is extracted from webchat.py and
 run under node with fake timers; skipped when node is not installed."""
-import pathlib, re, shutil, subprocess, pytest
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "carwatch" / "webchat.py"
 
@@ -71,30 +77,48 @@ console.log(JSON.stringify({c1,c2,c3,settled,order,deadline:CW_DEADLINE}));
 })();
 """
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_stalled_poll_does_not_stop_the_loop(tmp_path):
-    js = tmp_path / "loop.js"
-    js.write_text(HARNESS % _scheduler_js())
-    out = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=30)
-    assert out.returncode == 0, out.stderr
-    r = __import__("json").loads(out.stdout.strip().splitlines()[-1])
-    assert r["c1"] == 1, r
-    assert r["c2"] == 1, "a second poll started while the first was still pending"
-    assert r["c3"] == 2, "the loop stopped after a poll that never settled"
-    assert r["settled"] == 1, "the deadline did not abort the stalled poll"
-    assert r["order"] == ["call1", "settle1", "call2"], f"second run started before the first settled: {r['order']}"
+def _run_node(harness: str, body: str) -> dict:
+    """Write the harness to a temp file, run it under node, return its JSON."""
+    with tempfile.TemporaryDirectory() as td:
+        js = pathlib.Path(td) / "t.js"
+        js.write_text(harness % body)
+        out = subprocess.run(["node", str(js)], capture_output=True,
+                             text=True, timeout=30)
+        assert out.returncode == 0, out.stderr
+        return json.loads(out.stdout.strip().splitlines()[-1])
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
-def test_fetch_helper_abort_reaches_the_request(tmp_path):
-    """codexmb, #61: Object.assign({signal}, o) let the caller's options overwrite
-    the helper's own signal, so its timeout never aborted the request."""
-    js = tmp_path / "f.js"
-    js.write_text(F_HARNESS % _fetch_helper_js())
-    out = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=30)
-    assert out.returncode == 0, out.stderr
-    r = __import__("json").loads(out.stdout.strip().splitlines()[-1])
-    assert r["ownTimeoutAborts"], "F's own timeout did not abort the request (no outer signal)"
-    assert r["undefinedOuterOk"], "a caller passing {signal: undefined} disabled F's timeout"
-    assert r["outerAborts"], "an aborted outer signal did not abort the request"
-    assert r["distinct"], "F passed the outer signal itself instead of its linked one"
+@unittest.skipUnless(shutil.which("node"), "node not installed")
+class DashLoop(unittest.TestCase):
+    """These ran under pytest only, and pytest is not installed in CI, so the
+    import error was the ONLY thing CI ever reported from this file. As
+    unittest they actually execute."""
+
+    def test_stalled_poll_does_not_stop_the_loop(self):
+        r = _run_node(HARNESS, _scheduler_js())
+        self.assertEqual(r["c1"], 1, r)
+        self.assertEqual(r["c2"], 1,
+                         "a second poll started while the first was still pending")
+        self.assertEqual(r["c3"], 2,
+                         "the loop stopped after a poll that never settled")
+        self.assertEqual(r["settled"], 1,
+                         "the deadline did not abort the stalled poll")
+        self.assertEqual(r["order"], ["call1", "settle1", "call2"],
+                         f"second run started before the first settled: {r['order']}")
+
+    def test_fetch_helper_abort_reaches_the_request(self):
+        """codexmb, #61: Object.assign({signal}, o) let the caller's options
+        overwrite the helper's own signal, so its timeout never aborted."""
+        r = _run_node(F_HARNESS, _fetch_helper_js())
+        self.assertTrue(r["ownTimeoutAborts"],
+                        "F's own timeout did not abort the request (no outer signal)")
+        self.assertTrue(r["undefinedOuterOk"],
+                        "a caller passing {signal: undefined} disabled F's timeout")
+        self.assertTrue(r["outerAborts"],
+                        "an aborted outer signal did not abort the request")
+        self.assertTrue(r["distinct"],
+                        "F passed the outer signal itself instead of its linked one")
+
+
+if __name__ == "__main__":
+    unittest.main()
