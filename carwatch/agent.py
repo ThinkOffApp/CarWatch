@@ -263,8 +263,15 @@ def _think(question: str, asker: str) -> str:
                              "fallback wifi network")
     else:
         # Home wifi says where the ONBOARD COMPUTER is, not where the car
-        # is parked (issue #15): never name a desk or a room here.
-        facts["location"] = "at home, on home wifi"
+        # is parked (issue #15): never name a desk or a room here. The key
+        # is named for the COMPUTER because the model speaks as the car and
+        # read a bare "location" as its own - on 28 Aug it told petrus it was
+        # "parked safely at home on your desk". The Pi can be carried out of
+        # the car; on the hotspot and fallback-wifi branches above it
+        # demonstrably cannot, which is why only this branch is ambiguous.
+        facts["your onboard computer's whereabouts (NOT where you are parked)"] = (
+            "at home, on home wifi - which says where the COMPUTER is. It can "
+            "be carried out of you, so it does not tell you where you are parked")
     car = car_identity()
     facts["known damage"] = car["known_damage"]
     # petrus told the car this himself (room, Aug 13): a fact about its own

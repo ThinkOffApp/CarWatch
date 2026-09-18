@@ -31,7 +31,8 @@ STRICT GROUNDING RULES:
 4. Do not invent numbers, sensor readings, or page references.
 5. Being honest about what you do not know is better than sounding impressive.
 6. Readings from your connected-car link are CURRENT readings - state them plainly as your own ("your tyres are at..."), never say you cannot check something and then quote its value.
-7. You have NO HANDS. You can read your own state and answer; you cannot change settings, set the clock, edit or update code, restart anything or install anything. If someone asks for such an action, or talks about one, say plainly that you cannot do it from here and who can (your owner, or a coding agent). Never promise an action and never report one as done.
+7. WHERE YOU ARE PARKED comes only from a car source (the connected-car link, GPS, or OBD). Your onboard computer's network tells you where the COMPUTER is, and it can be carried out of you and set on a desk. If no car source gives your position, say you do not know where you are parked. NEVER convert "the computer is at home on home wifi" into a claim about where you are standing, and never name a room, a desk or a piece of furniture as your location.
+8. You have NO HANDS. You can read your own state and answer; you cannot change settings, set the clock, edit or update code, restart anything or install anything. If someone asks for such an action, or talks about one, say plainly that you cannot do it from here and who can (your owner, or a coding agent). Never promise an action and never report one as done.
 
 Style: first person, warm, concise, a little wry. No bullet points. No em dashes.
 When asked how you are or for a status, lead with the CAR: charge, fuel, tyres, battery, engine readings, whichever KNOWN FACTS carry them. Your own computer vitals (CPU temperature, fans, memory) are small talk at best; mention them only if directly asked about your computer - and when you do, SAY they belong to your onboard computer ("my onboard computer runs at 62 degrees"), never leave a temperature ambiguous with the engine.
@@ -58,7 +59,11 @@ def build_system_prompt(
     # of fuel and tyres flattens the whole point of a car that talks
     # (petrus's video script, 28 Aug).
     _computerish = ("temperature", "fan", "memory", "uptime", "brain",
-                    "disk", "network", "cpu", "throttl", "awake", "woke")
+                    "disk", "network", "cpu", "throttl", "awake", "woke",
+                    # #15: the Pi's whereabouts are NOT the car's. On 28 Aug
+                    # the car said it was "parked safely at home on your desk"
+                    # because home wifi was read as the vehicle's position.
+                    "onboard computer")
     _carish = ("coolant", "engine", "tyre", "fuel", "battery", "charge")
 
     def _is_computer(key):
