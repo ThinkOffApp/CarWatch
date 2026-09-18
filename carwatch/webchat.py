@@ -1229,7 +1229,8 @@ def answer(question: str, use_manual: bool = True) -> str:
         except Exception:
             _vs.set_state("idle", note="answer failed - brain unreachable?")
             raise
-    _out = (msg.get("content") or "").strip()
+    from carwatch.grounding import strip_scaffold
+    _out = strip_scaffold((msg.get("content") or "").strip())
     _vs.set_state("idle", answer=_out[:400])
     return _out or "[the model spent its budget thinking and did not answer]"
 
