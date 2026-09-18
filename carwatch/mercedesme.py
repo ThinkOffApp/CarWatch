@@ -223,8 +223,66 @@ def _numeric(state: str):
         return None
 
 
-def _norm_value(entity_id: str, state: str):
-    """HA state string -> honest normalized value."""
+# Tyre pressure arrives in whatever unit the owner's Home Assistant is set to.
+# We used to file it under "tires_kpa" regardless, so a psi reading became a
+# "kPa" number and the agent told petrus his tyres were at THIRTY BAR
+# (issue #39). The unit is in the entity attributes and we were throwing it
+# away. Convert explicitly, and refuse rather than guess on an unknown unit.
+_PRESSURE_TO_KPA = {
+    "kpa": 1.0,
+    "bar": 100.0,
+    "psi": 6.894757,
+    "mbar": 0.1,
+    "hpa": 0.1,
+}
+
+
+def _pressure_kpa(value: float, unit):
+    """Pressure in ANY reported unit -> kPa. None when the unit is unknown."""
+    if value is None:
+        return None
+    factor = _PRESSURE_TO_KPA.get(str(unit or "").strip().lower())
+    if factor is None:
+        return None          # fail closed: an unlabelled pressure is not a kPa
+    return round(value * factor, 1)
+
+
+_WHEEL_ORDER = ("front_left", "front_right", "rear_left", "rear_right")
+# A passenger-car tyre lives around 2.0-3.0 bar. Anything outside this is a
+# sensor or unit problem, and saying it flatly is how "thirty bar" reached the
+# driver. Flag it instead of stating it as fact.
+_TYRE_BAR_MIN, _TYRE_BAR_MAX = 1.0, 4.5
+
+
+def fmt_tyres_bar(tires_kpa: dict) -> str:
+    """kPa readings -> 'front left 2.4 bar, ...'.
+
+    We do the conversion so the model never has to. Handing it a raw number
+    and a unit name is what produced a ten-times-too-large answer.
+    """
+    if not tires_kpa:
+        return ""
+    keys = [k for k in _WHEEL_ORDER if k in tires_kpa]
+    keys += [k for k in tires_kpa if k not in _WHEEL_ORDER]
+    parts = []
+    for k in keys:
+        v = tires_kpa.get(k)
+        if v is None:
+            continue
+        bar = v / 100.0
+        txt = f"{k.replace('_', ' ')} {bar:.1f} bar"
+        if not (_TYRE_BAR_MIN <= bar <= _TYRE_BAR_MAX):
+            txt += " (IMPLAUSIBLE - report as a sensor fault, do not state it as the pressure)"
+        parts.append(txt)
+    return ", ".join(parts)
+
+
+def _norm_value(entity_id: str, state: str, unit=None, to_kpa: bool = False):
+    """HA state string -> honest normalized value.
+
+    `to_kpa` marks a pressure entity, whose numeric state is only meaningful
+    together with its unit_of_measurement.
+    """
     if state in ("unknown", "unavailable", "", None):
         return None
     if entity_id.startswith(("binary_sensor.", "lock.")):
@@ -232,6 +290,8 @@ def _norm_value(entity_id: str, state: str):
         # dashboard renders words, inventing booleans loses "jammed" etc.
         return state
     n = _numeric(state)
+    if to_kpa:
+        return _pressure_kpa(n, unit)
     return state if n is None else n
 
 
@@ -339,7 +399,9 @@ class MercedesMeHA(cloudcar.CloudCarProvider):
                 str(attrs.get("friendly_name", "car")).split()[0].lower()
             car = cars.setdefault(slug, {"label": slug})
             hits_per_slug[slug] = hits_per_slug.get(slug, 0) + 1
-            val = _norm_value(eid, ent.get("state"))
+            val = _norm_value(eid, ent.get("state"),
+                              attrs.get("unit_of_measurement"),
+                              to_kpa=(grp == "tires_kpa"))
             if val is None:
                 continue
             if grp == "_flat":
