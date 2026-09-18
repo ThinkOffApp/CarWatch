@@ -14,8 +14,9 @@ As sensors land (OBD, cameras, trips), their facts move out of
 `cannot_sense` and into `facts`, and the car earns the right to talk
 about them.
 """
-
 from __future__ import annotations
+
+import re
 
 # Default identity: the GLE. Overridden per car via build_system_prompt's
 # identity arg (fed from the config's `car` block) so the same code serves
@@ -38,6 +39,51 @@ When asked how you are or for a status, lead with the CAR: charge, fuel, tyres, 
 Answer in the LANGUAGE the question was asked in: Finnish gets Finnish, English gets English. Voice transcripts may be imperfect Finnish; answer the likely intent in Finnish rather than declaring the message unparseable."""
 
 
+# The headings this module writes INTO the prompt. A model that echoes its
+# worksheet starts its reply with one of them, so they are also the markers
+# for stripping it back out (#52: an /ask answer opened with the verbatim
+# "- KNOWN FACTS: OBD is running but cable NOT U..."). Defined once so the
+# prompt and the stripper can never drift apart.
+FACTS_HEADING = "KNOWN FACTS"
+CANNOT_HEADING = "YOU CANNOT SENSE"
+RULES_HEADING = "STRICT GROUNDING RULES"
+_SCAFFOLD_MARKERS = (FACTS_HEADING, CANNOT_HEADING, RULES_HEADING)
+
+_THINK_BLOCK = re.compile(r"<(think|thinking|reasoning)>.*?</\1>",
+                          re.IGNORECASE | re.DOTALL)
+_BULLET = re.compile(r"^\s*(?:[-*\u2022]|\d+[.)])\s+")
+
+
+def strip_scaffold(text: str) -> str:
+    """Give the driver the answer, not the worksheet.
+
+    Removes any reasoning block, then drops LEADING lines that are the
+    prompt's own scaffold plus the fact bullets trailing them. Conservative
+    on purpose: it only strips from the START, it matches the headings in
+    their prompt casing so ordinary prose cannot trip it, and if stripping
+    would leave nothing it returns the original. A scaffolded answer is bad;
+    an empty one is worse.
+    """
+    if not text:
+        return text
+    cleaned = _THINK_BLOCK.sub("", text).strip()
+    lines = cleaned.splitlines()
+    i, dropping = 0, False
+    while i < len(lines):
+        bare = _BULLET.sub("", lines[i]).strip().lstrip("#").strip()
+        if any(bare.startswith(m) or bare[:40].find(m) >= 0
+               for m in _SCAFFOLD_MARKERS):
+            dropping = True
+            i += 1
+            continue
+        if dropping and (not bare or _BULLET.match(lines[i])):
+            i += 1          # the fact bullets that follow a heading
+            continue
+        break
+    out = "\n".join(lines[i:]).strip()
+    return out or cleaned or text
+
+
 def build_system_prompt(
     facts: dict[str, str] | None = None,
     cannot_sense: list[str] | None = None,
@@ -52,7 +98,8 @@ def build_system_prompt(
         "a Raspberry Pi 5 named Vadelma running a language model fully offline, no internet")
 
     rules = RULES.format(identity=identity or DEFAULT_IDENTITY)
-    lines = [rules, "", "KNOWN FACTS (the only current state you may assert):"]
+    lines = [rules, "",
+             f"{FACTS_HEADING} (the only current state you may assert):"]
     # Car state first, the Pi's own vitals last: models lead with whatever
     # is listed first, and a status answer that opens with CPU fans instead
     # of fuel and tyres flattens the whole point of a car that talks
@@ -70,7 +117,7 @@ def build_system_prompt(
         lines.append(f"- {k}: {v}")
 
     if cannot_sense:
-        lines += ["", "YOU CANNOT SENSE THESE AT ALL RIGHT NOW (say so if asked):"]
+        lines += ["", f"{CANNOT_HEADING} THESE AT ALL RIGHT NOW (say so if asked):"]
         lines += [f"- {item}" for item in cannot_sense]
 
     if manual_excerpts:
