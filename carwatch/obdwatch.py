@@ -52,6 +52,30 @@ RESULTS_DIR = os.path.expanduser("~/.carwatch/probe-results")
 # cycles (~3 min); the payload carries ts so the UI can show data age.
 OBD_ALL_CACHE = os.path.expanduser("~/.carwatch/obd-all.json")
 FULL_SWEEP_EVERY = 3
+# The "no engine data yet" epoch marker, PERSISTED for the same reason
+# DEEP_STAMP above is: an in-memory flag dies with the process. obdwatch
+# restarts on every boot and every rfcomm rebind, so the flag reset and the
+# identical "adapter asleep or car off" line went to petrus's phone again
+# (#56: 12:58Z and 13:06Z on 15 Sep, car parked at home; #31 is the same
+# shape on service restart). State belongs on disk, not in a local.
+NO_DATA_STAMP = os.path.expanduser("~/.carwatch/no-data-posted.stamp")
+
+
+def _no_data_posted() -> bool:
+    return os.path.exists(NO_DATA_STAMP)
+
+
+def _set_no_data_posted(on: bool) -> None:
+    try:
+        if on:
+            os.makedirs(os.path.dirname(NO_DATA_STAMP), exist_ok=True)
+            with open(NO_DATA_STAMP, "w") as f:
+                f.write(str(int(time.time())))
+        elif os.path.exists(NO_DATA_STAMP):
+            os.remove(NO_DATA_STAMP)
+    except OSError as e:
+        # Never let bookkeeping kill the read loop; worst case we repost once.
+        print(f"obdwatch: no-data stamp {e}", flush=True)
 
 
 # Map the 8 basic PIDs (the ones the room reads use and that never errno-5)
@@ -252,7 +276,12 @@ def run() -> None:
     # off the BT adapter power-flaps, each flap > RECONNECT_GAP_S reset the
     # post-state and re-posted the same no-data line into petrus's phone
     # (4+ times on Aug 27, twice within 34s). State, not reconnects, decides.
-    no_data_posted = False
+    no_data_posted = _no_data_posted()   # survives restarts (#31, #56)
+    seen_data = False          # has a real reading been posted since we started?
+                               # "asleep or car off" is only worth saying as a
+                               # data -> lost TRANSITION. On a cold boot with the
+                               # car parked it is not news, it is the normal
+                               # state, and it was arriving as a notification.
     last_dtc_key = None        # last stored-DTC set, to post only on a CHANGE
     last_posted_batt = None    # hybrid-SoC at the last post; a high-water mark
                                # that follows charge UP silently and posts on a
@@ -352,6 +381,8 @@ def run() -> None:
                     post(f"Engine read (live from my OBD port): {line}")
                     last_post_readings = line
                     no_data_posted = False
+                    seen_data = True
+                    _set_no_data_posted(False)
                     if batt is not None:
                         last_posted_batt = batt        # reset baseline on post
                 last_dtc_key = dtc_key
@@ -457,12 +488,21 @@ def run() -> None:
                 # faster read cadence does NOT re-spam the room (was 60s, which
                 # made the "LIVE 29s" badge grow to a minute between updates).
             else:
-                if not last_post_readings and not no_data_posted:
+                if not last_post_readings and not no_data_posted and seen_data:
+                    # `seen_data` is the #56 gate: post this ONLY as a
+                    # data -> lost transition. Booting next to a parked car is
+                    # not an event. The fact still shows in the presence and
+                    # preflight tiles, which is where a resting state belongs.
                     hint = (result.get("summary", "no data")
                             if port else failure_hint(result))
                     post(f"OBD: adapter/link present but no engine data yet - {hint}")
                     last_post_readings = "(failed)"
                     no_data_posted = True
+                    _set_no_data_posted(True)
+                elif not last_post_readings and not seen_data:
+                    print("obdwatch: no engine data and none seen this session "
+                          "- not posting (car is simply off)", flush=True)
+                    last_post_readings = "(failed)"
                 next_try = time.time() + RETRY_COOLDOWN_S
         # Live steering fills what was idle sleep time: sample the wheel angle
         # off the passive CAN broadcast (id 0x0500 byte 0) and cache it, so
