@@ -22,6 +22,7 @@ Read-only: mode 01 (current data) and mode 03 (stored DTCs). Never writes.
 from __future__ import annotations
 
 import os
+import sys
 import time
 
 
@@ -37,6 +38,30 @@ def _first_present_port() -> str:
         if os.path.exists(p):
             return p
     return "/dev/ttyUSB0"
+
+
+# Swallowed-exception trace (#20). These handlers deliberately continue - an
+# OBD dongle vanishing mid-drive is normal, not an error - but with no record
+# at all a decoder bug and a missing dongle look identical in the field, and
+# a dropped reading just shows as a blank tile.
+#
+# Deduped on purpose: "as a rule" means a bare log would flood the journal on
+# exactly the drive you are trying to diagnose. First occurrence prints, then
+# only at 10 / 100 / 1000. stderr, never stdout: this module's CLI prints JSON
+# and a stray line would corrupt it.
+_SWALLOWED: dict = {}
+
+
+def _swallowed(site: str, exc: BaseException) -> None:
+    key = (site, type(exc).__name__)
+    n = _SWALLOWED.get(key, 0) + 1
+    _SWALLOWED[key] = n
+    if n == 1:
+        print(f"elm327: {site}: {type(exc).__name__}: {exc}",
+              file=sys.stderr, flush=True)
+    elif n in (10, 100, 1000):
+        print(f"elm327: {site}: {type(exc).__name__} x{n}",
+              file=sys.stderr, flush=True)
 
 
 DEFAULT_PORT = _first_present_port()
@@ -100,8 +125,8 @@ class Elm327:
     def close(self):
         try:
             os.close(self.fd)
-        except Exception:
-            pass
+        except Exception as e:
+            _swallowed("close", e)
 
     def _read_until_prompt(self, timeout: float = 5.0) -> str:
         """ELM327 ends every response with '>'. Read until it, or timeout."""
@@ -156,7 +181,10 @@ def _parse_pid_reply(text: str, pid: int):
                 return None
             try:
                 return name, dec(data)
-            except Exception:
+            except Exception as e:
+                # A decoder raising means a reading silently disappears from
+                # the dash. Worth a line even though we carry on.
+                _swallowed(f"decode pid 0x{pid:02X}", e)
                 return None
     return None
 
@@ -251,7 +279,8 @@ def _parse_ext_reply(text: str, pid: int):
                 return {"key": key, "label": label, "unit": unit,
                         "group": group, "pid": f"0x{pid:02X}",
                         "value": dec(data)}
-            except Exception:
+            except Exception as e:
+                _swallowed(f"decode ext pid 0x{pid:02X}", e)
                 return None
     return None
 
@@ -264,7 +293,10 @@ def read_all_extended(elm: Elm327, pids=None) -> dict:
     if pids is None:
         try:
             supported = set(scan_supported_quiet(elm))
-        except Exception:
+        except Exception as e:
+            # Falling back to the full PID list hides that the capability
+            # scan failed; the sweep then looks merely unlucky.
+            _swallowed("scan_supported_quiet", e)
             supported = set()
         pids = [p for p in EXT_PIDS if p in supported] or list(PIDS)
     groups: dict = {}
