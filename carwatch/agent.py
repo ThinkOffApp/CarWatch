@@ -364,9 +364,10 @@ def _think(question: str, asker: str) -> str:
                              f"({_fu.get('range_km', 0):.0f} km range)")
             _ty = _me.get("tires_kpa") or {}
             if _ty:
-                _bits.append("tyre pressures kPa " + ", ".join(
-                    f"{k.replace('_', ' ')} {v:.0f}"
-                    for k, v in _ty.items()))
+                from carwatch.mercedesme import fmt_tyres_bar
+                _tt = fmt_tyres_bar(_ty)
+                if _tt:
+                    _bits.append("tyre pressures " + _tt)
             _lk = (_me.get("lock") or {}).get("locked")
             if _lk:
                 _bits.append(f"doors {_lk}")

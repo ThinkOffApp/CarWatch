@@ -1165,7 +1165,10 @@ def answer(question: str, use_manual: bool = True) -> str:
                 _label = f"{_label} (the household's OTHER car, not you)"
             _t = _car.get("tires_kpa")
             if _t:
-                _bits.append(f"{_label}: tyres {_t} kPa")
+                from carwatch.mercedesme import fmt_tyres_bar
+                _tt = fmt_tyres_bar(_t)
+                if _tt:
+                    _bits.append(f"{_label}: tyres {_tt}")
             _fu = _car.get("fuel") or {}
             _ev = _car.get("ev") or {}
             _fparts = []
