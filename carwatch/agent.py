@@ -459,7 +459,10 @@ def _think(question: str, asker: str) -> str:
         voicestate.record_answer_s(time.time() - t0, model=_serving_model_name())
     if line_buf.strip():
         print(f"  ... {line_buf.strip()}", flush=True)
-    answer = "".join(parts).strip()
+    from carwatch.grounding import strip_scaffold
+    # The driver gets the answer, not the worksheet (#52): some models open
+    # by echoing the prompt's own KNOWN FACTS block.
+    answer = strip_scaffold("".join(parts).strip())
     # Hand the dash the finished text; the voice path overrides this with
     # "speaking" right after, other surfaces are simply done.
     voicestate.set_state("idle", answer=answer[:400])
