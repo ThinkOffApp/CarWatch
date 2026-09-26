@@ -39,4 +39,9 @@ sleep 1
 systemctl daemon-reload
 systemctl enable --now carwatch-chat carwatch-presence
 systemctl restart $UNITS
+# The voice listener is optional (USB mic installs only), so it rides along
+# as try-restart: restarted when running, skipped when absent. Left out, it
+# kept executing pre-update listen.py (26 Sep: #71 merged and pulled, the
+# Jabra still silent until a hand restart).
+systemctl try-restart carwatch-listen 2>/dev/null || true
 echo "restart-when-quiet: restarted $UNITS after $(( $(date +%s) - start ))s"

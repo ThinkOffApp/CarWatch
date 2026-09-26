@@ -430,9 +430,14 @@ def _speak(text: str) -> bool:
             # Bond can exist while the A2DP link is down; connect is cheap
             # when already connected (car-speak.sh does the same).
             if _bt_pcm_mac("a2dpsrc/sink") != car:
-                subprocess.run(["bluetoothctl", "connect", car],
-                               capture_output=True, timeout=10)
-                time.sleep(2)
+                # An absent car makes connect hang to the timeout; that is
+                # a normal answer here, not a reason to drop the reply.
+                try:
+                    subprocess.run(["bluetoothctl", "connect", car],
+                                   capture_output=True, timeout=10)
+                    time.sleep(2)
+                except subprocess.TimeoutExpired:
+                    pass
             # Only a LIVE link counts. The saved MAC outlives the car: on the
             # kitchen table (26 Sep, Jabra) every answer went to the absent
             # car's A2DP and the speakerphone on the desk stayed silent.
