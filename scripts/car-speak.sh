@@ -40,6 +40,18 @@ speak() {
         # Bond can exist while A2DP is down (measured: Paired yes, Connected no).
         bluetoothctl connect "$mac" >/dev/null 2>&1 || true
         sleep 2
+        # The saved MAC outlives the car: away from it (26 Sep, Jabra on the
+        # kitchen table) speak to a USB speakerphone instead of into silence.
+        if ! bluetoothctl info "$mac" 2>/dev/null | grep -q "Connected: yes"; then
+            local usb
+            usb=$(aplay -l 2>/dev/null | awk '/^card [0-9]+:.*USB Audio/{sub(":","",$2); print $2; exit}')
+            if [ -n "$usb" ]; then
+                timeout 60 aplay -q -D "plughw:$usb,0" "$wav" 2>/dev/null || \
+                echo "USB playback failed - is the voice listener holding the speakerphone?"
+                rm -f "$wav"
+                return
+            fi
+        fi
         # aplay = send direction; bluealsa-aplay was the receive tool and
         # blocked forever (27 Aug). Timeout guards the wedge.
         timeout 30 aplay --buffer-time=1000000 -D "bluealsa:DEV=$mac,PROFILE=a2dp" "$wav" 2>/dev/null || \

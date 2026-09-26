@@ -433,8 +433,15 @@ def _speak(text: str) -> bool:
                 subprocess.run(["bluetoothctl", "connect", car],
                                capture_output=True, timeout=10)
                 time.sleep(2)
-            target = f"bluealsa:DEV={car},PROFILE=a2dp"
-            bt = True
+            # Only a LIVE link counts. The saved MAC outlives the car: on the
+            # kitchen table (26 Sep, Jabra) every answer went to the absent
+            # car's A2DP and the speakerphone on the desk stayed silent.
+            if _bt_pcm_mac("a2dpsrc/sink") == car:
+                target = f"bluealsa:DEV={car},PROFILE=a2dp"
+                bt = True
+            else:
+                print(f"speak: car {car} not connected, trying USB/headset",
+                      flush=True)
         if not target:
             target = _usb_audio_device("playback")
         if not target:
