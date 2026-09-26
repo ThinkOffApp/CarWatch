@@ -221,7 +221,14 @@ def _mentions_me(msg: dict, handle: str, owner: str = "") -> bool:
     # #32. A message is addressed to the car when the handle LEADS it, or
     # when it is a reply to one of the car's own posts. A mention buried in
     # a sentence is somebody talking about the car; stay quiet.
-    if not _addressed_to(msg, handle):
+    # The owner typing the literal @handle anywhere is talking TO the car:
+    # "can you speak using the jabra @eclass" (petrus, 26 Sep) went
+    # unanswered because the handle trailed. #32's third-person false
+    # triggers came from agents, which the owner gate below still stops.
+    owner_tagged = (handle.lower() in body.lower()
+                    and bool((owner or "").strip())
+                    and _owner_ok(sender, owner))
+    if not owner_tagged and not _addressed_to(msg, handle):
         return False
     # ONLY the owner addresses the car through the room. Fellow agents
     # DISCUSSING the car ("eclass", "E Class" in ordinary sentences) kept

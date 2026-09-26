@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 
@@ -170,6 +171,42 @@ def manual_status() -> str | None:
     return None
 
 
+def _usb_audio_names(aplay_l: str) -> list[str]:
+    """Card names of USB audio devices in `aplay -l` output, e.g.
+    'card 0: MS [Jabra Speak2 40 MS], device 0: USB Audio [USB Audio]'."""
+    names = []
+    for line in (aplay_l or "").splitlines():
+        m = re.match(r"card \d+: \S+ \[([^\]]+)\], device \d+: USB Audio", line)
+        if m and m.group(1) not in names:
+            names.append(m.group(1))
+    return names
+
+
+def voice() -> str | None:
+    """What the car speaks and listens through right now. Without this the
+    car told petrus it had no Jabra while one sat plugged into it (26 Sep)."""
+    usb = _usb_audio_names(_run(["aplay", "-l"]) or "")
+    car = None
+    try:
+        mac = open(os.path.expanduser("~/.carwatch/car-bt-mac")).read().strip()
+        if mac:
+            info = _run(["bluetoothctl", "info", mac]) or ""
+            car = "Connected: yes" in info
+    except Exception:
+        pass
+    parts = []
+    if car:
+        parts.append("you speak through the car's own speakers over Bluetooth")
+    if usb:
+        dev = " and ".join(usb)
+        parts.append(f"a USB speakerphone is plugged into your onboard computer ({dev}); "
+                     "you hear through its microphone"
+                     + ("" if car else " and speak your answers aloud through its speaker"))
+    if car is False:
+        parts.append("the car's Bluetooth audio is not connected right now")
+    return "; ".join(parts) or None
+
+
 def live_facts() -> dict[str, str]:
     """Sensor readings the car may legitimately assert about itself."""
     facts: dict[str, str] = {}
@@ -193,6 +230,7 @@ def live_facts() -> dict[str, str]:
         ("brain", serving_model()),
         ("network", network()),
         ("your manual", manual_status()),
+        ("your voice", voice()),
     ):
         if val:
             facts[key] = val
