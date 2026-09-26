@@ -402,6 +402,22 @@ def _car_a2dp_mac():
         return None
 
 
+def _usb_speaker_volume(target: str, pct: int = 90) -> None:
+    """Bring a USB speakerphone's playback level up before an answer. The
+    Jabra Speak2 40 came up at 53% (-21 dB): aplay exited 0 and petrus heard
+    nothing across the room (26 Sep). Best effort; control names vary."""
+    m = re.match(r"plughw:(\d+),", target or "")
+    if not m:
+        return
+    for control in ("PCM", "Speaker"):
+        try:
+            if subprocess.run(["amixer", "-q", "-c", m.group(1), "sset", control, f"{pct}%", "unmute"],
+                              capture_output=True, timeout=5).returncode == 0:
+                return
+        except Exception:
+            return
+
+
 def _speak(text: str) -> bool:
     """Voice a reply through the car's A2DP sink (the brief's music channel),
     falling back to USB playback, then the headset channels. Call ONLY with
@@ -480,6 +496,8 @@ def _speak(text: str) -> bool:
             pass
         if bt:
             time.sleep(1.5)   # let a shared headset fall back from HFP mode
+        else:
+            _usb_speaker_volume(target)
         rc = subprocess.run(
             ["aplay", "--buffer-time=1000000", "-D", target, wav],
             capture_output=True, timeout=play_timeout).returncode

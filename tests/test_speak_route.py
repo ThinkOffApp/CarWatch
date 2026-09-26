@@ -29,8 +29,10 @@ class TestSpeakRoute(unittest.TestCase):
 
     def _route(self, a2dp_mac):
         played = []
+        self.calls = []
 
         def run(cmd, **kw):
+            self.calls.append(cmd[0])
             if cmd[0] == "aplay":
                 played.append(cmd[cmd.index("-D") + 1])
             return mock.Mock(returncode=0)
@@ -49,6 +51,16 @@ class TestSpeakRoute(unittest.TestCase):
 
     def test_absent_car_falls_back_to_usb(self):
         self.assertEqual(self._route(None), ["plughw:0,0"])
+
+    def test_usb_volume_is_raised_before_playback(self):
+        # 26 Sep: the Jabra sat at 53% and petrus heard nothing.
+        self._route(None)
+        self.assertIn("amixer", self.calls)
+        self.assertLess(self.calls.index("amixer"), self.calls.index("aplay"))
+
+    def test_car_playback_leaves_the_mixer_alone(self):
+        self._route(CAR)
+        self.assertNotIn("amixer", self.calls)
 
     def test_connect_timeout_still_falls_back_to_usb(self):
         # 26 Sep on vadelma: connect to the absent car hung past 10 s and the
