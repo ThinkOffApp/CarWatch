@@ -70,3 +70,42 @@ class TestOwnerTrailingHandle(unittest.TestCase):
     def test_owner_spoken_name_mid_sentence_stays_quiet(self):
         msg = {"from": "petrus", "body": "I parked the eclass outside"}
         self.assertFalse(self.agent._mentions_me(msg, "@eclass", owner="petrus"))
+
+
+class TestVoiceFact(unittest.TestCase):
+    """The car said "I don't have a Jabra speaker" with one plugged in."""
+
+    APLAY = ("**** List of PLAYBACK Hardware Devices ****\n"
+             "card 0: MS [Jabra Speak2 40 MS], device 0: USB Audio [USB Audio]\n"
+             "  Subdevices: 1/1\n"
+             "card 1: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]\n")
+
+    def setUp(self):
+        from carwatch import selfstate
+        self.S = selfstate
+
+    def test_usb_names_skip_hdmi(self):
+        self.assertEqual(self.S._usb_audio_names(self.APLAY), ["Jabra Speak2 40 MS"])
+
+    def _voice(self, bt_info):
+        def run(cmd, timeout=5):
+            return self.APLAY if cmd[0] == "aplay" else bt_info
+        with mock.patch.object(self.S, "_run", side_effect=run), \
+                mock.patch("builtins.open", mock.mock_open(read_data=CAR)):
+            return self.S.voice()
+
+    def test_car_away_names_the_jabra_as_the_speaker(self):
+        v = self._voice("Device x\n\tConnected: no\n")
+        self.assertIn("Jabra Speak2 40 MS", v)
+        self.assertIn("speak your answers aloud through its speaker", v)
+        self.assertIn("Bluetooth audio is not connected", v)
+
+    def test_car_connected_speaks_through_the_car(self):
+        v = self._voice("Device x\n\tConnected: yes\n")
+        self.assertIn("car's own speakers", v)
+        self.assertNotIn("aloud through its speaker", v)
+
+    def test_nothing_plugged_in_says_nothing(self):
+        with mock.patch.object(self.S, "_run", return_value=""), \
+                mock.patch("builtins.open", side_effect=OSError):
+            self.assertIsNone(self.S.voice())
