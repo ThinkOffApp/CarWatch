@@ -264,7 +264,98 @@ def _usb_audio_device(kind: str):
     return None
 
 
+# USB speakerphone capture keepalive (petrus, 26 Sep 2026: Jabra Speak2 40
+# heard nothing. On vadelma `arecord -D plughw:0,0 -r 16000 -c 1` failed
+# every time with "read error: Input/output error" (hw:0,0 too, no kernel
+# messages), and the same arecord recorded fine while an aplay of silence
+# held the SAME card's output open. This speakerphone only streams its mic
+# while its speaker side is open, so the journal showed "mic: USB audio
+# plughw:0,0" every ~3 s: an endless reopen storm, nothing ever heard.)
+# So while the mic is open on a USB device, a silent aplay holds that card's
+# playback open. It is tied to the mic's lifetime: started in _open_mic,
+# stopped by _close_mic everywhere the mic is closed (reopen, before
+# _speak, shutdown). Stop-and-restart rather than an ALSA dmix: _speak
+# plays straight to plughw on the same card, a hw PCM is exclusive, and a
+# dmix would need an asoundrc on the Pi, i.e. deploy-side config this repo
+# does not own. The mic is already closed for every reply, so the keepalive
+# simply goes down with it and comes back when the mic reopens.
+# Not gated on detecting the I/O error: 16 kHz stereo zeros cost nothing,
+# a card that captures on its own is unaffected by its output being open,
+# and a mic-only USB card (the SF-558) just makes aplay exit at once.
+# BT HFP and the default device never get one: their paths are unchanged.
+KEEPALIVE_RATE = 16000   # the Jabra's playback rates incl. 16000, 2 ch
+KEEPALIVE_CHANNELS = 2
+_keepalive = None
+
+
+def _start_keepalive(capture_dev: str) -> None:
+    """Play silence on the capture device's own 'plughw:N,M' string, i.e.
+    the SAME card. Deliberately not _usb_audio_device('playback'): that
+    picks the first matching card, which with two USB devices may be a
+    different one than the mic."""
+    global _keepalive
+    _stop_keepalive()
+    try:
+        _keepalive = subprocess.Popen(
+            ["aplay", "-q", "-D", capture_dev, "-f", "S16_LE",
+             "-r", str(KEEPALIVE_RATE), "-c", str(KEEPALIVE_CHANNELS),
+             "-t", "raw", "/dev/zero"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"mic: keepalive not started ({e})", flush=True)
+        _keepalive = None
+        return
+    # Let the output side come up before arecord opens the mic, otherwise
+    # arecord can still hit the I/O error and die inside the 2 s window
+    # that listen() treats as a wedged device.
+    time.sleep(0.3)
+    if _keepalive.poll() is not None:
+        # Mic-only card or output busy; capture proceeds as before.
+        print(f"mic: keepalive aplay exited ({_keepalive.returncode})",
+              flush=True)
+        _keepalive = None
+
+
+def _stop_keepalive() -> None:
+    """Terminate the keepalive aplay and reap it, killing it if terminate
+    does not stick, so no aplay leaks across a reopen the way a wedged
+    arecord did on 20.8. Safe to call when none is running."""
+    global _keepalive
+    ka, _keepalive = _keepalive, None
+    if ka is None:
+        return
+    try:
+        ka.terminate()
+        ka.wait(timeout=5)
+    except Exception:
+        try:
+            ka.kill()
+            ka.wait(timeout=5)
+        except Exception:
+            pass
+
+
+def _close_mic(proc) -> None:
+    """Close the mic AND its keepalive. Every place the mic is closed goes
+    through here so the two cannot drift apart."""
+    try:
+        proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        # A terminate that did not stick leaves the capture device held
+        # forever and every reopen fails busy - make sure it is dead.
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+    _stop_keepalive()
+
+
 def _open_mic():
+    # Never two keepalives: whatever the previous mic left running goes.
+    _stop_keepalive()
     cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", str(CHANNELS),
            "-t", "raw"]
     # Priority: USB speakerphone, then BT headset SCO (the headset is both
@@ -285,6 +376,7 @@ def _open_mic():
     if usb:
         cmd[1:1] = ["-D", usb]
         print(f"mic: USB audio {usb}", flush=True)
+        _start_keepalive(usb)
     elif mac:
         cmd[1:1] = ["-D", f"bluealsa:DEV={mac},PROFILE=sco"]
         print(f"mic: bluetooth HFP {mac}", flush=True)
@@ -427,15 +519,15 @@ def listen(threshold: float, on_text) -> None:
                     # 20.8. reopen storm after the first USB speak cycle).
                     # This service is the mic's sole legitimate owner, so
                     # clearing every arecord is safe - then breathe.
+                    # Our own keepalive aplay goes first and by handle: a
+                    # blanket pkill of aplay would also hit reply playback.
+                    _stop_keepalive()
                     subprocess.run(["pkill", "-9", "-x", "arecord"],
                                    capture_output=True)
                     time.sleep(2)
                 has_mic = _usb_audio_device("capture") or _bt_pcm_mac("hfpag/source")
                 time.sleep(0.3 if has_mic else 5)
-                try:
-                    proc.terminate()
-                except Exception:
-                    pass
+                _close_mic(proc)
                 proc = _open_mic()
                 opened_at = time.time()
                 speech, quiet, in_speech = [], 0, False
@@ -465,19 +557,10 @@ def listen(threshold: float, on_text) -> None:
                             # Voice the answer with the mic CLOSED: SCO and
                             # A2DP cannot be live at once on one headset,
                             # then reopen (also discards echo of our own
-                            # voice buffered during playback).
-                            try:
-                                proc.terminate()
-                                proc.wait(timeout=5)
-                            except Exception:
-                                # A terminate that did not stick leaves the
-                                # capture device held forever and every
-                                # reopen fails busy - make sure it is dead.
-                                try:
-                                    proc.kill()
-                                    proc.wait(timeout=5)
-                                except Exception:
-                                    pass
+                            # voice buffered during playback). The USB
+                            # keepalive closes with it so _speak can take
+                            # the speakerphone's exclusive output.
+                            _close_mic(proc)
                             voicestate.set_state("speaking", answer=reply)
                             _speak(reply)
                             # Conversation continues: for FOLLOWUP_S after an
@@ -496,7 +579,7 @@ def listen(threshold: float, on_text) -> None:
                             opened_at = time.time()
                     speech = []
     finally:
-        proc.terminate()
+        _close_mic(proc)
 
 
 def _default_on_text(text: str) -> None:
