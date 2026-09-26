@@ -50,6 +50,29 @@ class TestSpeakRoute(unittest.TestCase):
     def test_absent_car_falls_back_to_usb(self):
         self.assertEqual(self._route(None), ["plughw:0,0"])
 
+    def test_connect_timeout_still_falls_back_to_usb(self):
+        # 26 Sep on vadelma: connect to the absent car hung past 10 s and the
+        # TimeoutExpired aborted the whole reply.
+        played = []
+
+        def run(cmd, **kw):
+            if cmd[0] == "bluetoothctl":
+                raise self.L.subprocess.TimeoutExpired(cmd, 10)
+            if cmd[0] == "aplay":
+                played.append(cmd[cmd.index("-D") + 1])
+            return mock.Mock(returncode=0)
+
+        from carwatch import voiceroom
+        with mock.patch.object(voiceroom, "tts_wav", return_value=self.wav), \
+                mock.patch.object(self.L, "_car_a2dp_mac", return_value=CAR), \
+                mock.patch.object(self.L, "_bt_pcm_mac", return_value=None), \
+                mock.patch.object(self.L, "_usb_audio_device", return_value="plughw:0,0"), \
+                mock.patch.object(self.L, "_echo_tail_sec", return_value=0.0), \
+                mock.patch.object(self.L.subprocess, "run", side_effect=run), \
+                mock.patch.object(self.L.time, "sleep"):
+            self.assertTrue(self.L._speak("hello"))
+        self.assertEqual(played, ["plughw:0,0"])
+
     def test_connected_car_still_wins(self):
         self.assertEqual(self._route(CAR), [f"bluealsa:DEV={CAR},PROFILE=a2dp"])
 
