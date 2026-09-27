@@ -13,6 +13,7 @@ The state machine emits events; the agent decides what to post.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -33,16 +34,45 @@ class Event:
     at: float
 
 
+def _iw_ssid() -> str | None:
+    """SSID from `iw dev <if> link` on each wireless interface. The VTA-439
+    (27 Sep 2026) had no wireless-tools, so iwgetid did not exist and every
+    "am I at home" check read False: the dash asked for a password on the
+    home wifi and trips could not see home. iw ships with the kernel's
+    wireless stack on Ubuntu and Pi OS alike."""
+    try:
+        ifaces = [n for n in os.listdir("/sys/class/net")
+                  if os.path.isdir(f"/sys/class/net/{n}/wireless")]
+    except OSError:
+        return None
+    for iface in ifaces:
+        try:
+            out = subprocess.run(["iw", "dev", iface, "link"], capture_output=True,
+                                 text=True, timeout=5).stdout
+        except Exception:
+            continue
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("SSID:"):
+                ssid = line[len("SSID:"):].strip()
+                if ssid:
+                    return ssid
+    return None
+
+
 def current_ssid() -> str | None:
-    """SSID the Pi is associated with, or None. Uses iwgetid (wireless-tools)."""
+    """SSID the box is associated with, or None. iwgetid (wireless-tools)
+    first, as installed by install.sh; `iw` when iwgetid is missing."""
     try:
         out = subprocess.run(
             ["iwgetid", "-r"], capture_output=True, text=True, timeout=5
         )
         ssid = out.stdout.strip()
-        return ssid or None
+        if ssid:
+            return ssid
     except Exception:
-        return None
+        pass
+    return _iw_ssid()
 
 
 class TripTracker:

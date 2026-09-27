@@ -71,6 +71,10 @@ echo ">> apt: updating package lists"
 sudo apt-get update -qq
 sudo apt-get install -y wireless-tools poppler-utils bluez bluez-alsa-utils \
   alsa-utils ffmpeg network-manager rsync curl git >/dev/null
+# The voice listener opens /dev/snd, which is group audio. Pi OS puts the first
+# user in audio; Ubuntu (the VTA-439, 27 Sep 2026) does not, and the listener
+# then cannot open the USB speakerphone at all.
+id -nG "$RUN_USER" | grep -qw audio || sudo usermod -aG audio "$RUN_USER"
 
 # 5) Every systemd unit, user/home rewritten to yours.
 for u in "$DEST"/systemd/carwatch-*.service "$DEST"/systemd/carwatch-*.timer; do
