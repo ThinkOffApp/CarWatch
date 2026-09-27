@@ -58,5 +58,22 @@ class ScaffoldLeak(unittest.TestCase):
         self.assertIn(CANNOT_HEADING, p)
 
 
+
+class StrayThinkClose(unittest.TestCase):
+    """VTA 27 Sep: '</think>  Kuule, Petrus, ...' reached the room and the voice."""
+
+    def test_bare_closing_tag_is_dropped(self):
+        self.assertEqual(strip_scaffold("</think>  Kuule, Petrus."), "Kuule, Petrus.")
+
+    def test_reasoning_before_unopened_close_is_dropped(self):
+        self.assertEqual(strip_scaffold("The user greets me.\nI should reply.</think>\nHello Petrus!"),
+                         "Hello Petrus!")
+
+    def test_paired_block_still_works(self):
+        self.assertEqual(strip_scaffold("<think>hmm</think>Hi."), "Hi.")
+
+    def test_only_reasoning_is_not_emptied(self):
+        self.assertTrue(strip_scaffold("thinking only</think>").strip())
+
 if __name__ == "__main__":
     unittest.main()

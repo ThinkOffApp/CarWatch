@@ -52,6 +52,12 @@ _SCAFFOLD_MARKERS = (FACTS_HEADING, CANNOT_HEADING, RULES_HEADING)
 
 _THINK_BLOCK = re.compile(r"<(think|thinking|reasoning)>.*?</\1>",
                           re.IGNORECASE | re.DOTALL)
+# A reasoning block whose OPENING tag was never in the output: chat templates
+# that start the model inside <think> (Qwen3.6 on the VTA, 27 Sep 2026) make
+# it emit "...reasoning...</think> answer", or just "</think> answer" when the
+# reasoning went to a separate field. The paired pattern above cannot see it,
+# and the bare tag was posted to the room and handed to the voice.
+_THINK_CLOSE = re.compile(r"</(think|thinking|reasoning)>", re.IGNORECASE)
 _BULLET = re.compile(r"^\s*(?:[-*\u2022]|\d+[.)])\s+")
 
 
@@ -68,6 +74,11 @@ def strip_scaffold(text: str) -> str:
     if not text:
         return text
     cleaned = _THINK_BLOCK.sub("", text).strip()
+    closes = list(_THINK_CLOSE.finditer(cleaned))
+    if closes:
+        after = cleaned[closes[-1].end():].strip()
+        if after:
+            cleaned = after
     lines = cleaned.splitlines()
     i, dropping = 0, False
     while i < len(lines):
