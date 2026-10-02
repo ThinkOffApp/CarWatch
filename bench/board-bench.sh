@@ -43,7 +43,7 @@ MODEL_SPECS=(
   "gemma4-e2b|Gemma 4 E2B Q4_K_M|google_gemma-4-E2B-it-Q4_K_M.gguf;*gemma-4-E2B*Q4_K_M*.gguf|bartowski/google_gemma-4-E2B-it-GGUF|google_gemma-4-E2B-it-Q4_K_M.gguf|"
   # The E4B QAT repo also ships a projector; on 28 Aug a download grabbed a
   # 376 MB projector as "the model". Exact name first, MIN_MODEL_BYTES below.
-  "gemma4-e4b|Gemma 4 E4B QAT Q4_0|gemma-4-E4B_q4_0-it.gguf;*gemma-4-E4B*it*Q4_0*.gguf|google/gemma-4-E4B-it-qat-q4_0-gguf|gemma-4-E4B_q4_0-it.gguf|"
+  "gemma4-e4b|Gemma 4 E4B QAT Q4_0|gemma-4-E4B_q4_0-it.gguf;gemma-4-E4B-qat-q4_0.gguf;*gemma-4-E4B*it*Q4_0*.gguf|google/gemma-4-E4B-it-qat-q4_0-gguf|gemma-4-E4B_q4_0-it.gguf|"
   "ornith-9b|Ornith 1.5 9B (dense) Q4_K_M|Ornith-1.5-9B-Q4_K_M.gguf;*Ornith*1.5*9B*Q4_K_M*.gguf|ornith-ai/Ornith-1.5-9B-GGUF|Ornith-1.5-9B-Q4_K_M.gguf|"
   # REPLACES the README's "Qwen3.6 27B dense IQ2_M" (10.8 GB) row: Qwen3.8
   # 27B is the newer generation, Q2_K_XL (9.83 GB) the nearest size and a
@@ -498,9 +498,11 @@ EOF
 # ------------------------------------------------------------------ models
 shopt -s nullglob nocaseglob
 find_model() {   # find_model "glob;glob" -> first matching file path
-  local globs=$1 d g f
-  local IFS=';'
-  for g in $globs; do
+  local globs=$1 d g f pats
+  # split without pathname expansion: with nullglob a bare `for g in $globs`
+  # globs each pattern against the CWD first, and a wildcard-only spec vanishes
+  IFS=';' read -r -a pats <<< "$globs"
+  for g in "${pats[@]}"; do
     for d in "${MODEL_DIRS[@]}"; do
       for f in "$d"/$g; do
         case "$(basename "$f")" in mmproj*|*mmproj*|*.part) continue ;; esac
@@ -773,7 +775,7 @@ FOUND_DIR=""
 for d in "${MODEL_DIRS[@]}"; do [ -d "$d" ] && { FOUND_DIR=$d; break; }; done
 
 rec section=top started_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  script_commit="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+  script_commit="$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || cat "$HERE/../BENCH_COMMIT" 2>/dev/null || echo unknown)" \
   model_dirs:="$(printf '%s\n' "${MODEL_DIRS[@]}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().splitlines()))')"
 rec section=settings n_prompt:="$N_PROMPT" n_gen:="$N_GEN" repetitions:="$REPS" \
   threads:="[$(thread_list)]" headroom_gb:="$HEADROOM_GB" only="$ONLY" accel="${ACCEL:-none}"
