@@ -79,7 +79,10 @@ DEFAULT_LLAMA_CPP_REF=7fe450e19305b828c199d602c23a8337aaa1f03b
 # that were active. reach / netfallback / rfcomm are connectivity and stay
 # up: stopping them could cut the remote path to the car mid-run.
 CLEAN_UNITS=(carwatch-agent carwatch-chat carwatch-listen carwatch-obd
-             carwatch-presence carwatch-pairwatch carwatch-update.timer)
+             carwatch-presence carwatch-pairwatch carwatch-update.timer
+             "carwatch-kiosk@$(id -un).service")
+# The dash kiosk (Chromium under cage) burns about one core: 2 Oct 2026 a Pi 5 run with it up measured Gemma 4 E2B
+# tg 2.15 tok/s vs 6.96 with it stopped, since -t 4 on four cores waits on the busiest one.
 BRAIN_ENV=${CARWATCH_BRAIN_ENV:-$HOME/.config/carwatch/brain.env}
 QUALITY_PORT_AVOID=8081    # carwatch-brain's port
 STACK=${CARWATCH_STACK:-$HOME/carwatch-stack}
@@ -385,6 +388,16 @@ stop_clean_units() {
     fi
   done
   rec section=services clean_stopped="${STOPPED_UNITS% }"
+}
+
+# Anything else eating CPU at the start skews every number: record it, and say so loudly. ps's %CPU is each
+# process's average over its lifetime, so this catches long-running hogs (a kiosk, a desktop app), not bursts.
+check_busy_others() {
+  local busy
+  busy=$(ps -eo pid=,pcpu=,comm= --sort=-pcpu | awk -v me=$$ '$1 != me && $2 > 10 {printf "%s(%s%%) ", $3, $2}' | head -c 400)
+  rec section=services busy_at_start="${busy% }"
+  [ -n "$busy" ] && log "WARNING: other processes busy at start, numbers may be low: ${busy% }"
+  return 0
 }
 
 restore_units() {
@@ -810,6 +823,7 @@ QUALITY_MODELS=()
 LAST_MODE=${MODES[${#MODES[@]}-1]}
 for PASS_MODE in "${MODES[@]}"; do
   [ "$PASS_MODE" = clean ] && stop_clean_units
+  check_busy_others
   log "pass: $PASS_MODE"
   for spec in "${MODEL_SPECS[@]}"; do
     IFS='|' read -r id label globs _repo _file spec_note <<< "$spec"
