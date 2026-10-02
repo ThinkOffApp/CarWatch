@@ -394,7 +394,28 @@ stop_clean_units() {
 # process's average over its lifetime, so this catches long-running hogs (a kiosk, a desktop app), not bursts.
 check_busy_others() {
   local busy
-  busy=$(ps -eo pid=,pcpu=,comm= --sort=-pcpu | awk -v me=$$ '$1 != me && $2 > 10 {printf "%s(%s%%) ", $3, $2}' | head -c 400)
+  # Current load, not ps's lifetime %CPU (a ps that just started reports itself at 200-700%): sample per-process CPU
+  # ticks from /proc twice, one second apart, and report anything above 10% of one core, excluding this sampler.
+  busy=$(python3 - "$$" <<'PYEOF' 2>/dev/null
+import os, sys, time
+skip = {int(sys.argv[1]), os.getpid(), os.getppid()}
+def ticks():
+    t = {}
+    for p in os.listdir("/proc"):
+        if not p.isdigit() or int(p) in skip: continue
+        try:
+            raw = open(f"/proc/{p}/stat").read()
+            name = raw[raw.index("(") + 1:raw.rindex(")")]
+            f = raw[raw.rindex(")") + 2:].split()
+            t[int(p)] = (name, int(f[11]) + int(f[12]))
+        except (OSError, ValueError, IndexError):
+            pass
+    return t
+hz = os.sysconf("SC_CLK_TCK"); a = ticks(); time.sleep(1.0); b = ticks()
+use = sorted(((b[p][1] - a[p][1]) * 100 // hz, b[p][0]) for p in b if p in a)
+print(" ".join(f"{n}({c}%)" for c, n in reversed(use) if c > 10)[:400])
+PYEOF
+)
   rec section=services busy_at_start="${busy% }"
   [ -n "$busy" ] && log "WARNING: other processes busy at start, numbers may be low: ${busy% }"
   return 0
