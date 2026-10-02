@@ -307,6 +307,18 @@ record_identity() {
 # ------------------------------------------------------------------ builds
 ref_dir_name() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
 
+# ARM CPUs whose kernel reports dot product (asimddp) but whose build left it out: GCC's -mcpu=native resolved to a
+# target without it on the Ventuno Q (Qualcomm A78C + A55, GCC 13), and prompt speed fell 2.3x with no error anywhere.
+# Prints the explicit -march to use when that happened, nothing otherwise.
+arm_dotprod_missing() {
+  local cache=$1/build/CMakeCache.txt feats
+  [ "$(uname -m)" = aarch64 ] && [ -r "$cache" ] || return 0
+  feats=$(grep -m1 '^Features' /proc/cpuinfo 2>/dev/null)
+  case " $feats " in *" asimddp "*) ;; *) return 0 ;; esac
+  grep -q '^HAVE_DOTPROD:INTERNAL=1' "$cache" && return 0
+  case " $feats " in *" asimdhp "*) echo "armv8.2-a+dotprod+fp16" ;; *) echo "armv8.2-a+dotprod" ;; esac
+}
+
 # build_llama NAME REPO REF DIR TARGETS... ; extra cmake flags in CMAKE_EXTRA
 build_llama() {
   local name=$1 repo=$2 ref=$3 dir=$4; shift 4
@@ -314,6 +326,10 @@ build_llama() {
   for t in "${targets[@]}"; do
     [ -x "$dir/build/bin/$t" ] || missing=1
   done
+  if [ $missing -eq 0 ] && [ -n "$(arm_dotprod_missing "$dir")" ]; then
+    log "WARNING: $name: existing build lacks ARM dot product although this CPU has it; rebuilding"
+    missing=1
+  fi
   if [ $missing -eq 0 ]; then
     log "$name: reusing build in $dir"
     return 0
@@ -332,6 +348,15 @@ build_llama() {
   # shellcheck disable=SC2086  # CMAKE_EXTRA is a deliberate word list
   cmake -S "$dir" -B "$dir/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF \
     ${CMAKE_EXTRA:-} > "$dir/cmake.log" 2>&1 || { tail -20 "$dir/cmake.log" >&2; return 1; }
+  local arch
+  arch=$(arm_dotprod_missing "$dir")
+  if [ -n "$arch" ]; then
+    log "WARNING: $name: native CPU detection left out ARM dot product; configuring with -march=$arch instead"
+    # shellcheck disable=SC2086
+    cmake -S "$dir" -B "$dir/build" -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF \
+      -DGGML_CPU_ARM_ARCH="$arch" ${CMAKE_EXTRA:-} >> "$dir/cmake.log" 2>&1 || { tail -20 "$dir/cmake.log" >&2; return 1; }
+    [ -z "$(arm_dotprod_missing "$dir")" ] || { echo "dot product still missing after -march=$arch" >&2; return 1; }
+  fi
   local built=0
   for t in "${targets[@]}"; do
     # llama-simple / llama-cli are optional; llama-bench is the one we need
