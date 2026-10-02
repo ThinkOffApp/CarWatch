@@ -1,0 +1,204 @@
+{
+  "brain": {
+    "restored": true,
+    "stop_requested": true,
+    "stopped": true
+  },
+  "cache_drop": null,
+  "device": {
+    "cores": 8,
+    "cpu_models": [
+      "Cortex-A55",
+      "Cortex-A78"
+    ],
+    "governor": "ondemand x8",
+    "hostname": "fixture-ventuno",
+    "kernel": "6.6.0-fixture",
+    "max_mhz": "2361",
+    "mem_total_bytes": 17179869184,
+    "model": "Arduino VENTUNO Q",
+    "os": "FIXTURE DATA, not measured",
+    "storage": "/dev/sda5 (ext4, /dev/sda ufs)",
+    "temp_end_c": "61.2",
+    "temp_start_c": "45.0",
+    "throttled_end": "0x0",
+    "throttled_start": "0x0"
+  },
+  "exit_code": 0,
+  "finished_utc": "2026-10-02T13:00:00Z",
+  "rows": [
+    {
+      "accel": false,
+      "backend": "CPU",
+      "bench_backends": "CPU",
+      "build_commit": "abc1234",
+      "file": "gemma4-e2b.gguf",
+      "id": "gemma4-e2b",
+      "label": "Gemma 4 E2B Q4_K_M",
+      "load_cache": "cold (drop_caches)",
+      "load_s": 9.8,
+      "pp": {
+        "mean": 40.0,
+        "n": 512,
+        "reps": 3,
+        "sd": 0.4
+      },
+      "runtime": "llama.cpp",
+      "size_bytes": 3500000000,
+      "status": "OK",
+      "tg": {
+        "mean": 9.3,
+        "n": 128,
+        "reps": 3,
+        "sd": 0.1
+      },
+      "thread_modes": [
+        "4"
+      ],
+      "threads": 4
+    },
+    {
+      "accel": false,
+      "backend": "CPU",
+      "bench_backends": "CPU",
+      "build_commit": "abc1234",
+      "file": "gemma4-e2b.gguf",
+      "id": "gemma4-e2b",
+      "label": "Gemma 4 E2B Q4_K_M",
+      "pp": {
+        "mean": 55.5,
+        "n": 512,
+        "reps": 3,
+        "sd": 0.5
+      },
+      "runtime": "llama.cpp",
+      "size_bytes": 3500000000,
+      "status": "OK",
+      "tg": {
+        "mean": 10.1,
+        "n": 128,
+        "reps": 3,
+        "sd": 0.2
+      },
+      "thread_modes": [
+        "all"
+      ],
+      "threads": 8
+    },
+    {
+      "accel": true,
+      "backend": "Vulkan",
+      "bench_backends": "Vulkan",
+      "build_commit": "abc1234",
+      "file": "gemma4-e2b.gguf",
+      "id": "gemma4-e2b",
+      "label": "Gemma 4 E2B Q4_K_M",
+      "n_gpu_layers": 99,
+      "pp": {
+        "mean": 123.4,
+        "n": 512,
+        "reps": 3,
+        "sd": 1.0
+      },
+      "runtime": "llama.cpp",
+      "size_bytes": 3500000000,
+      "status": "OK",
+      "tg": {
+        "mean": 15.0,
+        "n": 128,
+        "reps": 3,
+        "sd": 0.3
+      },
+      "thread_modes": [
+        "all"
+      ],
+      "threads": 8
+    },
+    {
+      "accel": false,
+      "backend": "CPU",
+      "bench_backends": "CPU",
+      "build_commit": "abc1234",
+      "file": "ornith-9b.gguf",
+      "id": "ornith-9b",
+      "label": "Ornith 1.5 9B (dense)",
+      "pp": {
+        "mean": 12.0,
+        "n": 512,
+        "reps": 3,
+        "sd": 0.1
+      },
+      "runtime": "llama.cpp",
+      "size_bytes": 5800000000,
+      "status": "OK",
+      "tg": {
+        "mean": 2.5,
+        "n": 128,
+        "reps": 3,
+        "sd": 0.0
+      },
+      "thread_modes": [
+        "4"
+      ],
+      "threads": 4
+    },
+    {
+      "accel": false,
+      "backend": "CPU",
+      "bench_backends": "CPU",
+      "build_commit": "abc1234",
+      "file": "ornith-9b.gguf",
+      "id": "ornith-9b",
+      "label": "Ornith 1.5 9B (dense)",
+      "pp": {
+        "mean": 16.0,
+        "n": 512,
+        "reps": 3,
+        "sd": 0.2
+      },
+      "runtime": "llama.cpp",
+      "size_bytes": 5800000000,
+      "status": "OK",
+      "tg": {
+        "mean": 2.7,
+        "n": 128,
+        "reps": 3,
+        "sd": 0.0
+      },
+      "thread_modes": [
+        "all"
+      ],
+      "threads": 8
+    },
+    {
+      "accel": false,
+      "file": "qwen36-35b.gguf",
+      "id": "qwen36-35b",
+      "label": "Qwen3.6 35B MoE Q3_K_S",
+      "mem_available_bytes": 14100000000,
+      "note": "needs size + 1.5 GB",
+      "runtime": "llama.cpp",
+      "size_bytes": 15400000000,
+      "status": "SKIPPED-NOFIT",
+      "thread_modes": []
+    }
+  ],
+  "runtimes": {
+    "llama.cpp": {
+      "cmake_flags": "GGML_NATIVE=ON",
+      "commit": "abc1234def5678900000000000000000000000000",
+      "ref": "b9999"
+    }
+  },
+  "schema": "carwatch-board-bench/1",
+  "settings": {
+    "n_gen": 128,
+    "n_prompt": 512,
+    "repetitions": 3,
+    "threads": [
+      4,
+      8
+    ]
+  },
+  "started_utc": "2026-10-02T10:00:00Z"
+}
