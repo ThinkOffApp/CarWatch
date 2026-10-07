@@ -482,7 +482,7 @@ html.dense .cmds button{padding:8px}
   </div>
  </div>
 </div>
-<div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
+<div class=links><a href=# id=trustlink>trust wifi</a><a href=/dash>Pi vitals</a><a href=/nerd>all PIDs</a><a href=/radiation>radiation</a><a href=/streams>streams</a><a href=/journal>journal</a></div>
 <div class=bar>
  <div class=ctlrow>
   <div class=ctl data-act=read><span class=i>&#128202;</span><span class=t>Read</span></div>
@@ -2946,6 +2946,21 @@ class Handler(BaseHTTPRequestHandler):
                     "application/json")
             return self._send(200, json.dumps(prov.status()),
                               "application/json")
+        elif self.path.startswith("/api/radiation"):
+            # RadiaCode readings for /radiation from the source config names
+            # (carwatch.radiation). status() never raises: an exception comes
+            # back as state "error" with its text, never as an empty page.
+            from carwatch import radiation as _rad
+            return self._send(200, json.dumps(_rad.status()), "application/json")
+        elif self.path.startswith("/radiation"):
+            # Radiation page (carwatch/radiation.html), read from disk per
+            # request like /nerd so a git pull updates it without a restart.
+            try:
+                with open(os.path.join(REPO, "carwatch", "radiation.html"),
+                          encoding="utf-8") as f:
+                    return self._send(200, f.read())
+            except Exception as e:
+                return self._send(404, f"radiation.html missing: {e}")
         elif self.path.startswith("/cloudcar"):
             # Minimal setup + status page for the cloud provider: email ->
             # vendor emails a one-time code -> code -> tokens on the Pi.

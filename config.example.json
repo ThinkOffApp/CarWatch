@@ -25,5 +25,22 @@
     "host": "",
     "led_count": 30,
     "brightness": 128
+  },
+  "radiation": {
+    "source": "",
+    "stale_seconds": 60,
+    "json": {
+      "url": ""
+    },
+    "radwatch": {
+      "python": "python3",
+      "script": "~/radwatch/radwatch.py",
+      "db": "~/radwatch/radwatch.sqlite"
+    },
+    "ha": {
+      "url": "http://homeassistant.local:8123",
+      "token": "",
+      "entity_prefix": "sensor.radiacode_"
+    }
   }
 }

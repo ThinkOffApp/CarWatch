@@ -29,6 +29,11 @@
 - `bench/bench.sh`: one command on a fresh Pi 5 builds llama.cpp and whisper.cpp, downloads a quantized Gemma 4 E2B, benchmarks real tokens/sec, probes the dashcam API and the mirror's ADB
 - systemd service + idempotent installer; config lives in `/etc/carwatch`, never in the repo
 
+**Radiation page**
+- `/radiation`: RadiaCode 10x dose rate, count rate, accumulated dose, battery, temperature, reading age and radwatch's alarm verdict
+- Three sources by config: a JSON bridge (recommended), radwatch's SQLite on the same box, or Home Assistant REST
+- Live / stale / source error / no reading yet / not configured are five different screens, never an empty page
+
 ## Probe-gated (wired the day the hardware answers)
 
 - Parked-impact clip posts (needs the camera's event flags from the probe)

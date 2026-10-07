@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CarWatch Radiation</title>
+  <style>
+    :root { color-scheme: dark; --bg:#091016; --panel:#111c24; --line:#20313c; --text:#e8f1f5; --muted:#8ca1ad; --good:#40d98b; --warn:#ffc857; --bad:#ff667d; --blue:#62c7ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at top,#142a35 0,#091016 48%); color:var(--text); font:15px/1.4 system-ui,sans-serif; min-height:100vh; }
+    header { padding:22px 20px 16px; border-bottom:1px solid var(--line); }
+    h1 { margin:0; font-size:25px; letter-spacing:.02em; }
+    header p { margin:4px 0 0; color:var(--muted); }
+    header a { color:var(--blue); text-decoration:none; font-weight:650; }
+    main { max-width:760px; margin:auto; padding:12px; }
+    /* The state banner is the point of the page: five states, five looks. */
+    #banner { border-radius:14px; padding:12px 14px; border:1px solid var(--line); background:var(--panel); margin-bottom:10px; }
+    #banner b { font-size:17px; display:block; }
+    #banner .detail { color:var(--muted); font-size:13px; margin-top:2px; word-break:break-word; }
+    #banner.live { border-color:#1f6b46; } #banner.live b { color:var(--good); }
+    #banner.stale { border-color:#7a6224; background:#2a2310; } #banner.stale b { color:var(--warn); }
+    #banner.error, #banner.offline { border-color:#7a2a36; background:#2a1016; } #banner.error b, #banner.offline b { color:var(--bad); }
+    #banner.empty b { color:var(--blue); }
+    #banner.unconfigured b { color:var(--muted); }
+    #grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:9px; }
+    section { background:linear-gradient(145deg,#13232c,#0e171e); border:1px solid var(--line); border-radius:14px; padding:10px 13px; }
+    section h2 { margin:0 0 2px; font-size:13px; color:var(--muted); font-weight:600; }
+    .value { font:700 26px ui-monospace,monospace; color:var(--good); }
+    .value small { font-size:14px; color:var(--muted); font-weight:500; }
+    .value.note { font:500 15px system-ui,sans-serif; color:var(--muted); padding:6px 0; }
+    body.dim .value:not(.note) { color:var(--warn); opacity:.75; }
+    #alarm .value.alert { color:var(--bad); }
+    .footer { margin-top:14px; color:var(--muted); font-size:12px; }
+    @media(max-width:500px) { header { padding:17px 14px 13px; } main { padding:10px; } }
+  </style>
+</head>
+<body>
+  <header><h1>☢ Radiation</h1><p>RadiaCode readings · <a href="/">💬 Chat with the car</a> · <a href="/nerd">all PIDs</a></p></header>
+  <main>
+    <div id="banner" class="offline"><b>Loading…</b><div class="detail"></div></div>
+    <div id="grid"></div>
+    <div class="footer" id="meta">Read-only. Updates every 5 s.</div>
+  </main>
+  <script>
+    const _tok=new URLSearchParams(location.search).get('t')||'';
+    const _q=u=>_tok?(u+(u.includes('?')?'&':'?')+'t='+encodeURIComponent(_tok)):u;
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const banner=document.getElementById('banner'), grid=document.getElementById('grid'), meta=document.getElementById('meta');
+    const TITLES={live:'● Live', stale:'◐ Stale', error:'✖ Source error', empty:'○ Connected, no reading yet', unconfigured:'○ No radiation source configured'};
+    const SRC={json:'radiation bridge (JSON)', radwatch:'radwatch on this box', ha:'Home Assistant'};
+    function ago(s){ if(s==null||!isFinite(s)) return 'unknown'; s=Math.max(0,s); return s<90?`${Math.round(s)} s`:s<5400?`${Math.round(s/60)} min`:`${(s/3600).toFixed(1)} h`; }
+    function fmt(v){ const a=Math.abs(v); return a>=100?v.toFixed(0):a>=10?v.toFixed(1):a>=1?v.toFixed(2):v.toFixed(3); }
+    function setBanner(cls,title,detail){ banner.className=cls; banner.innerHTML=`<b>${esc(title)}</b><div class="detail">${esc(detail||'')}</div>`; }
+    function card(title,inner,id){ return `<section${id?` id="${id}"`:''}><h2>${esc(title)}</h2>${inner}</section>`; }
+    function render(d){
+      const st=d.state||'error';
+      const detail=st==='error'?(d.error||'unknown error'):d.message;
+      setBanner(st, TITLES[st]||st, (d.source?SRC[d.source]||d.source:'')+(d.source?' · ':'')+(detail||''));
+      document.body.classList.toggle('dim', st!=='live');
+      if(st==='unconfigured'||st==='error'){ grid.innerHTML=''; meta.textContent=`Checked ${new Date((d.checked_at||0)*1000).toLocaleTimeString()}.`; return; }
+      let h='';
+      for(const [k,f] of Object.entries(d.values||{})){
+        h+=card(f.label||k, f.value==null ? `<div class="value note">${esc(f.note||'unavailable')}</div>`
+                                          : `<div class="value">${esc(fmt(f.value))} <small>${esc(f.unit||'')}</small></div>`);
+      }
+      h+=card('Last reading', `<div class="value${d.age_s==null?' note':''}">${esc(ago(d.age_s))}${d.age_s==null?'':' <small>ago</small>'}</div><div class="footer">${esc(d.age_basis||'')} · stale after ${esc(d.stale_seconds)} s</div>`);
+      if(d.alarm){
+        const a=d.alarm, cls=a.alert?'alert':'';
+        h+=card('radwatch alarm', `<div class="value ${cls}">${a.alert?'ALERT':'quiet'} <small>${a.sigma==null?'σ unknown':esc(a.sigma)+' σ'}</small></div><div class="footer">window ${esc(a.window_cps)} vs baseline ${esc(a.baseline_cps)} CPS${a.threshold_calibrated?'':' · threshold not calibrated'}</div>`,'alarm');
+      } else if(d.alarm_note){
+        h+=card('radwatch alarm', `<div class="value note">${esc(d.alarm_note)}</div>`,'alarm');
+      }
+      grid.innerHTML=h;
+      const x=d.extra||{}, bits=[];
+      if(x.firmware) bits.push('firmware '+x.firmware);
+      if(x.hardness!=null) bits.push('hardness '+x.hardness);
+      if(x.missing_entities&&x.missing_entities.length) bits.push('missing in HA: '+x.missing_entities.join(', '));
+      if(x.device_note) bits.push(x.device_note);
+      meta.textContent=(bits.length?bits.join(' · ')+' · ':'')+`checked ${new Date((d.checked_at||0)*1000).toLocaleTimeString()} · read-only`;
+    }
+    async function refresh(){
+      try{ const r=await fetch(_q('/api/radiation'),{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status); render(await r.json()); }
+      catch(e){ setBanner('offline','✖ CarWatch unreachable','Could not reach /api/radiation: '+e.message); document.body.classList.add('dim'); }
+    }
+    refresh(); setInterval(refresh,5000);
+  </script>
+</body>
+</html>
