@@ -368,6 +368,33 @@ through `carwatch/config.py`, so there is exactly one place to edit:
   brain); without it the car says it has not been described yet
 - `home_ssids` — wifi networks that mean "parked at home"
 - `wolfbox` — dashcam AP name/password and poll interval
+- `radiation` — where the `/radiation` page reads a RadiaCode 10x from (see below)
+
+### Radiation page (`/radiation`)
+
+Dose rate (µSv/h), count rate (CPS), accumulated dose, battery, temperature,
+the age of the last reading and, with radwatch, its `watch` alarm verdict.
+`/api/radiation` serves the same as JSON. `radiation.source` picks one of:
+
+- `json` (recommended) — a bridge on another machine serves one object by
+  plain GET, no auth: `{"dose_rate", "count_rate", "ts", ...}` with
+  `accumulated_dose`, `battery`, `temperature`, `hardness`, `serial`,
+  `firmware` optional. `ts` is unix seconds or ISO 8601 (give an offset).
+  Set `radiation.json.url`, e.g. `http://bridge.example:8099/radiacode.json`.
+- `radwatch` — [radwatch](https://github.com/ThinkOffApp/radwatch) logs on
+  this box; the page runs `radwatch.py status` (read-only) with
+  `radiation.radwatch.python` / `script` / `db`. Needs a radwatch with the
+  `status` subcommand.
+- `ha` — Home Assistant REST, `GET /api/states/<entity_prefix><key>`.
+  `radiation.ha.url` and a long-lived token in `radiation.ha.token`, or
+  `$CARWATCH_RADIATION_HA_URL` / `$CARWATCH_RADIATION_HA_TOKEN` (env wins).
+  The token is only sent to a LAN / `.local` / Tailscale host.
+
+`radiation.stale_seconds` (default 60) is when a reading stops counting as
+live. The page shows five states that never look alike: no source
+configured, source error (with the reason), connected but no reading yet,
+stale, and live. A field the source has not sent yet reads "not yet
+reported", not an error.
 
 ## Bench-day probe
 
