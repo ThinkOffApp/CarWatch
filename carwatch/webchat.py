@@ -110,7 +110,7 @@ Doors, tires, charge, and lock from Mercedes.me. This page is not the OBD plug.
 It reads Home Assistant at home. You never type a Mercedes password here.
 </div>
 <ol style="color:#bbb;margin:0 0 14px 1.2em;padding:0;max-width:36em">
-<li>On home wifi open Home Assistant (http://192.168.50.241:8123)</li>
+<li>On home wifi open Home Assistant (__HA_URL__)</li>
 <li>Tap your name, then Security, then Create long-lived access token</li>
 <li>Copy the token and paste it below, then tap Connect</li>
 </ol>
@@ -2965,7 +2965,10 @@ class Handler(BaseHTTPRequestHandler):
             # Minimal setup + status page for the cloud provider: email ->
             # vendor emails a one-time code -> code -> tokens on the Pi.
             # The owner's PASSWORD is never asked anywhere on this page.
-            return self._send(200, CLOUDCAR_PAGE)
+            # The HA address comes from config (ha.url), not from source.
+            from html import escape
+            from carwatch import mercedesme as _mm
+            return self._send(200, CLOUDCAR_PAGE.replace("__HA_URL__", escape(_mm._ha_url())))
         elif self.path.startswith("/streams"):
             return self._send(200, STREAMS_PAGE)
         elif self.path.startswith("/nerd"):

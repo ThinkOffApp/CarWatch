@@ -29,7 +29,7 @@ class TestPreflight(unittest.TestCase):
             ("tailscale", "ip", "-4"): "100.65.0.9",
             ("bluetoothctl", "info", "AA:BB:CC:DD:EE:FF"): "Device AA:BB:CC:DD:EE:FF\n\tPaired: yes\n\tTrusted: yes",
         }
-        self.http = {pf.INTERNET_PROBE: 204, "http://100.97.140.13:8123/api/": 401}
+        self.http = {pf.INTERNET_PROBE: 204, "http://100.64.0.10:8123/api/": 401}
         self._patches = [
             mock.patch.object(pf, "_run", lambda cmd, timeout=5.0, any_rc=False: self.runs.get(tuple(cmd))),
             mock.patch.object(pf, "_http_status", lambda url, timeout=4.0: self.http.get(url)),
@@ -37,7 +37,7 @@ class TestPreflight(unittest.TestCase):
             mock.patch("carwatch.brain.model_url", lambda now=None: "http://127.0.0.1:8080/v1/chat/completions"),
             mock.patch("carwatch.brain._healthy", lambda url, timeout=2.0: True),
             mock.patch.object(pf, "_local_state", lambda: "down"),
-            mock.patch("carwatch.mercedesme._ha_url", lambda: "http://100.97.140.13:8123"),
+            mock.patch("carwatch.mercedesme._ha_url", lambda: "http://100.64.0.10:8123"),
             mock.patch("carwatch.mercedesme._TOKEN_FILE", os.path.join(self.tmp, "ha-token")),
             mock.patch.object(pf, "_adapter_present", lambda: None),
             mock.patch.object(pf, "_obd_mac", lambda: "AA:BB:CC:DD:EE:FF"),
@@ -86,7 +86,7 @@ class TestPreflight(unittest.TestCase):
 
     def test_mercedes_names_missing_token_and_unreachable_ha(self):
         os.remove(os.path.join(self.tmp, "ha-token"))
-        self.http.pop("http://100.97.140.13:8123/api/")
+        self.http.pop("http://100.64.0.10:8123/api/")
         self.runs.pop(("tailscale", "ip", "-4"))
         res = pf.run()
         t = self._tile(res, "mercedes")
