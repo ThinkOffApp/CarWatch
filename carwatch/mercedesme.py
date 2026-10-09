@@ -30,7 +30,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from carwatch import cloudcar
+from carwatch import cloudcar, tokenhttp
 
 
 # Hostnames that name a private mesh/LAN rather than the public internet.
@@ -146,16 +146,22 @@ def _get(path: str, token: str, timeout: float = 8.0):
         base + path,
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    # ...and never follow a redirect with it either (carwatch/tokenhttp.py).
+    with tokenhttp.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
 def _post(path: str, token: str, payload: dict, timeout: float = 15.0):
+    # Same two rules as _get: a private target only, and no redirects. _post had
+    # neither, so a command could carry the token anywhere _ha_url() pointed.
+    base = _ha_url()
+    if not _is_private_ha(base):
+        raise ValueError("refusing to send HA token to a non-private host")
     req = urllib.request.Request(
-        _ha_url() + path, data=json.dumps(payload).encode(),
+        base + path, data=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with tokenhttp.urlopen(req, timeout=timeout) as r:
         return r.status
 
 
