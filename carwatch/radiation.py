@@ -46,6 +46,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
+from carwatch import tokenhttp
 from carwatch.config import load_raw
 
 DEFAULT_STALE_S = 60
@@ -111,7 +112,9 @@ def _expand(p: str) -> str:
 
 def _get_json(url: str, headers: dict | None = None):
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT) as r:
+    # A request carrying a token never follows a redirect (carwatch/tokenhttp.py).
+    opener = tokenhttp.urlopen if "Authorization" in (headers or {}) else urllib.request.urlopen
+    with opener(req, timeout=_HTTP_TIMEOUT) as r:
         return r.read()
 
 
@@ -223,6 +226,10 @@ def read_ha(c: dict, now: float) -> dict:
         try:
             states[key] = json.loads(_get_json(f"{url}/api/states/{eid}", hdr).decode())
         except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:
+                raise SourceError(f"Home Assistant answered a redirect (HTTP {e.code}); the token "
+                                  "is never sent on after a redirect, so set radiation.ha.url "
+                                  "to the final address")
             if e.code in (401, 403):
                 raise SourceError(f"Home Assistant rejected the token (HTTP {e.code})")
             if e.code == 404:

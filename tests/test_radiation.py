@@ -53,6 +53,12 @@ class _Fake:
         def do_GET(self):
             _Fake.seen_auth.append(self.headers.get("Authorization"))
             code, body = _Fake.routes.get(self.path, (404, {"message": "Entity not found."}))
+            if 300 <= code < 400:   # {"location": url} -> a redirect
+                self.send_response(code)
+                self.send_header("Location", body["location"])
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -290,6 +296,17 @@ class TestHomeAssistant(unittest.TestCase):
         self.assertEqual(d["state"], "error")
         self.assertIn("rejected the token (HTTP 401)", d["error"])
         self.assertNotIn(self.TOKEN, json.dumps(d))
+
+    def test_redirect_is_refused_and_the_token_goes_nowhere(self):
+        # Codex review of #76: urllib would follow a 30x with the Authorization header.
+        # The target is a dead port: following it would read "unreachable", not "redirect".
+        _Fake.routes = {p: (302, {"location": _dead_url() + p}) for p in _ha_routes()}
+        d = radiation.status(self._cfg(), now=NOW)
+        self.assertEqual(d["state"], "error", d)
+        self.assertIn("redirect (HTTP 302)", d["error"])
+        self.assertNotIn("unreachable", d["error"])
+        self.assertNotIn(self.TOKEN, json.dumps(d))
+        self.assertEqual(len(_Fake.seen_auth), 1)   # one request to the private HA, none after
 
     def test_unreachable(self):
         t0 = time.time()
